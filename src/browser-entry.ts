@@ -24,6 +24,21 @@ declare global {
 // Version is injected at bundle time via esbuild `define`.
 declare const __ORZMD_VERSION__: string;
 
+// Stamp every block element with its source line (`data-src-line`) so the
+// editor and preview can be scroll-synced. Uses markdown-it's token.map; only
+// affects this browser bundle's output (not orz-markdown core), and the
+// copy-as-markdown walker ignores the attribute.
+md.core.ruler.push('orz_src_line', function (state) {
+  const tokens = state.tokens;
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.map && t.block && t.nesting !== -1 && !t.hidden) {
+      t.attrSet('data-src-line', String(t.map[0]));
+    }
+  }
+  return false;
+});
+
 window.orzmd = {
   version: typeof __ORZMD_VERSION__ !== 'undefined' ? __ORZMD_VERSION__ : '0.0.0',
   render(source: string): string {

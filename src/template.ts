@@ -24,6 +24,8 @@ export interface TemplateOptions {
   title: string;
   /** Base filename (no extension) used as the save suggestion. */
   filename: string;
+  /** Stable per-document id — keys the persisted save handle in IndexedDB. */
+  docId: string;
   /** orz-markdown version (version-check baseline). */
   rendererVersion: string;
   /** The in-file app runtime (assets/app.js contents). */
@@ -80,6 +82,7 @@ export function buildHtml(opts: TemplateOptions): string {
   // Everything the app needs to (re)build the iframe + manage themes.
   const config = {
     filename: opts.filename,
+    docId: opts.docId,
     rendererVersion: opts.rendererVersion,
     versionManifest: opts.versionManifest,
     defaultTheme: opts.defaultTheme,

@@ -99,6 +99,7 @@
     var container = doc.getElementById('orz-doc');
     if (container) container.innerHTML = renderHtml(currentSource());
     enhanceSoon();
+    scheduleAnchors();
   }
 
   function patch(src) {
@@ -124,10 +125,98 @@
       container.innerHTML = next.innerHTML;
     }
     enhance();
+    scheduleAnchors();
   }
 
   var updTimer = null;
   function scheduleUpdate() { if (updTimer) clearTimeout(updTimer); updTimer = setTimeout(function () { patch(currentSource()); }, 120); }
+
+  // ---- editor <-> preview scroll sync -------------------------------------
+  // Source-line mapped (not percentage): each preview block carries
+  // data-src-line (stamped by the renderer). We map between CodeMirror lines
+  // and preview offsets, interpolating between anchors.
+  var anchors = [];
+  var activePane = null;   // 'editor' | 'preview' — whichever the user drives
+  var syncWired = false;
+
+  function scroller() { var d = frameDoc(); return d ? (d.scrollingElement || d.documentElement) : null; }
+
+  function rebuildAnchors() {
+    var doc = frameDoc(); if (!doc) { anchors = []; return; }
+    var sc = scroller();
+    var st = sc ? sc.scrollTop : 0;
+    var els = doc.querySelectorAll('#orz-doc [data-src-line]');
+    var arr = [];
+    for (var i = 0; i < els.length; i++) {
+      var line = parseInt(els[i].getAttribute('data-src-line'), 10);
+      if (isNaN(line)) continue;
+      // document-space offset: rect is viewport-relative, add the scroll position
+      arr.push({ line: line, top: els[i].getBoundingClientRect().top + st });
+    }
+    arr.sort(function (a, b) { return a.top - b.top; });
+    anchors = arr;
+  }
+  function scheduleAnchors() {
+    requestAnimationFrame(rebuildAnchors);
+    setTimeout(rebuildAnchors, 350); // after async mermaid/image layout
+  }
+
+  function lineToTop(line) {
+    if (!anchors.length) return 0;
+    var prev = anchors[0], next = anchors[anchors.length - 1], found = false;
+    for (var i = 0; i < anchors.length; i++) {
+      if (anchors[i].line <= line) prev = anchors[i];
+      if (anchors[i].line > line) { next = anchors[i]; found = true; break; }
+    }
+    if (!found || next.line === prev.line) return prev.top;
+    var f = (line - prev.line) / (next.line - prev.line);
+    return prev.top + f * (next.top - prev.top);
+  }
+  function topToLine(top) {
+    if (!anchors.length) return 0;
+    var prev = anchors[0], next = anchors[anchors.length - 1], found = false;
+    for (var i = 0; i < anchors.length; i++) {
+      if (anchors[i].top <= top) prev = anchors[i];
+      if (anchors[i].top > top) { next = anchors[i]; found = true; break; }
+    }
+    if (!found || next.top === prev.top) return prev.line;
+    var f = (top - prev.top) / (next.top - prev.top);
+    return prev.line + f * (next.line - prev.line);
+  }
+
+  function syncPreviewFromEditor() {
+    if (!cm || root.getAttribute('data-mode') !== 'split') return;
+    var sc = scroller(); if (!sc) return;
+    rebuildAnchors(); // fresh offsets (fonts/images may have changed heights)
+    // first visible source line: the line at the top edge of the editor viewport
+    var wrapTop = cm.getWrapperElement().getBoundingClientRect().top;
+    var line = cm.lineAtHeight(wrapTop, 'window');
+    sc.scrollTop = lineToTop(line);
+  }
+  function syncEditorFromPreview() {
+    if (!cm || root.getAttribute('data-mode') !== 'split') return;
+    var sc = scroller(); if (!sc) return;
+    rebuildAnchors();
+    cm.scrollTo(null, cm.heightAtLine(Math.round(topToLine(sc.scrollTop)), 'local'));
+  }
+
+  function rafThrottle(fn) {
+    var queued = false;
+    return function () { if (queued) return; queued = true; requestAnimationFrame(function () { queued = false; fn(); }); };
+  }
+
+  function wireScrollSync() {
+    if (syncWired || !cm) return;
+    syncWired = true;
+    var onEd = rafThrottle(function () { if (activePane === 'editor') syncPreviewFromEditor(); });
+    var onPv = rafThrottle(function () { if (activePane === 'preview') syncEditorFromPreview(); });
+    cm.on('scroll', onEd);
+    cm.getWrapperElement().addEventListener('mouseenter', function () { activePane = 'editor'; });
+    cm.on('focus', function () { activePane = 'editor'; });
+    var fw = frame.contentWindow;
+    if (fw) fw.addEventListener('scroll', onPv, { passive: true });
+    frame.addEventListener('mouseenter', function () { activePane = 'preview'; });
+  }
 
   // ---- lazy editor libs ----------------------------------------------------
   function loadScript(src) {
@@ -171,6 +260,7 @@
       },
     });
     cm.on('change', function () { markDirty(); scheduleUpdate(); });
+    wireScrollSync();
   }
 
   // ---- view modes ----------------------------------------------------------
@@ -178,13 +268,14 @@
     root.setAttribute('data-mode', mode);
     if (mode === 'split') enableSplit(); else disableSplit();
     if (cm) setTimeout(function () { cm.refresh(); }, 30);
+    if (mode === 'split') scheduleAnchors();
   }
   function enableSplit() {
     if (splitInstance || !window.Split) return;
     splitInstance = window.Split(['#orz-editor', '#orz-frame'], {
       sizes: [50, 50], minSize: 220, gutterSize: 8,
       onDragStart: function () { frame.style.pointerEvents = 'none'; },
-      onDragEnd: function () { frame.style.pointerEvents = ''; if (cm) cm.refresh(); },
+      onDragEnd: function () { frame.style.pointerEvents = ''; if (cm) cm.refresh(); scheduleAnchors(); },
     });
   }
   function disableSplit() {
@@ -245,6 +336,64 @@
     return '<!DOCTYPE html>\n' + clone.outerHTML + '\n';
   }
 
+  // IndexedDB: persist the save handle so a reopened file can be saved with a
+  // one-click permission grant instead of the full picker. Best-effort — it
+  // no-ops gracefully where unavailable (e.g. file:// opaque origins).
+  function idbOpen() {
+    return new Promise(function (res, rej) {
+      var r = indexedDB.open('orz-mdhtml', 1);
+      r.onupgradeneeded = function () { r.result.createObjectStore('handles'); };
+      r.onsuccess = function () { res(r.result); };
+      r.onerror = function () { rej(r.error); };
+    });
+  }
+  function idbGet(key) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (res, rej) {
+        var t = db.transaction('handles', 'readonly');
+        var g = t.objectStore('handles').get(key);
+        g.onsuccess = function () { res(g.result || null); };
+        g.onerror = function () { rej(g.error); };
+      });
+    }).catch(function () { return null; });
+  }
+  function idbPut(key, val) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (res, rej) {
+        var t = db.transaction('handles', 'readwrite');
+        var p = t.objectStore('handles').put(val, key);
+        p.onsuccess = function () { res(); };
+        p.onerror = function () { rej(p.error); };
+      });
+    }).catch(function () {});
+  }
+
+  function pickAndStore() {
+    return window.showSaveFilePicker({
+      suggestedName: (CFG.filename || 'document') + '.md.html',
+      types: [{ description: 'Markdown HTML', accept: { 'text/html': ['.md.html', '.html'] } }],
+    }).then(function (h) { fileHandle = h; if (CFG.docId) idbPut(CFG.docId, h); return h; });
+  }
+
+  // Resolve a writable handle: in-memory → persisted (re-grant permission) → picker.
+  function acquireHandle() {
+    if (fileHandle) return Promise.resolve(fileHandle);
+    if (!CFG.docId) return pickAndStore();
+    return idbGet(CFG.docId).then(function (saved) {
+      if (!saved || !saved.queryPermission) return pickAndStore();
+      return saved.queryPermission({ mode: 'readwrite' }).then(function (p) {
+        if (p === 'granted') return saved;
+        // Chrome shows a prompt naming the file — a deliberate one-click gate.
+        return saved.requestPermission({ mode: 'readwrite' }).then(function (p2) {
+          return p2 === 'granted' ? saved : null;
+        });
+      }).then(function (h) {
+        if (h) { fileHandle = h; return h; }
+        return pickAndStore();
+      });
+    }).catch(function () { return pickAndStore(); });
+  }
+
   function save() {
     var src = currentSource();
     var html = serializeDoc(src);
@@ -252,13 +401,8 @@
     if (s) s.textContent = '\n' + escapeSource(src) + '\n';
 
     if (window.showSaveFilePicker) {
-      var pick = fileHandle
-        ? Promise.resolve(fileHandle)
-        : window.showSaveFilePicker({
-            suggestedName: (CFG.filename || 'document') + '.md.html',
-            types: [{ description: 'Markdown HTML', accept: { 'text/html': ['.md.html', '.html'] } }],
-          });
-      pick.then(function (h) { fileHandle = h; return h.createWritable(); })
+      acquireHandle()
+        .then(function (h) { return h.createWritable(); })
         .then(function (w) { return Promise.resolve(w.write(html)).then(function () { return w.close(); }); })
         .then(function () { clearDirty(); toast('Saved'); })
         .catch(function (err) { if (err && err.name === 'AbortError') return; download(html); });

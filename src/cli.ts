@@ -16,6 +16,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { basename, extname, dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { randomUUID } from 'node:crypto';
 import { getBrowserRuntimeScript } from 'orz-markdown/runtime';
 import { buildHtml, type ThemeEntry } from './template.js';
 
@@ -121,6 +122,7 @@ function main(): void {
     source,
     title: args.title ?? base,
     filename: base,
+    docId: randomUUID(),
     rendererVersion: orzVersion,
     appJs,
     runtimeScript: getBrowserRuntimeScript(),
