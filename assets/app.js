@@ -138,6 +138,7 @@
   var anchors = [];
   var activePane = null;   // 'editor' | 'preview' — whichever the user drives
   var syncWired = false;
+  var syncEnabled = true;  // user-toggleable; persisted in localStorage
 
   function scroller() { var d = frameDoc(); return d ? (d.scrollingElement || d.documentElement) : null; }
 
@@ -185,7 +186,7 @@
   }
 
   function syncPreviewFromEditor() {
-    if (!cm || root.getAttribute('data-mode') !== 'split') return;
+    if (!syncEnabled || !cm || root.getAttribute('data-mode') !== 'split') return;
     var sc = scroller(); if (!sc) return;
     rebuildAnchors(); // fresh offsets (fonts/images may have changed heights)
     // first visible source line: the line at the top edge of the editor viewport
@@ -194,7 +195,7 @@
     sc.scrollTop = lineToTop(line);
   }
   function syncEditorFromPreview() {
-    if (!cm || root.getAttribute('data-mode') !== 'split') return;
+    if (!syncEnabled || !cm || root.getAttribute('data-mode') !== 'split') return;
     var sc = scroller(); if (!sc) return;
     rebuildAnchors();
     cm.scrollTo(null, cm.heightAtLine(Math.round(topToLine(sc.scrollTop)), 'local'));
@@ -305,6 +306,17 @@
     if (dirty) toast('Unsaved changes — press ' + (isMac() ? '⌘' : 'Ctrl') + '+S to save');
   }
   function isMac() { return /Mac|iPhone|iPad/.test(navigator.platform || ''); }
+
+  function setSyncEnabled(on) {
+    syncEnabled = !!on;
+    var btn = document.getElementById('orz-sync');
+    if (btn) {
+      btn.setAttribute('aria-pressed', syncEnabled ? 'true' : 'false');
+      btn.title = syncEnabled ? 'Scroll sync on' : 'Scroll sync off';
+    }
+    try { localStorage.setItem('orz-mdhtml:scrollsync', syncEnabled ? '1' : '0'); } catch (e) {}
+    if (syncEnabled && activePane === 'editor') syncPreviewFromEditor();
+  }
 
   // ---- theme ---------------------------------------------------------------
   function setTheme(id) {
@@ -461,6 +473,8 @@
       document.getElementById('orz-update').classList.remove('show');
     });
     if (themeSelect) themeSelect.addEventListener('change', function () { setTheme(this.value); });
+    var syncBtn = document.getElementById('orz-sync');
+    if (syncBtn) syncBtn.addEventListener('click', function () { setSyncEnabled(!syncEnabled); });
     // plain-textarea fallback live updates (when CodeMirror isn't active)
     textarea.addEventListener('input', function () { if (!cm) { markDirty(); scheduleUpdate(); } });
     document.addEventListener('keydown', function (e) {
@@ -483,6 +497,8 @@
     buildFrame(t);
     firstPaint();
     wireUi();
+    try { if (localStorage.getItem('orz-mdhtml:scrollsync') === '0') syncEnabled = false; } catch (e) {}
+    setSyncEnabled(syncEnabled);
     checkVersion();
   }
 

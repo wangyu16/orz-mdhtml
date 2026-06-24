@@ -152,6 +152,8 @@ export function buildHtml(opts: TemplateOptions): string {
   }
   .icon-btn:hover { background: var(--c-hover); }
   .icon-btn svg { width: 17px; height: 17px; display: block; }
+  .icon-btn[aria-pressed="true"] { color: var(--c-accent); background: var(--c-active); }
+  .icon-btn[aria-pressed="false"] { color: var(--c-muted); }
   .text-btn {
     display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px;
     border: 1px solid var(--c-border); border-radius: 8px;
@@ -246,6 +248,10 @@ export function buildHtml(opts: TemplateOptions): string {
   <span class="bar-title" id="orz-title">${escapeHtml(opts.title)}</span>
   <span class="dirty-dot" title="Unsaved changes"></span>
   <span class="bar-spring"></span>
+
+  <button class="icon-btn" id="orz-sync" title="Sync scrolling" aria-label="Sync scrolling" aria-pressed="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+  </button>
 
   <select class="theme-pick" id="orz-theme" title="Theme" aria-label="Theme">${themeOptions}</select>
 
