@@ -27,7 +27,12 @@ export interface TemplateOptions {
   versionManifest: string;
 }
 
-/** Guard the embedded source against premature </script> termination. */
+/**
+ * Guard inline <script> content (embedded source, app JS, inline bundle)
+ * against premature `</script>` termination. For JS, `<\/script` is
+ * semantically identical to `</script`; for the text/markdown source it is
+ * reversed at runtime by the app's unescapeSource().
+ */
 function escapeForScript(s: string): string {
   return s.replace(/<\/(script)/gi, '<\\/$1');
 }
@@ -39,7 +44,7 @@ function escapeHtml(s: string): string {
 export function buildHtml(opts: TemplateOptions): string {
   const rendererTag =
     opts.renderer.mode === 'inline'
-      ? `<script>${opts.renderer.js}</script>`
+      ? `<script>${escapeForScript(opts.renderer.js)}</script>`
       : `<script src="${opts.renderer.src}"></script>`;
 
   const config = {
@@ -140,7 +145,7 @@ ${rendererTag}
 
 <!-- in-file runtime config + app -->
 <script>window.__ORZ_MDHTML__ = ${JSON.stringify(config)};</script>
-<script>${opts.appJs}</script>
+<script>${escapeForScript(opts.appJs)}</script>
 </body>
 </html>
 `;
