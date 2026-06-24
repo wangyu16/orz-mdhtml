@@ -1,6 +1,6 @@
 {
   "name": "orz-mdhtml",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Generate self-contained, editable .md.html files from Markdown using orz-markdown — preview + edit modes, source-aware copy, in-place save.",
   "type": "module",
   "bin": {
@@ -29,7 +29,7 @@
   "author": "Yu Wang <yuwang@orz.how>",
   "license": "MIT",
   "dependencies": {
-    "orz-markdown": "^1.2.1"
+    "orz-markdown": "^1.2.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

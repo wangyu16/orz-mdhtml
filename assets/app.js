@@ -68,6 +68,9 @@
       + '<script>window.__orzEnhance=function(){'
       + 'try{if(window.hljs){document.querySelectorAll("#orz-doc pre code:not(.hljs)").forEach(function(b){window.hljs.highlightElement(b)})}}catch(e){}'
       + 'try{if(window.mermaid){window.mermaid.run({querySelector:"#orz-doc .mermaid:not([data-processed])"})}}catch(e){}'
+      // Tabs init runs in the runtime on load (empty #orz-doc); re-run now that
+      // content is injected, and after each incremental update. Idempotent.
+      + 'try{if(window.OrzMarkdownRuntime&&window.OrzMarkdownRuntime.initTabs){window.OrzMarkdownRuntime.initTabs(document)}}catch(e){}'
       + '};<\/script></body></html>';
   }
 

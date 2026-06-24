@@ -54,6 +54,8 @@ await build({
     fs: join(HERE, 'shims', 'fs.cjs'),
     path: 'path-browserify',
   },
+  // Provide a harmless `process` global (markdown-include's cwd fallback, etc.).
+  inject: [join(HERE, 'shims', 'process.js')],
   define: {
     __ORZMD_VERSION__: JSON.stringify(orzPkg.version),
     // node-emoji / some deps occasionally branch on process.env.
