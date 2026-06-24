@@ -420,8 +420,9 @@
     if (s) s.textContent = '\n' + escapeSource(src) + '\n';
 
     // On a published (served) page with no prior file handle, the reader has no
-    // write access to the server — guide them to a downloadable local copy.
-    if (isServed() && !fileHandle) { showServedNote(); return; }
+    // write access to the server. Only nag — once they've actually edited — that
+    // they should download a local copy. (Never shown on open or on a no-op save.)
+    if (isServed() && !fileHandle) { if (dirty) showServedNote(); return; }
 
     if (window.showSaveFilePicker) {
       acquireHandle()
