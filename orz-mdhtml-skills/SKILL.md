@@ -30,18 +30,22 @@ document, so the file reproduces itself.
 
 ## Generate a file
 
-Node 18+. From the package (CLI: `orz-mdhtml`, or `npm run gen --` in a clone):
+Node 18+. The CLI is on npm — run it with `npx` (no install), or `npm i -g
+orz-mdhtml`, or `npm run gen --` in a clone:
 
 ```bash
-orz-mdhtml <input.md> [options]
+npx orz-mdhtml <input.md> [options]
   -o, --out <file>   output path (default: <input>.md.html)
   --theme <name>     default theme id (default: light-academic-1)
-  --inline           embed the renderer bundle (default; recommended)
-  --cdn              reference the renderer from jsDelivr (needs orz-mdhtml-browser published)
+  --cdn              reference the renderer from jsDelivr (default; small files)
+  --inline           embed the renderer bundle (larger file, no renderer fetch)
   --title <text>     document <title>
 ```
 
-Always prefer `--inline` unless `orz-mdhtml-browser` is published to npm.
+Default `--cdn` produces small files that fetch the renderer
+(`orz-mdhtml-browser`) from jsDelivr on first open (cached after). Use
+`--inline` only when you want the file to carry its own renderer (~750 KB);
+note even `--inline` still fetches themes and editor libraries from CDN.
 
 Theme ids: `light-academic-1/2`, `light-neat-1/2`, `light-playful-1/2`,
 `beige-decent-1/2`, `dark-elegant-1/2`.
@@ -62,10 +66,11 @@ edit the `.md` and regenerate (or edit in the browser and Save).
 
 ## What the generated file needs at view time
 
-"Self-contained" means *one file*, **not** *offline*. The renderer is embedded
-(with `--inline`), but these load from CDN when the file is opened, so **viewing
-requires internet**: theme CSS (jsDelivr `orz-markdown/themes/...`), KaTeX CSS,
-highlight.js, Mermaid, and — only on first edit — CodeMirror, Split.js, morphdom.
+"Self-contained" means *one file*, **not** *offline*. **Viewing requires
+internet**: the renderer (`orz-mdhtml-browser` from jsDelivr by default, or
+embedded with `--inline`), theme CSS (jsDelivr `orz-markdown/themes/...`), KaTeX
+CSS, highlight.js, Mermaid, and — only on first edit — CodeMirror, Split.js,
+morphdom. All are CDN-cached after first load.
 
 ## Deploying / sharing
 

@@ -36,16 +36,15 @@ as the single source of truth; Save/Export re-serialize the whole document.
 
 ## Install / generate
 
-Requires Node 18+. Until this package is published to npm, use it from a clone:
+Requires Node 18+. No install needed — run it with `npx`:
 
 ```bash
-git clone https://github.com/wangyu16/orz-mdhtml.git
-cd orz-mdhtml
-npm install
-npm run bundle                       # build dist/orzmd.browser.js (the in-browser renderer)
-npm run gen -- path/to/doc.md        # → path/to/doc.md.html
+npx orz-mdhtml path/to/doc.md     # → path/to/doc.md.html
 open path/to/doc.md.html
 ```
+
+Or install the CLI globally (`npm i -g orz-mdhtml`), then `orz-mdhtml doc.md`.
+To hack on it, clone the repo and use `npm run gen -- doc.md`.
 
 ### CLI options
 
@@ -54,10 +53,14 @@ orz-mdhtml <input.md> [options]
 
   -o, --out <file>   output path (default: <input>.md.html)
   --theme <name>     default theme id (default: light-academic-1)
-  --inline           embed the renderer bundle in the file (default; offline-capable renderer)
-  --cdn              reference the renderer from jsDelivr (needs orz-mdhtml-browser published)
+  --cdn              reference the renderer from jsDelivr (default; small files)
+  --inline           embed the renderer bundle (larger file, no renderer fetch)
   --title <text>     document <title> (default: input filename)
 ```
+
+By default (`--cdn`), the renderer is fetched from jsDelivr on first open and
+cached, so generated files are small (~tens of KB). Use `--inline` to embed the
+renderer (~750 KB) when you want the file to carry its own renderer.
 
 Themes: `light-academic-1/2`, `light-neat-1/2`, `light-playful-1/2`,
 `beige-decent-1/2`, `dark-elegant-1/2`. (Readers can switch live in the editor.)
@@ -104,7 +107,7 @@ whole-table/blockquote copy fix.
 - [x] Document-first UI: read / edit, iframe preview, incremental live updates
 - [x] Theme picker, reader font size, export, scroll-sync toggle
 - [x] copy-as-markdown via orz-markdown core
-- [ ] Publish `orz-mdhtml` (the CLI) and `orz-mdhtml-browser` (CDN bundle) to npm
+- [x] Publish `orz-mdhtml` (the CLI) and `orz-mdhtml-browser` (CDN bundle) to npm
 - [ ] Optional fully-offline build (inline themes + editor libs)
 - [ ] Mermaid/KaTeX live re-render parity in the editor
 
