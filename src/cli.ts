@@ -151,6 +151,7 @@ function main(): void {
       hljsDarkCss: `${CDN.hl}/styles/atom-one-dark.min.css`,
       hljsJs: `${CDN.hl}/highlight.min.js`,
       mermaidJs: 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js',
+      smilesJs: 'https://cdn.jsdelivr.net/npm/smiles-drawer@1.0.10/dist/smiles-drawer.min.js',
     },
     editorLibs: {
       codemirrorCss: `${CDN.cm}/codemirror.min.css`,

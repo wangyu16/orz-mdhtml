@@ -47,6 +47,7 @@ export interface TemplateOptions {
     hljsDarkCss: string;
     hljsJs: string;
     mermaidJs: string;
+    smilesJs: string;
   };
   /** CDN URLs for lazy-loaded editor libraries. */
   editorLibs: {

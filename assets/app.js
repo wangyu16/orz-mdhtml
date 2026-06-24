@@ -63,11 +63,15 @@
       + '<article class="markdown-body" id="orz-doc"></article>'
       + '<script src="' + f.hljsJs + '"><\/script>'
       + '<script src="' + f.mermaidJs + '"><\/script>'
+      + '<script src="' + f.smilesJs + '"><\/script>'
       + '<script>try{mermaid.initialize({startOnLoad:false})}catch(e){}<\/script>'
       + '<script>' + guard(CFG.runtime) + '<\/script>'
       + '<script>window.__orzEnhance=function(){'
       + 'try{if(window.hljs){document.querySelectorAll("#orz-doc pre code:not(.hljs)").forEach(function(b){window.hljs.highlightElement(b)})}}catch(e){}'
       + 'try{if(window.mermaid){window.mermaid.run({querySelector:"#orz-doc .mermaid:not([data-processed])"})}}catch(e){}'
+      // SMILES: draw each canvas once (tracked via a JS prop so morphdom keeps
+      // the drawn canvas across edits — DOM attributes stay identical).
+      + 'try{if(window.SmilesDrawer){document.querySelectorAll("#orz-doc canvas[data-smiles]").forEach(function(c){if(c.__orzSmilesDone)return;var s=c.getAttribute("data-smiles");if(!s)return;c.__orzSmilesDone=true;var dr=new window.SmilesDrawer.Drawer({width:c.width,height:c.height});window.SmilesDrawer.parse(s,function(t){try{dr.draw(t,c,window.__orzSmilesTheme||"light",false)}catch(e){}},function(){})})}}catch(e){}'
       // Tabs init runs in the runtime on load (empty #orz-doc); re-run now that
       // content is injected, and after each incremental update. Idempotent.
       + 'try{if(window.OrzMarkdownRuntime&&window.OrzMarkdownRuntime.initTabs){window.OrzMarkdownRuntime.initTabs(document)}}catch(e){}'
@@ -94,7 +98,20 @@
 
   function enhance() {
     var w = frame.contentWindow;
-    if (w && typeof w.__orzEnhance === 'function') { try { w.__orzEnhance(); } catch (e) {} }
+    if (!w) return;
+    try { w.__orzSmilesTheme = themeById(currentTheme).scheme === 'dark' ? 'dark' : 'light'; } catch (e) {}
+    if (typeof w.__orzEnhance === 'function') { try { w.__orzEnhance(); } catch (e) {} }
+  }
+
+  // Re-draw SMILES canvases (fresh, cleared) so they pick up the current
+  // light/dark theme; used after a theme switch.
+  function redrawSmiles() {
+    var doc = frameDoc(); if (!doc) return;
+    Array.prototype.forEach.call(doc.querySelectorAll('#orz-doc canvas[data-smiles]'), function (c) {
+      var fresh = c.cloneNode(false); // drops the drawing + the __orzSmilesDone JS prop
+      if (c.parentNode) c.parentNode.replaceChild(fresh, c);
+    });
+    enhance();
   }
   // CDN libs inside the iframe load async — retry enhance a few times.
   function enhanceSoon() { enhance(); setTimeout(enhance, 150); setTimeout(enhance, 600); setTimeout(enhance, 1500); }
@@ -330,6 +347,7 @@
     root.setAttribute('data-chrome', t.scheme);
     if (themeSelect) themeSelect.value = id;
     applyThemeToFrame(t);
+    redrawSmiles(); // pick up the new light/dark SMILES palette
     if (cm) cm.setOption('theme', cmTheme(t.scheme));
     markDirty();
   }
@@ -466,19 +484,30 @@
   }
 
   // ---- version check -------------------------------------------------------
+  // True only when `a` is a strictly newer semver than `b` (so an older
+  // resolved version never shows a bogus "update available").
+  function isNewer(a, b) {
+    var pa = String(a).split('.'), pb = String(b).split('.');
+    for (var i = 0; i < 3; i++) {
+      var x = parseInt(pa[i], 10) || 0, y = parseInt(pb[i], 10) || 0;
+      if (x > y) return true;
+      if (x < y) return false;
+    }
+    return false;
+  }
   function checkVersion() {
     if (!CFG.versionManifest || !CFG.rendererVersion) return;
     try {
       var cached = JSON.parse(localStorage.getItem('orz-mdhtml:vercheck') || 'null');
       if (cached && (Date.now() - cached.t) < 86400000) {
-        if (cached.v && cached.v !== CFG.rendererVersion) showUpdate(cached.v);
+        if (cached.v && isNewer(cached.v, CFG.rendererVersion)) showUpdate(cached.v);
         return;
       }
     } catch (e) {}
     fetch(CFG.versionManifest).then(function (r) { return r.json(); }).then(function (j) {
       var latest = j && j.version;
       try { localStorage.setItem('orz-mdhtml:vercheck', JSON.stringify({ t: Date.now(), v: latest })); } catch (e) {}
-      if (latest && latest !== CFG.rendererVersion) showUpdate(latest);
+      if (latest && isNewer(latest, CFG.rendererVersion)) showUpdate(latest);
     }).catch(function () {});
   }
   function showUpdate(latest) {
