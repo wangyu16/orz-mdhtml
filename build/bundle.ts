@@ -8,7 +8,7 @@
  */
 import { build } from 'esbuild';
 import { createRequire } from 'node:module';
-import { mkdirSync, existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, existsSync, readFileSync, copyFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -62,4 +62,9 @@ await build({
   logLevel: 'info',
 });
 
-console.log(`Bundled orz-markdown@${orzPkg.version} → dist/orzmd.browser.js`);
+// Also stage the bundle into the orz-mdhtml-browser package (published to CDN).
+const browserPkgDir = join(HERE, '..', 'browser');
+mkdirSync(browserPkgDir, { recursive: true });
+copyFileSync(join('dist', 'orzmd.browser.js'), join(browserPkgDir, 'orzmd.browser.js'));
+
+console.log(`Bundled orz-markdown@${orzPkg.version} → dist/orzmd.browser.js (+ browser/)`);

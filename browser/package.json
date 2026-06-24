@@ -1,0 +1,26 @@
+{
+  "name": "orz-mdhtml-browser",
+  "version": "0.1.0",
+  "description": "Prebuilt in-browser renderer for orz-mdhtml .md.html files (exposes window.orzmd.render). Served via CDN (jsDelivr).",
+  "main": "orzmd.browser.js",
+  "files": [
+    "orzmd.browser.js",
+    "README.md"
+  ],
+  "keywords": [
+    "orz-markdown",
+    "orz-mdhtml",
+    "markdown",
+    "browser",
+    "cdn"
+  ],
+  "author": "Yu Wang <yuwang@orz.how>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wangyu16/orz-mdhtml"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

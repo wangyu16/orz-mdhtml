@@ -8,8 +8,8 @@
  * Options:
  *   -o, --out <file>      output path (default: <input>.md.html)
  *   --theme <name>        orz-markdown theme (default: light-academic-1)
- *   --inline              embed the renderer bundle in the file (offline; default)
- *   --cdn                 reference the renderer from jsDelivr (Delivery C)
+ *   --cdn                 reference the renderer from jsDelivr (default; small files)
+ *   --inline              embed the renderer bundle in the file (larger, no renderer fetch)
  *   --title <text>        document <title> (default: input filename)
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
@@ -50,6 +50,20 @@ function orzVersionOf(): string {
 const orzVersion = orzVersionOf();
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
+/** orz-mdhtml's own version — pins the renderer bundle + version check. */
+function selfVersionOf(): string {
+  for (const p of [join(HERE, '..', 'package.json'), join(HERE, '..', '..', 'package.json')]) {
+    try {
+      const j = JSON.parse(readFileSync(p, 'utf8')) as { name?: string; version?: string };
+      if (j.name === 'orz-mdhtml' && j.version) return j.version;
+    } catch {
+      /* keep looking */
+    }
+  }
+  return '0.0.0';
+}
+const selfVersion = selfVersionOf();
 // assets/ sits next to dist/ when published, and next to src/ in dev.
 function findAsset(name: string): string {
   for (const p of [join(HERE, '..', 'assets', name), join(HERE, '..', '..', 'assets', name)]) {
@@ -67,7 +81,7 @@ interface Args {
 }
 
 function parseArgs(argv: string[]): Args {
-  const a: Args = { theme: 'light-academic-1', delivery: 'inline' };
+  const a: Args = { theme: 'light-academic-1', delivery: 'cdn' };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '-o' || arg === '--out') a.out = argv[++i];
@@ -114,7 +128,7 @@ function main(): void {
   } else {
     renderer = {
       mode: 'cdn',
-      src: `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@${orzVersion}/orzmd.browser.js`,
+      src: `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@${selfVersion}/orzmd.browser.js`,
     };
   }
 
@@ -123,7 +137,7 @@ function main(): void {
     title: args.title ?? base,
     filename: base,
     docId: randomUUID(),
-    rendererVersion: orzVersion,
+    rendererVersion: selfVersion,
     appJs,
     runtimeScript: getBrowserRuntimeScript(),
     renderer,
