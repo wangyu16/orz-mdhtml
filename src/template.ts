@@ -141,11 +141,6 @@ export function buildHtml(opts: TemplateOptions): string {
   }
   html:not([data-mode="read"]) #orz-bar { display: flex; }
   .bar-spring { flex: 1; }
-  .bar-group { display: flex; align-items: center; gap: 2px; }
-  .seg {
-    display: inline-flex; background: var(--c-hover);
-    border: 1px solid var(--c-border); border-radius: 8px; padding: 2px;
-  }
   .icon-btn {
     display: inline-flex; align-items: center; justify-content: center;
     width: 30px; height: 30px; border: 0; border-radius: 7px;
@@ -153,8 +148,6 @@ export function buildHtml(opts: TemplateOptions): string {
     transition: background .12s, color .12s;
   }
   .icon-btn:hover { background: var(--c-hover); }
-  .seg .icon-btn:hover { background: var(--c-bg); }
-  .seg .icon-btn[aria-pressed="true"] { background: var(--c-bg); color: var(--c-accent); box-shadow: var(--c-shadow); }
   .icon-btn svg { width: 17px; height: 17px; display: block; }
   .text-btn {
     display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px;
@@ -183,14 +176,10 @@ export function buildHtml(opts: TemplateOptions): string {
   #orz-editor { display: none; min-width: 0; height: 100%; background: var(--c-bg); }
   #orz-frame { flex: 1; min-width: 0; height: 100%; width: 100%; border: 0; background: #fff; display: block; }
 
-  html[data-mode="read"]    #orz-editor { display: none; }
-  html[data-mode="read"]    #orz-frame  { flex: 1; }
-  html[data-mode="editor"]  #orz-editor { display: block; flex: 1; }
-  html[data-mode="editor"]  #orz-frame  { display: none; }
-  html[data-mode="preview"] #orz-editor { display: none; }
-  html[data-mode="preview"] #orz-frame  { flex: 1; }
-  html[data-mode="split"]   #orz-editor { display: block; }
-  html[data-mode="split"]   #orz-frame  { border-left: 1px solid var(--c-border); }
+  html[data-mode="read"]  #orz-editor { display: none; }
+  html[data-mode="read"]  #orz-frame  { flex: 1; }
+  html[data-mode="split"] #orz-editor { display: block; }
+  html[data-mode="split"] #orz-frame  { border-left: 1px solid var(--c-border); }
 
   /* CodeMirror fills the editor pane */
   #orz-editor .CodeMirror { height: 100%; font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 13.5px; line-height: 1.6; }
@@ -217,6 +206,15 @@ export function buildHtml(opts: TemplateOptions): string {
   #orz-fab:hover { opacity: 1; transform: translateY(-1px); }
   #orz-fab svg { width: 18px; height: 18px; }
   html[data-mode="read"] #orz-fab { display: inline-flex; }
+  /* unsaved-changes badge, visible while reading */
+  #orz-fab::after {
+    content: ""; position: absolute; top: -2px; right: -2px;
+    width: 11px; height: 11px; border-radius: 50%;
+    background: #e5534b; border: 2px solid var(--c-fab-bg);
+    opacity: 0; transition: opacity .15s;
+  }
+  html[data-dirty="1"] #orz-fab { opacity: 1; }
+  html[data-dirty="1"] #orz-fab::after { opacity: 1; }
 
   /* toast */
   #orz-toast {
@@ -245,18 +243,6 @@ export function buildHtml(opts: TemplateOptions): string {
   <span class="bar-title" id="orz-title">${escapeHtml(opts.title)}</span>
   <span class="dirty-dot" title="Unsaved changes"></span>
   <span class="bar-spring"></span>
-
-  <div class="seg" role="group" aria-label="View">
-    <button class="icon-btn" data-view="editor" title="Editor only" aria-label="Editor only">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6l-5 6 5 6M16 6l5 6-5 6"/></svg>
-    </button>
-    <button class="icon-btn" data-view="split" title="Split" aria-label="Split">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16"/></svg>
-    </button>
-    <button class="icon-btn" data-view="preview" title="Preview only" aria-label="Preview only">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-    </button>
-  </div>
 
   <select class="theme-pick" id="orz-theme" title="Theme" aria-label="Theme">${themeOptions}</select>
 

@@ -209,7 +209,11 @@
       toast('Editor libraries unavailable — basic editing');
     });
   }
-  function done() { setMode('read'); }
+  function done() {
+    setMode('read');
+    if (dirty) toast('Unsaved changes — press ' + (isMac() ? '⌘' : 'Ctrl') + '+S to save');
+  }
+  function isMac() { return /Mac|iPhone|iPad/.test(navigator.platform || ''); }
 
   // ---- theme ---------------------------------------------------------------
   function setTheme(id) {
@@ -312,10 +316,6 @@
     document.getElementById('orz-upd-dismiss').addEventListener('click', function () {
       document.getElementById('orz-update').classList.remove('show');
     });
-    var views = document.querySelectorAll('#orz-bar [data-view]');
-    Array.prototype.forEach.call(views, function (b) {
-      b.addEventListener('click', function () { setView(b.getAttribute('data-view')); });
-    });
     if (themeSelect) themeSelect.addEventListener('change', function () { setTheme(this.value); });
     // plain-textarea fallback live updates (when CodeMirror isn't active)
     textarea.addEventListener('input', function () { if (!cm) { markDirty(); scheduleUpdate(); } });
@@ -323,14 +323,9 @@
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
       else if (e.key === 'Escape' && root.getAttribute('data-mode') !== 'read') { done(); }
     });
-    syncViewButtons();
-  }
-  function setView(v) { setMode(v); syncViewButtons(); }
-  function syncViewButtons() {
-    var mode = root.getAttribute('data-mode');
-    var views = document.querySelectorAll('#orz-bar [data-view]');
-    Array.prototype.forEach.call(views, function (b) {
-      b.setAttribute('aria-pressed', b.getAttribute('data-view') === mode ? 'true' : 'false');
+    // Warn before losing unsaved edits (close / reload / navigate away).
+    window.addEventListener('beforeunload', function (e) {
+      if (dirty) { e.preventDefault(); e.returnValue = ''; }
     });
   }
 
