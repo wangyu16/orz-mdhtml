@@ -8,7 +8,8 @@
   },
   "files": [
     "dist",
-    "assets"
+    "assets",
+    "orz-mdhtml-skills"
   ],
   "scripts": {
     "build": "tsc && npm run bundle",

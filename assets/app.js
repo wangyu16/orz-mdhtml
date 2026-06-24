@@ -58,7 +58,8 @@
       + '<link id="orz-theme-css" rel="stylesheet" href="' + theme.href + '">'
       + '<link rel="stylesheet" href="' + f.katexCss + '">'
       + '<link id="orz-hljs-css" rel="stylesheet" href="' + hljsCss + '">'
-      + '<style>html,body{margin:0}</style></head><body>'
+      // bottom padding so the last content clears the floating reader tools
+      + '<style>html,body{margin:0}body{padding-bottom:84px}</style></head><body>'
       + '<article class="markdown-body" id="orz-doc"></article>'
       + '<script src="' + f.hljsJs + '"><\/script>'
       + '<script src="' + f.mermaidJs + '"><\/script>'
