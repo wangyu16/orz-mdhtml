@@ -71,7 +71,7 @@
       + 'try{if(window.mermaid){window.mermaid.run({querySelector:"#orz-doc .mermaid:not([data-processed])"})}}catch(e){}'
       // SMILES: draw each canvas once (tracked via a JS prop so morphdom keeps
       // the drawn canvas across edits — DOM attributes stay identical).
-      + 'try{if(window.SmilesDrawer){document.querySelectorAll("#orz-doc canvas[data-smiles]").forEach(function(c){if(c.__orzSmilesDone)return;var s=c.getAttribute("data-smiles");if(!s)return;c.__orzSmilesDone=true;var dr=new window.SmilesDrawer.Drawer({width:c.width,height:c.height});window.SmilesDrawer.parse(s,function(t){try{dr.draw(t,c,window.__orzSmilesTheme||"light",false)}catch(e){}},function(){})})}}catch(e){}'
+      + 'try{if(window.SmilesDrawer){document.querySelectorAll("#orz-doc canvas[data-smiles]").forEach(function(c){if(c.__orzSmilesDone)return;var s=c.getAttribute("data-smiles");if(!s)return;if(c.__orzOrigW===undefined){c.__orzOrigW=c.width;c.__orzOrigH=c.height;}c.width=c.__orzOrigW;c.height=c.__orzOrigH;c.__orzSmilesDone=true;var dr=new window.SmilesDrawer.Drawer({width:c.__orzOrigW,height:c.__orzOrigH});window.SmilesDrawer.parse(s,function(t){try{dr.draw(t,c,window.__orzSmilesTheme||"light",false)}catch(e){}},function(){})})}}catch(e){}'
       // Tabs init runs in the runtime on load (empty #orz-doc); re-run now that
       // content is injected, and after each incremental update. Idempotent.
       + 'try{if(window.OrzMarkdownRuntime&&window.OrzMarkdownRuntime.initTabs){window.OrzMarkdownRuntime.initTabs(document)}}catch(e){}'
@@ -103,13 +103,13 @@
     if (typeof w.__orzEnhance === 'function') { try { w.__orzEnhance(); } catch (e) {} }
   }
 
-  // Re-draw SMILES canvases (fresh, cleared) so they pick up the current
-  // light/dark theme; used after a theme switch.
+  // Re-draw SMILES canvases in the current light/dark theme (after a theme
+  // switch). Just clear the done flag; the draw hook resets each canvas to its
+  // original dimensions before redrawing, so sizes never drift.
   function redrawSmiles() {
     var doc = frameDoc(); if (!doc) return;
     Array.prototype.forEach.call(doc.querySelectorAll('#orz-doc canvas[data-smiles]'), function (c) {
-      var fresh = c.cloneNode(false); // drops the drawing + the __orzSmilesDone JS prop
-      if (c.parentNode) c.parentNode.replaceChild(fresh, c);
+      c.__orzSmilesDone = false;
     });
     enhance();
   }
