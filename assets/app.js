@@ -134,9 +134,13 @@
       window.morphdom(container, next, {
         onBeforeElUpdated: function (fromEl, toEl) {
           if (fromEl.isEqualNode && fromEl.isEqualNode(toEl)) return false;
-          // keep already-rendered mermaid when its source is unchanged
-          if (fromEl.classList && fromEl.classList.contains('mermaid') &&
-              fromEl.getAttribute('data-md') === toEl.getAttribute('data-md')) return false;
+          // Keep an already-rendered generated construct (mermaid / smiles / qr /
+          // youtube) when its source is unchanged. These are client-rendered into
+          // canvases / SVGs / iframes, so letting morphdom touch them would wipe
+          // the drawing (e.g. a SMILES canvas disappearing when nearby text is
+          // edited). data-md carries the source; skip the whole subtree on match.
+          var dm = fromEl.getAttribute && fromEl.getAttribute('data-md');
+          if (dm != null && toEl.getAttribute && dm === toEl.getAttribute('data-md')) return false;
           // keep highlighted code when the text is unchanged
           if (fromEl.nodeName === 'CODE' && fromEl.classList && fromEl.classList.contains('hljs') &&
               fromEl.textContent === toEl.textContent) return false;
