@@ -21,6 +21,8 @@ export interface TemplateOptions {
   rendererVersion: string;
   /** The in-file runtime (assets/app.js contents). */
   appJs: string;
+  /** orz-markdown's browser runtime (QR overlays + copy-as-markdown). */
+  runtimeScript: string;
   /** Renderer delivery: inline bundle JS, or a CDN <script src>. */
   renderer: { mode: 'inline'; js: string } | { mode: 'cdn'; src: string };
   /** jsDelivr resolved-version manifest URL (version check). Empty to disable. */
@@ -136,12 +138,12 @@ ${escapeForScript(opts.source)}
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>if(window.mermaid)mermaid.initialize({startOnLoad:false});</script>
 
-<!-- Copy-as-markdown stopgap (migrates into orz-markdown core runtime) -->
-<script src="https://cdn.jsdelivr.net/npm/turndown@7.2.0/dist/turndown.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/turndown-plugin-gfm@1.0.2/dist/turndown-plugin-gfm.js"></script>
-
 <!-- orz-markdown renderer -->
 ${rendererTag}
+
+<!-- orz-markdown runtime: QR overlays + copy-as-markdown (DOM->Markdown).
+     Replaces the former Turndown stopgap; copy is now a core feature. -->
+<script>${escapeForScript(opts.runtimeScript)}</script>
 
 <!-- in-file runtime config + app -->
 <script>window.__ORZ_MDHTML__ = ${JSON.stringify(config)};</script>

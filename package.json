@@ -27,7 +27,7 @@
   "author": "Yu Wang <yuwang@orz.how>",
   "license": "MIT",
   "dependencies": {
-    "orz-markdown": "^1.1.0"
+    "orz-markdown": "file:../orz-markdown"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

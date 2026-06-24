@@ -4,8 +4,6 @@
  *   - read embedded markdown source
  *   - render preview (default mode) via window.orzmd.render
  *   - edit mode: textarea + live preview side by side
- *   - copy: rendered selection -> markdown (STOPGAP via Turndown; migrates to
- *     orz-markdown core runtime as a bespoke DOM->markdown walker)
  *   - save: File System Access API in-place (Chromium), download fallback
  *   - version check: nudge user when a newer renderer is published
  *
@@ -69,40 +67,11 @@
     }, 150);
   }
 
-  // ---- copy: rendered selection -> markdown (STOPGAP) ----------------------
-  // TODO(core): replace with orz-markdown's bespoke DOM->markdown walker.
-  // `data-md` breadcrumbs (math, mermaid, containers, resolved TOC) take
-  // precedence so generated content copies as meaningful markdown, never as
-  // its source directive (e.g. a TOC copies its heading list, not {{toc 2,3}}).
-  function installCopyHandler() {
-    if (!window.TurndownService) return;
-    var td = new window.TurndownService({
-      headingStyle: 'atx',
-      codeBlockStyle: 'fenced',
-      bulletListMarker: '-',
-    });
-    if (window.turndownPluginGfm && window.turndownPluginGfm.gfm) {
-      td.use(window.turndownPluginGfm.gfm);
-    }
-    // Honor render-time breadcrumbs.
-    td.addRule('orz-md-breadcrumb', {
-      filter: function (node) { return node.getAttribute && node.getAttribute('data-md') != null; },
-      replacement: function (_content, node) { return node.getAttribute('data-md'); },
-    });
-
-    preview.addEventListener('copy', function (e) {
-      var sel = window.getSelection();
-      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return;
-      var container = document.createElement('div');
-      for (var i = 0; i < sel.rangeCount; i++) {
-        container.appendChild(sel.getRangeAt(i).cloneContents());
-      }
-      var markdown = td.turndown(container.innerHTML).trim();
-      if (!markdown) return;
-      e.clipboardData.setData('text/plain', markdown);
-      e.preventDefault();
-    });
-  }
+  // ---- copy: rendered selection -> markdown --------------------------------
+  // Handled by orz-markdown's core runtime (OrzMarkdownRuntime): its document
+  // `copy` listener converts selections inside #orz-preview (.markdown-body) to
+  // Markdown via the bespoke DOM->Markdown walker, honoring data-md breadcrumbs.
+  // Nothing to wire up here.
 
   // ---- save ----------------------------------------------------------------
   function serializeDocument(currentMd) {
@@ -202,7 +171,6 @@
     var src = getSource();
     textarea.value = src;
     render(src);
-    installCopyHandler();
     checkVersion();
 
     $('#orz-mode-preview').addEventListener('click', function () { setMode('preview'); });

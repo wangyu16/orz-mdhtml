@@ -17,6 +17,7 @@ import { basename, extname, dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { md } from 'orz-markdown';
+import { getBrowserRuntimeScript } from 'orz-markdown/runtime';
 import { buildHtml } from './template.js';
 
 const require = createRequire(import.meta.url);
@@ -106,6 +107,7 @@ function main(): void {
     themeHref,
     rendererVersion: orzVersion,
     appJs,
+    runtimeScript: getBrowserRuntimeScript(),
     renderer,
     versionManifest:
       'https://data.jsdelivr.com/v1/packages/npm/orz-mdhtml-browser/resolved',

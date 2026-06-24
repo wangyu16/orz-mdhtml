@@ -43,13 +43,18 @@ open path/to/doc.md.html
 - **In-place save** via the File System Access API (Chromium); download
   fallback elsewhere. The document is *self-reproducing*: Save rewrites the
   embedded `#orz-src` + pre-rendered preview and serializes itself.
-- **Copy-as-markdown lives in orz-markdown core** (not here), so every
+- **Copy-as-markdown lives in orz-markdown core** (≥ 1.2.0), so every
   orz-markdown project inherits it. The render-time half emits `data-md`
-  breadcrumbs on generated constructs (math, mermaid, containers, resolved TOC)
-  so they copy as meaningful content — e.g. a TOC copies its heading list, not
-  `{{toc 2,3}}`. The runtime half is a bespoke DOM→markdown walker in
-  `browserRuntimeScript`. This repo currently uses a Turndown stopgap pending
-  that core work.
+  breadcrumbs on generated constructs (math, mermaid, qr, youtube) so they copy
+  as meaningful content — e.g. a TOC copies its heading list, not `{{toc 2,3}}`.
+  The runtime half is a bespoke DOM→Markdown walker in `browserRuntimeScript`,
+  inlined into each `.md.html` via `getBrowserRuntimeScript()`. (The earlier
+  Turndown stopgap has been removed.)
+
+> **Dependency note.** This repo links orz-markdown locally
+> (`"orz-markdown": "file:../orz-markdown"`) because the copy feature requires
+> orz-markdown ≥ 1.2.0. Switch to `"^1.2.0"` once that version is published to
+> npm.
 
 ## Layout
 
@@ -63,9 +68,10 @@ src/cli.ts             CLI: foo.md -> foo.md.html
 
 ## Roadmap
 
-- [ ] Validate the esbuild browser bundle (markdown-it + katex + node-emoji).
-- [ ] Generate & open a real example end-to-end.
+- [x] Validate the esbuild browser bundle (markdown-it + katex + node-emoji).
+- [x] Generate & open a real example end-to-end.
+- [x] Port copy-as-markdown into orz-markdown core (`data-md` + DOM→md walker).
 - [ ] Mermaid/KaTeX re-render on edit; theme switcher parity with orz-markdown.
-- [ ] Port copy-as-markdown into orz-markdown core (`data-md` + DOM→md walker).
+- [ ] Publish `orz-markdown@1.2.0` to npm, then switch this repo to `^1.2.0`.
 - [ ] Publish `orz-mdhtml-browser` to npm for Delivery C.
 ```
