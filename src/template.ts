@@ -199,27 +199,35 @@ export function buildHtml(opts: TemplateOptions): string {
     border-radius: 3px; background: transparent; transition: background .12s; }
   .gutter.gutter-horizontal:hover::after { background: var(--c-accent); }
 
-  /* ---- floating edit affordance (reading mode only) ---- */
-  #orz-fab {
+  /* ---- floating reader tools (reading mode only) ---- */
+  #orz-reader-tools {
     position: fixed; right: 18px; bottom: 18px; z-index: 30;
-    width: var(--fab-size); height: var(--fab-size); border-radius: 50%;
-    border: 1px solid var(--c-border); background: var(--c-fab-bg); color: var(--c-fab-fg);
-    box-shadow: var(--c-shadow); cursor: pointer; display: none;
-    align-items: center; justify-content: center; backdrop-filter: blur(8px);
-    transition: transform .12s, opacity .2s; opacity: .55;
+    display: none; align-items: center; gap: 2px; padding: 4px;
+    border-radius: 24px; border: 1px solid var(--c-border);
+    background: var(--c-fab-bg); color: var(--c-fab-fg);
+    box-shadow: var(--c-shadow); backdrop-filter: blur(8px);
+    opacity: .6; transition: opacity .2s;
   }
-  #orz-fab:hover { opacity: 1; transform: translateY(-1px); }
-  #orz-fab svg { width: 18px; height: 18px; }
-  html[data-mode="read"] #orz-fab { display: inline-flex; }
-  /* unsaved-changes badge, visible while reading */
-  #orz-fab::after {
-    content: ""; position: absolute; top: -2px; right: -2px;
-    width: 11px; height: 11px; border-radius: 50%;
-    background: #e5534b; border: 2px solid var(--c-fab-bg);
+  #orz-reader-tools:hover { opacity: 1; }
+  html[data-mode="read"] #orz-reader-tools { display: inline-flex; }
+  .rtool {
+    width: 34px; height: 34px; border: 0; border-radius: 50%;
+    background: transparent; color: inherit; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1; transition: background .12s, transform .12s;
+  }
+  .rtool:hover { background: var(--c-hover); }
+  .rtool svg { width: 18px; height: 18px; }
+  .rtool.font { font-weight: 700; font-family: Georgia, "Times New Roman", serif; }
+  .rtool.edit { position: relative; background: var(--c-accent); color: #fff; }
+  .rtool.edit:hover { filter: brightness(1.06); transform: translateY(-1px); }
+  .rtool.edit::after {
+    content: ""; position: absolute; top: 0; right: 0; width: 11px; height: 11px;
+    border-radius: 50%; background: #e5534b; border: 2px solid var(--c-fab-bg);
     opacity: 0; transition: opacity .15s;
   }
-  html[data-dirty="1"] #orz-fab { opacity: 1; }
-  html[data-dirty="1"] #orz-fab::after { opacity: 1; }
+  html[data-dirty="1"] #orz-reader-tools { opacity: 1; }
+  html[data-dirty="1"] .rtool.edit::after { opacity: 1; }
 
   /* toast */
   #orz-toast {
@@ -237,6 +245,16 @@ export function buildHtml(opts: TemplateOptions): string {
     background: var(--c-bg); color: var(--c-fg); border: 1px solid var(--c-border); box-shadow: var(--c-shadow);
   }
   #orz-update.show { display: flex; }
+
+  /* published-page (read-only) save notice */
+  #orz-served-note {
+    position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 41;
+    display: none; align-items: center; gap: 12px; max-width: min(92vw, 560px);
+    padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.4;
+    background: var(--c-bg); color: var(--c-fg); border: 1px solid var(--c-border); box-shadow: var(--c-shadow);
+  }
+  #orz-served-note.show { display: flex; }
+  #orz-served-note .note-text { flex: 1; }
 </style>
 </head>
 <body>
@@ -255,6 +273,10 @@ export function buildHtml(opts: TemplateOptions): string {
 
   <select class="theme-pick" id="orz-theme" title="Theme" aria-label="Theme">${themeOptions}</select>
 
+  <button class="icon-btn" id="orz-export-bar" title="Download a copy" aria-label="Download a copy">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+  </button>
+
   <button class="text-btn primary" id="orz-save" title="Save (Cmd/Ctrl+S)">
     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
     Save
@@ -266,13 +288,26 @@ export function buildHtml(opts: TemplateOptions): string {
   <iframe id="orz-frame" title="Preview"></iframe>
 </div>
 
-<button id="orz-fab" title="Edit this document" aria-label="Edit this document">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-</button>
+<div id="orz-reader-tools">
+  <button class="rtool font" id="orz-font-dec" title="Smaller text" aria-label="Decrease text size" style="font-size:13px">A</button>
+  <button class="rtool font" id="orz-font-inc" title="Larger text" aria-label="Increase text size" style="font-size:18px">A</button>
+  <button class="rtool" id="orz-export" title="Download a copy" aria-label="Download a copy">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+  </button>
+  <button class="rtool edit" id="orz-fab" title="Edit this document" aria-label="Edit this document">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+  </button>
+</div>
 
 <div id="orz-update">
   <span class="upd-text"></span>
   <button class="text-btn" id="orz-upd-dismiss">Dismiss</button>
+</div>
+
+<div id="orz-served-note">
+  <span class="note-text">This is a published page — your edits can't be saved back to the server. You can download a local copy to edit and save.</span>
+  <button class="text-btn primary" id="orz-served-download">Download copy</button>
+  <button class="text-btn" id="orz-served-dismiss">Dismiss</button>
 </div>
 <div id="orz-toast"></div>
 

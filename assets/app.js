@@ -25,6 +25,7 @@
   var splitInstance = null;
   var dirty = false;
   var fileHandle = null;
+  var fontScale = 1;
 
   // ---- source helpers ------------------------------------------------------
   function unescapeSource(s) { return s.replace(/<\\\/(script)/gi, '</$1'); }
@@ -341,6 +342,7 @@
     clone.setAttribute('data-mode', 'read');
     clone.setAttribute('data-chrome', themeById(currentTheme).scheme);
     clone.setAttribute('data-theme', currentTheme); // persist theme choice
+    clone.setAttribute('data-fontscale', String(fontScale));
     clone.removeAttribute('data-dirty');
     // strip live editor DOM (CodeMirror) — restore a clean textarea
     var ed = clone.querySelector('#orz-editor');
@@ -406,31 +408,56 @@
     }).catch(function () { return pickAndStore(); });
   }
 
+  function isServed() {
+    return location.protocol === 'http:' || location.protocol === 'https:';
+  }
+
   function save() {
     var src = currentSource();
     var html = serializeDoc(src);
     var s = document.getElementById('orz-src');
     if (s) s.textContent = '\n' + escapeSource(src) + '\n';
 
+    // On a published (served) page with no prior file handle, the reader has no
+    // write access to the server — guide them to a downloadable local copy.
+    if (isServed() && !fileHandle) { showServedNote(); return; }
+
     if (window.showSaveFilePicker) {
       acquireHandle()
         .then(function (h) { return h.createWritable(); })
         .then(function (w) { return Promise.resolve(w.write(html)).then(function () { return w.close(); }); })
         .then(function () { clearDirty(); toast('Saved'); })
-        .catch(function (err) { if (err && err.name === 'AbortError') return; download(html); });
+        .catch(function (err) { if (err && err.name === 'AbortError') return; downloadFile(html); clearDirty(); toast('Saved a local copy'); });
     } else {
-      download(html);
+      downloadFile(html); clearDirty(); toast('Saved a local copy');
     }
   }
 
-  function download(text) {
+  function downloadFile(text) {
     var blob = new Blob([text], { type: 'text/html' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url; a.download = (CFG.filename || 'document') + '.md.html';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-    clearDirty(); toast('Downloaded');
+  }
+
+  function exportCopy() { downloadFile(serializeDoc(currentSource())); toast('Downloaded a local copy'); }
+
+  function showServedNote() {
+    var n = document.getElementById('orz-served-note');
+    if (n) n.classList.add('show');
+  }
+
+  // ---- font size (reading comfort) ----------------------------------------
+  function applyFontScale() {
+    var doc = frameDoc();
+    if (doc && doc.body) doc.body.style.zoom = String(fontScale);
+  }
+  function bumpFont(delta) {
+    fontScale = Math.max(0.8, Math.min(1.8, Math.round((fontScale + delta) * 10) / 10));
+    applyFontScale();
+    try { localStorage.setItem('orz-mdhtml:fontscale', String(fontScale)); } catch (e) {}
   }
 
   // ---- version check -------------------------------------------------------
@@ -469,6 +496,17 @@
     document.getElementById('orz-fab').addEventListener('click', enterEdit);
     document.getElementById('orz-done').addEventListener('click', done);
     document.getElementById('orz-save').addEventListener('click', save);
+    document.getElementById('orz-font-dec').addEventListener('click', function () { bumpFont(-0.1); });
+    document.getElementById('orz-font-inc').addEventListener('click', function () { bumpFont(0.1); });
+    document.getElementById('orz-export').addEventListener('click', exportCopy);
+    document.getElementById('orz-export-bar').addEventListener('click', exportCopy);
+    document.getElementById('orz-served-download').addEventListener('click', function () {
+      exportCopy();
+      document.getElementById('orz-served-note').classList.remove('show');
+    });
+    document.getElementById('orz-served-dismiss').addEventListener('click', function () {
+      document.getElementById('orz-served-note').classList.remove('show');
+    });
     document.getElementById('orz-upd-dismiss').addEventListener('click', function () {
       document.getElementById('orz-update').classList.remove('show');
     });
@@ -493,9 +531,14 @@
     var t = themeById(currentTheme);
     root.setAttribute('data-chrome', t.scheme);
     if (themeSelect) themeSelect.value = currentTheme;
+    // font scale: saved-in-file attribute wins, else last localStorage choice
+    var savedScale = parseFloat(root.getAttribute('data-fontscale') || '');
+    if (!isNaN(savedScale)) fontScale = savedScale;
+    else { try { var ls = parseFloat(localStorage.getItem('orz-mdhtml:fontscale') || ''); if (!isNaN(ls)) fontScale = ls; } catch (e) {} }
     textarea.value = embeddedSource();
     buildFrame(t);
     firstPaint();
+    applyFontScale();
     wireUi();
     try { if (localStorage.getItem('orz-mdhtml:scrollsync') === '0') syncEnabled = false; } catch (e) {}
     setSyncEnabled(syncEnabled);
