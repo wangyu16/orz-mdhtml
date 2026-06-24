@@ -51,10 +51,8 @@ open path/to/doc.md.html
   inlined into each `.md.html` via `getBrowserRuntimeScript()`. (The earlier
   Turndown stopgap has been removed.)
 
-> **Dependency note.** This repo links orz-markdown locally
-> (`"orz-markdown": "file:../orz-markdown"`) because the copy feature requires
-> orz-markdown ≥ 1.2.0. Switch to `"^1.2.0"` once that version is published to
-> npm.
+  Requires orz-markdown ≥ 1.2.0 (`"orz-markdown": "^1.2.0"`), where
+  copy-as-markdown landed.
 
 ## Layout
 
@@ -71,7 +69,7 @@ src/cli.ts             CLI: foo.md -> foo.md.html
 - [x] Validate the esbuild browser bundle (markdown-it + katex + node-emoji).
 - [x] Generate & open a real example end-to-end.
 - [x] Port copy-as-markdown into orz-markdown core (`data-md` + DOM→md walker).
+- [x] Depend on published `orz-markdown@^1.2.0` from npm.
 - [ ] Mermaid/KaTeX re-render on edit; theme switcher parity with orz-markdown.
-- [ ] Publish `orz-markdown@1.2.0` to npm, then switch this repo to `^1.2.0`.
 - [ ] Publish `orz-mdhtml-browser` to npm for Delivery C.
 ```
