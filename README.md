@@ -3,22 +3,30 @@
 Generate **self-contained, editable `.md.html` files** from Markdown, powered by
 [orz-markdown](https://www.npmjs.com/package/orz-markdown).
 
-A `.md.html` file:
+A `.md.html` file is a **document first, quietly editable**:
 
 1. is a valid HTML page that opens in any browser;
-2. embeds its own Markdown source (single source of truth);
-3. has two modes — **Preview** (default) and **Edit** (source + live preview side by side);
-4. copies the **Markdown source** when you select & copy rendered content;
-5. saves itself in place (Chromium) or as a download (everywhere else).
+2. by default it reads like a normal themed webpage (the rendered document fills
+   an isolated `<iframe>`) with a single small **edit** button — a reader never
+   notices the editor;
+3. clicking it reveals a minimal editor — **CodeMirror** source beside a live
+   preview that updates **incrementally** (morphdom: only changed nodes repaint,
+   scroll preserved, no reload). Resizable split, editor/split/preview views;
+4. lets you switch among orz-markdown's **built-in themes** live (chrome, editor
+   and preview all follow the theme's light/dark scheme);
+5. copies the **Markdown source** when you select & copy rendered content
+   (orz-markdown's core copy-as-markdown runs inside the preview frame);
+6. saves itself in place (Chromium File System Access API) or as a download.
 
 "Self-contained" means *works as one file* — fetching the renderer, themes, and
-helper libraries over the internet is fine.
+editor libraries (CodeMirror, Split.js, morphdom) over the internet is fine.
+Editor libraries are **lazy-loaded on first edit**, so reading stays light.
 
 ## Status
 
-Early scaffold. Working: project structure, generator, in-file runtime
-(modes / save / version-check), copy via a Turndown stopgap. In progress:
-browser-bundle integration and a real example render.
+Working end to end: generator, document-first UI (read / edit), iframe preview
+with full theme isolation, incremental live updates, theme picker, copy-as-
+markdown, and self-reproducing save. Browser-validated.
 
 ## Quick start
 
