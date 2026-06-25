@@ -92,8 +92,8 @@ const BRAND =
 export function buildHtml(opts: TemplateOptions): string {
   const rendererTag =
     opts.renderer.mode === 'inline'
-      ? `<script>${escapeForScript(opts.renderer.js)}</script>`
-      : `<script src="${opts.renderer.src}"></script>`;
+      ? `<script data-orz-asset="engine">${escapeForScript(opts.renderer.js)}</script>`
+      : `<script data-orz-asset="engine" src="${opts.renderer.src}"></script>`;
 
   const defaultScheme =
     opts.themes.find((t) => t.id === opts.defaultTheme)?.scheme ?? 'light';
@@ -104,6 +104,9 @@ export function buildHtml(opts: TemplateOptions): string {
     docId: opts.docId,
     rendererVersion: opts.rendererVersion,
     versionManifest: opts.versionManifest,
+    enginePkg: 'orz-mdhtml-browser',
+    engineFile: 'orzmd.browser.js',
+    appPkg: 'orz-mdhtml',
     defaultTheme: opts.defaultTheme,
     themes: opts.themes,
     frame: opts.frame,
@@ -333,6 +336,7 @@ export function buildHtml(opts: TemplateOptions): string {
 
 <div id="orz-update">
   <span class="upd-text"></span>
+  <button class="text-btn primary" id="orz-upd-apply">Update</button>
   <button class="text-btn" id="orz-upd-dismiss">Dismiss</button>
 </div>
 
@@ -352,8 +356,8 @@ ${escapeForScript(opts.source)}
 ${rendererTag}
 
 <!-- in-file app config + runtime -->
-<script>window.__ORZ_MDHTML__ = ${escapeForScript(JSON.stringify(config))};</script>
-<script>${escapeForScript(opts.appJs)}</script>
+<script data-orz-asset="config">window.__ORZ_MDHTML__ = ${escapeForScript(JSON.stringify(config))};</script>
+<script data-orz-asset="app">${escapeForScript(opts.appJs)}</script>
 </body>
 </html>
 `;

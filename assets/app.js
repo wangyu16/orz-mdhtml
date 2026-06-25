@@ -316,6 +316,7 @@
   }
 
   function enterEdit() {
+    checkVersion(); // edit view only — broad viewers never see the update banner
     ensureLibs().then(function () {
       initEditor();
       setMode('split');
@@ -370,6 +371,8 @@
     clone.setAttribute('data-theme', currentTheme); // persist theme choice
     clone.setAttribute('data-fontscale', String(fontScale));
     clone.removeAttribute('data-dirty');
+    // never bake in the (edit-only) update banner so a viewer can't see it
+    var ub = clone.querySelector('#orz-update'); if (ub) { ub.classList.remove('show'); ub.removeAttribute('data-latest'); }
     // strip live editor DOM (CodeMirror) — restore a clean textarea
     var ed = clone.querySelector('#orz-editor');
     if (ed) ed.innerHTML = '<textarea id="orz-textarea" spellcheck="false"></textarea>';
@@ -516,8 +519,39 @@
   }
   function showUpdate(latest) {
     var bar = document.getElementById('orz-update'); if (!bar) return;
-    bar.querySelector('.upd-text').textContent = 'Renderer ' + latest + ' available (file uses ' + CFG.rendererVersion + ').';
+    bar.querySelector('.upd-text').textContent = 'Framework ' + latest + ' available (file uses ' + CFG.rendererVersion + ').';
+    bar.setAttribute('data-latest', latest);
     bar.classList.add('show');
+  }
+  /** One-click update: re-fetch the engine bundle + app.js at the latest version,
+   *  re-inline them, bump the version, save in place, and reload. */
+  function applyUpdate() {
+    var bar = document.getElementById('orz-update'); var latest = bar && bar.getAttribute('data-latest'); if (!latest) return;
+    var base = 'https://cdn.jsdelivr.net/npm/';
+    var engineUrl = base + CFG.enginePkg + '@' + latest + '/' + CFG.engineFile;
+    var appUrl = base + CFG.appPkg + '@' + latest + '/assets/app.js';
+    toast('Downloading framework ' + latest + '…');
+    Promise.all([
+      fetch(engineUrl).then(function (r) { if (!r.ok) throw new Error('engine'); return r.text(); }),
+      fetch(appUrl).then(function (r) { if (!r.ok) throw new Error('app'); return r.text(); }),
+    ]).then(function (res) {
+      var es = document.querySelector('script[data-orz-asset="engine"]');
+      if (es) { if (es.getAttribute('src')) es.setAttribute('src', engineUrl); else es.textContent = res[0]; }
+      var as = document.querySelector('script[data-orz-asset="app"]');
+      if (as) as.textContent = res[1];
+      var cs = document.querySelector('script[data-orz-asset="config"]');
+      if (cs) { CFG.version = latest; CFG.rendererVersion = latest; cs.textContent = 'window.__ORZ_MDHTML__ = ' + JSON.stringify(CFG) + ';'; }
+      bar.classList.remove('show');
+      var html = serializeDoc(currentSource());
+      if (isServed() && !fileHandle) { showServedNote(); return; }
+      if (window.showSaveFilePicker) {
+        return acquireHandle()
+          .then(function (h) { return h.createWritable(); })
+          .then(function (w) { return Promise.resolve(w.write(html)).then(function () { return w.close(); }); })
+          .then(function () { toast('Updated to ' + latest + ' — reloading…'); setTimeout(function () { location.reload(); }, 700); });
+      }
+      downloadFile(html); toast('Updated copy downloaded — reopen it to use the new framework.');
+    }).catch(function () { toast('Update failed — check your connection.'); });
   }
 
   // ---- toast ---------------------------------------------------------------
@@ -548,6 +582,8 @@
     document.getElementById('orz-upd-dismiss').addEventListener('click', function () {
       document.getElementById('orz-update').classList.remove('show');
     });
+    var ua = document.getElementById('orz-upd-apply');
+    if (ua) ua.addEventListener('click', applyUpdate);
     if (themeSelect) themeSelect.addEventListener('change', function () { setTheme(this.value); });
     var syncBtn = document.getElementById('orz-sync');
     if (syncBtn) syncBtn.addEventListener('click', function () { setSyncEnabled(!syncEnabled); });
@@ -580,7 +616,7 @@
     wireUi();
     try { if (localStorage.getItem('orz-mdhtml:scrollsync') === '0') syncEnabled = false; } catch (e) {}
     setSyncEnabled(syncEnabled);
-    checkVersion();
+    // version check runs on entering edit (edit view only), not on load
   }
 
   if (document.readyState === 'loading') {
