@@ -103,10 +103,8 @@ export function buildHtml(opts: TemplateOptions): string {
     filename: opts.filename,
     docId: opts.docId,
     rendererVersion: opts.rendererVersion,
-    versionManifest: opts.versionManifest,
-    enginePkg: 'orz-mdhtml-browser',
-    engineFile: 'orzmd.browser.js',
-    appPkg: 'orz-mdhtml',
+    // NB: the update SOURCE (manifest/packages/host) is hardcoded in app.js, not
+    // here — a config field must never be able to redirect the self-update.
     defaultTheme: opts.defaultTheme,
     themes: opts.themes,
     frame: opts.frame,

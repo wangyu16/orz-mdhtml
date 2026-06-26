@@ -93,3 +93,13 @@ morphdom. All are CDN-cached after first load.
   `#orz-src` element's `textContent` and reverse that escape.
 - Requires `orz-markdown` ≥ 1.2.0 (copy-as-markdown); ≥ 1.2.1 for the
   whole-table/blockquote copy fix.
+
+## Security
+
+`.md.html` files are **self-contained executable HTML** — opening one runs its
+embedded JavaScript. Treat them like programs: only open or edit files from a
+trusted source, and advise users the same. The one-click framework update is
+opt-in (edit view only, explicit confirm) and always fetches from the hardcoded
+canonical jsDelivr packages — a tampered file can't redirect it. A file's
+integrity can't be verified from inside it; for authenticity, verify out-of-band.
+See the README "Security" section.
