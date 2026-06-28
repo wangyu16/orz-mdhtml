@@ -22,10 +22,8 @@
   var currentTheme = CFG.defaultTheme;
   var cm = null;
   var libsLoading = null;
-  var splitInstance = null;
   var dirty = false;
   var fileHandle = null;
-  var fontScale = 1;
 
   // ---- source helpers ------------------------------------------------------
   function unescapeSource(s) { return s.replace(/<\\\/(script)/gi, '</$1'); }
@@ -212,7 +210,7 @@
   }
 
   function syncPreviewFromEditor() {
-    if (!syncEnabled || !cm || root.getAttribute('data-mode') !== 'split') return;
+    if (!syncEnabled || !cm || !isEdit()) return;
     var sc = scroller(); if (!sc) return;
     rebuildAnchors(); // fresh offsets (fonts/images may have changed heights)
     // first visible source line: the line at the top edge of the editor viewport
@@ -221,7 +219,7 @@
     sc.scrollTop = lineToTop(line);
   }
   function syncEditorFromPreview() {
-    if (!syncEnabled || !cm || root.getAttribute('data-mode') !== 'split') return;
+    if (!syncEnabled || !cm || !isEdit()) return;
     var sc = scroller(); if (!sc) return;
     rebuildAnchors();
     cm.scrollTo(null, cm.heightAtLine(Math.round(topToLine(sc.scrollTop)), 'local'));
@@ -262,7 +260,6 @@
     var L = CFG.editorLibs;
     loadCss(L.codemirrorCss); loadCss(L.codemirrorLightThemeCss); loadCss(L.codemirrorDarkThemeCss);
     libsLoading = loadScript(L.morphdomJs)
-      .then(function () { return loadScript(L.splitJs); })
       .then(function () { return loadScript(L.codemirrorJs); })
       .then(function () { return loadScript(L.codemirrorMarkdownJs); })
       .then(function () { return loadScript(L.codemirrorContinuelistJs); });
@@ -290,46 +287,50 @@
     wireScrollSync();
   }
 
-  // ---- view modes ----------------------------------------------------------
-  function setMode(mode) {
-    root.setAttribute('data-mode', mode);
-    if (mode === 'split') enableSplit(); else disableSplit();
-    if (cm) setTimeout(function () { cm.refresh(); }, 30);
-    if (mode === 'split') scheduleAnchors();
-  }
-  function enableSplit() {
-    if (splitInstance || !window.Split) return;
-    splitInstance = window.Split(['#orz-editor', '#orz-frame'], {
-      sizes: [50, 50], minSize: 220, gutterSize: 8,
-      onDragStart: function () { frame.style.pointerEvents = 'none'; },
-      onDragEnd: function () { frame.style.pointerEvents = ''; if (cm) cm.refresh(); scheduleAnchors(); },
+  // ---- edit mode (slide-in popout) -----------------------------------------
+  function isEdit() { return root.getAttribute('data-mode') === 'edit'; }
+
+  // Draggable divider — sets the editor/preview split (relative width). The
+  // iframe swallows pointer events, so disable them on the frame while dragging
+  // (otherwise the parent stops receiving mousemove/mouseup and the drag sticks).
+  var dividerWired = false;
+  function wireDivider() {
+    if (dividerWired) return; dividerWired = true;
+    var d = document.getElementById('orz-divider'); if (!d) return;
+    var dragging = false;
+    d.addEventListener('mousedown', function (e) {
+      dragging = true; d.classList.add('dragging'); e.preventDefault();
+      document.body.style.userSelect = 'none'; frame.style.pointerEvents = 'none';
     });
-  }
-  function disableSplit() {
-    if (!splitInstance) return;
-    splitInstance.destroy();
-    splitInstance = null;
-    document.getElementById('orz-editor').style.width = '';
-    frame.style.width = '';
-    document.getElementById('orz-editor').style.flex = '';
-    frame.style.flex = '';
+    document.addEventListener('mousemove', function (e) {
+      if (!dragging) return;
+      var pct = Math.max(20, Math.min(78, (e.clientX / window.innerWidth) * 100));
+      root.style.setProperty('--orz-split', pct + '%');
+    });
+    document.addEventListener('mouseup', function () {
+      if (!dragging) return;
+      dragging = false; d.classList.remove('dragging');
+      document.body.style.userSelect = ''; frame.style.pointerEvents = '';
+      if (cm) cm.refresh(); scheduleAnchors();
+    });
   }
 
   function enterEdit() {
+    root.setAttribute('data-mode', 'edit');
     checkVersion(); // edit view only — broad viewers never see the update banner
+    wireDivider();
     ensureLibs().then(function () {
       initEditor();
-      setMode('split');
-      if (cm) cm.focus();
+      if (cm) setTimeout(function () { cm.refresh(); cm.focus(); }, 30);
+      scheduleAnchors();
     }).catch(function () {
-      // offline / lib load failed: plain-textarea fallback
-      setMode('editor');
+      // offline / lib load failed: the bare textarea is still editable
       textarea.focus();
       toast('Editor libraries unavailable — basic editing');
     });
   }
-  function done() {
-    setMode('read');
+  function exitEdit() {
+    root.removeAttribute('data-mode');
     if (dirty) toast('Unsaved changes — press ' + (isMac() ? '⌘' : 'Ctrl') + '+S to save');
   }
   function isMac() { return /Mac|iPhone|iPad/.test(navigator.platform || ''); }
@@ -366,10 +367,9 @@
     var clone = root.cloneNode(true);
     var s = clone.querySelector('#orz-src');
     if (s) s.textContent = '\n' + escapeSource(src) + '\n';
-    clone.setAttribute('data-mode', 'read');
+    clone.removeAttribute('data-mode');
     clone.setAttribute('data-chrome', themeById(currentTheme).scheme);
     clone.setAttribute('data-theme', currentTheme); // persist theme choice
-    clone.setAttribute('data-fontscale', String(fontScale));
     clone.removeAttribute('data-dirty');
     // never bake in the (edit-only) update banner so a viewer can't see it
     var ub = clone.querySelector('#orz-update'); if (ub) { ub.classList.remove('show'); ub.removeAttribute('data-latest'); }
@@ -479,17 +479,6 @@
     if (n) n.classList.add('show');
   }
 
-  // ---- font size (reading comfort) ----------------------------------------
-  function applyFontScale() {
-    var doc = frameDoc();
-    if (doc && doc.body) doc.body.style.zoom = String(fontScale);
-  }
-  function bumpFont(delta) {
-    fontScale = Math.max(0.8, Math.min(1.8, Math.round((fontScale + delta) * 10) / 10));
-    applyFontScale();
-    try { localStorage.setItem('orz-mdhtml:fontscale', String(fontScale)); } catch (e) {}
-  }
-
   // ---- version check -------------------------------------------------------
   // True only when `a` is a strictly newer semver than `b` (so an older
   // resolved version never shows a bogus "update available").
@@ -575,13 +564,10 @@
 
   // ---- wiring --------------------------------------------------------------
   function wireUi() {
-    document.getElementById('orz-fab').addEventListener('click', enterEdit);
-    document.getElementById('orz-done').addEventListener('click', done);
+    document.getElementById('orz-edit-fab').addEventListener('click', enterEdit);
+    document.getElementById('orz-close').addEventListener('click', exitEdit);
     document.getElementById('orz-save').addEventListener('click', save);
-    document.getElementById('orz-font-dec').addEventListener('click', function () { bumpFont(-0.1); });
-    document.getElementById('orz-font-inc').addEventListener('click', function () { bumpFont(0.1); });
-    document.getElementById('orz-export').addEventListener('click', exportCopy);
-    document.getElementById('orz-export-bar').addEventListener('click', exportCopy);
+    document.getElementById('orz-download').addEventListener('click', exportCopy);
     document.getElementById('orz-served-download').addEventListener('click', function () {
       exportCopy();
       document.getElementById('orz-served-note').classList.remove('show');
@@ -601,7 +587,7 @@
     textarea.addEventListener('input', function () { if (!cm) { markDirty(); scheduleUpdate(); } });
     document.addEventListener('keydown', function (e) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
-      else if (e.key === 'Escape' && root.getAttribute('data-mode') !== 'read') { done(); }
+      else if (e.key === 'Escape' && isEdit()) { exitEdit(); }
     });
     // Warn before losing unsaved edits (close / reload / navigate away).
     window.addEventListener('beforeunload', function (e) {
@@ -615,14 +601,9 @@
     var t = themeById(currentTheme);
     root.setAttribute('data-chrome', t.scheme);
     if (themeSelect) themeSelect.value = currentTheme;
-    // font scale: saved-in-file attribute wins, else last localStorage choice
-    var savedScale = parseFloat(root.getAttribute('data-fontscale') || '');
-    if (!isNaN(savedScale)) fontScale = savedScale;
-    else { try { var ls = parseFloat(localStorage.getItem('orz-mdhtml:fontscale') || ''); if (!isNaN(ls)) fontScale = ls; } catch (e) {} }
     textarea.value = embeddedSource();
     buildFrame(t);
     firstPaint();
-    applyFontScale();
     wireUi();
     try { if (localStorage.getItem('orz-mdhtml:scrollsync') === '0') syncEnabled = false; } catch (e) {}
     setSyncEnabled(syncEnabled);

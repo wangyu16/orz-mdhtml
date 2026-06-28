@@ -81,6 +81,19 @@ const ORZ_LOGO =
 const GH_ICON =
   '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>';
 
+/* Canonical icon set — shared thin-stroke line icons (from the orz-markdown
+ * editor) so the same function shows the same glyph across every orz surface. */
+function ic(path: string): string {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+}
+const ICON = {
+  save: ic('<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/>'),
+  download: ic('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>'),
+  sync: ic('<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><path d="M8 12h8"/>'),
+  pencil: ic('<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>'),
+  collapse: ic('<path d="M15 6l-6 6 6 6"/>'),
+};
+
 /** Editor-header brand: logo + app name + GitHub link (whole thing → repo). */
 const BRAND =
   '<a id="orz-brand" href="https://github.com/wangyu16/orz-mdhtml" target="_blank" rel="noopener noreferrer" title="orz-mdhtml on GitHub">' +
@@ -122,7 +135,7 @@ export function buildHtml(opts: TemplateOptions): string {
     .join('');
 
   return `<!DOCTYPE html>
-<html lang="en" data-mode="read" data-chrome="${defaultScheme}">
+<html lang="en" data-chrome="${defaultScheme}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -130,8 +143,7 @@ export function buildHtml(opts: TemplateOptions): string {
 <meta name="generator" content="orz-mdhtml">
 <style>
   :root {
-    --chrome-h: 46px;
-    --fab-size: 40px;
+    --orz-split: 44%;
   }
   [data-chrome="light"] {
     --c-bg: #ffffff; --c-fg: #1f2328; --c-muted: #6b7280;
@@ -154,111 +166,98 @@ export function buildHtml(opts: TemplateOptions): string {
     display: flex; flex-direction: column;
   }
 
-  /* ---- toolbar (hidden while reading) ---- */
-  #orz-bar {
-    height: var(--chrome-h); flex: 0 0 var(--chrome-h);
-    display: none; align-items: center; gap: 8px;
-    padding: 0 10px; background: var(--c-bg);
-    border-bottom: 1px solid var(--c-border);
+  /* ---- editor panel: dark chrome, slides in from the left ---- */
+  #orz-panel {
+    position: fixed; left: 0; top: 0; bottom: 0; width: var(--orz-split); z-index: 40;
+    display: flex; flex-direction: column;
+    background: #1f2228; border-right: 1px solid #333; box-shadow: 2px 0 16px rgba(0,0,0,.25);
+    transform: translateX(calc(-100% - 24px)); transition: transform .22s ease;
     -webkit-user-select: none; user-select: none;
   }
-  html:not([data-mode="read"]) #orz-bar { display: flex; }
-  .bar-spring { flex: 1; }
-  .icon-btn {
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 30px; height: 30px; border: 0; border-radius: 7px;
-    background: transparent; color: var(--c-fg); cursor: pointer;
+  [data-mode="edit"] #orz-panel { transform: translateX(0); }
+  #orz-toolbar {
+    display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+    padding: 7px 10px; background: #23262c; border-bottom: 1px solid #34383f;
+  }
+  #orz-toolbar .ic {
+    width: 32px; height: 30px; display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; border: 0; border-radius: 7px; color: #c2c8d0; cursor: pointer;
     transition: background .12s, color .12s;
   }
-  .icon-btn:hover { background: var(--c-hover); }
-  .icon-btn svg { width: 17px; height: 17px; display: block; }
-  .icon-btn[aria-pressed="true"] { color: var(--c-accent); background: var(--c-active); }
-  .icon-btn[aria-pressed="false"] { color: var(--c-muted); }
-  .text-btn {
-    display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px;
-    border: 1px solid var(--c-border); border-radius: 8px;
-    background: var(--c-bg); color: var(--c-fg); cursor: pointer; font: inherit; font-weight: 500;
+  #orz-toolbar .ic:hover { background: #383d45; color: #fff; }
+  #orz-toolbar .ic svg { width: 17px; height: 17px; display: block; }
+  #orz-toolbar .ic[aria-pressed="true"] { color: #3b82f6; }
+  #orz-toolbar .ic[aria-pressed="false"] { opacity: .5; }
+  #orz-toolbar .ic.primary { background: #3b82f6; color: #fff; }
+  #orz-toolbar .ic.primary:hover { background: #2f6fe0; color: #fff; }
+  #orz-toolbar .orz-sep { width: 1px; height: 20px; background: #3c414a; margin: 0 5px; }
+  #orz-toolbar .orz-spacer { flex: 1; }
+  #orz-brand { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: #cdd3df; padding: 2px 7px; border-radius: 7px; }
+  #orz-brand:hover { color: #fff; background: #383d45; }
+  #orz-brand .orz-logo svg { height: 22px; width: auto; display: block; }
+  #orz-brand .orz-brand-name { font: 700 13px/1 system-ui, sans-serif; letter-spacing: .01em; }
+  #orz-brand .orz-gh { display: inline-flex; opacity: .55; }
+  #orz-brand:hover .orz-gh { opacity: 1; }
+  #orz-brand .orz-gh svg { width: 15px; height: 15px; display: block; }
+  /* close tab — a small handle on the editor's right edge that slides it away */
+  #orz-close {
+    position: absolute; top: 50%; right: -19px; transform: translateY(-50%);
+    width: 19px; height: 48px; z-index: 46; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 0; border-radius: 0 8px 8px 0; background: #23262c; color: #c2c8d0;
+    cursor: pointer; box-shadow: 2px 0 8px rgba(0,0,0,.18);
   }
+  #orz-close:hover { background: #383d45; color: #fff; }
+  #orz-close svg { width: 15px; height: 15px; display: block; }
+  select.theme-pick {
+    height: 30px; padding: 0 26px 0 10px; border: 1px solid #454b55; border-radius: 7px;
+    background: #34383f no-repeat right 8px center; color: #e6e8ec;
+    font: 500 12.5px/1 system-ui, sans-serif; cursor: pointer; max-width: 42%;
+    -webkit-appearance: none; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23aab2bd' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  }
+
+  /* ---- preview: fixed full-window wrapper; shifts right in edit mode ---- */
+  #orz-preview { position: fixed; inset: 0; left: 0; transition: left .22s ease; }
+  [data-mode="edit"] #orz-preview { left: calc(var(--orz-split) + 6px); }
+  #orz-frame { width: 100%; height: 100%; border: 0; background: #fff; display: block; }
+
+  /* draggable divider between editor and preview */
+  #orz-divider { display: none; }
+  [data-mode="edit"] #orz-divider { display: block; position: fixed; top: 0; bottom: 0;
+    left: var(--orz-split); width: 6px; z-index: 45; cursor: col-resize; background: #34383f; }
+  #orz-divider:hover, #orz-divider.dragging { background: #3b82f6; }
+
+  /* pencil FAB (opens the editor); bottom-left, where the editor slides in from */
+  #orz-edit-fab {
+    position: fixed; left: 22px; bottom: 18px; z-index: 30;
+    width: 42px; height: 42px; border: 0; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--c-accent); color: #fff; cursor: pointer;
+    box-shadow: var(--c-shadow); opacity: .92;
+  }
+  #orz-edit-fab svg { width: 19px; height: 19px; display: block; }
+  #orz-edit-fab:hover { opacity: 1; transform: scale(1.06); }
+  #orz-edit-fab::after { content: ""; position: absolute; top: 1px; right: 1px;
+    width: 11px; height: 11px; border-radius: 50%; background: #e5534b;
+    border: 2px solid var(--c-bg); opacity: 0; transition: opacity .15s; }
+  html[data-dirty="1"] #orz-edit-fab::after { opacity: 1; }
+  [data-mode="edit"] #orz-edit-fab { display: none; }
+
+  /* CodeMirror fills the editor area below the toolbar */
+  #orz-editor { flex: 1; min-height: 0; overflow: hidden; background: #1f2228; }
+  #orz-editor .CodeMirror { height: 100%; font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 13.5px; line-height: 1.6; }
+  #orz-textarea { width: 100%; height: 100%; box-sizing: border-box; border: 0; padding: 14px;
+    resize: none; outline: none; font: 13.5px/1.6 ui-monospace, Menlo, Consolas, monospace;
+    background: #1f2228; color: #e6e8eb; }
+
+  /* banner buttons (update / served-note) */
+  .text-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px;
+    border: 1px solid var(--c-border); border-radius: 8px; background: var(--c-bg); color: var(--c-fg);
+    cursor: pointer; font: inherit; font-weight: 500; }
   .text-btn:hover { background: var(--c-hover); }
   .text-btn.primary { background: var(--c-accent); border-color: var(--c-accent); color: #fff; }
   .text-btn.primary:hover { filter: brightness(1.06); }
-  .bar-title {
-    font-weight: 600; color: var(--c-fg); max-width: 38vw;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .dirty-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--c-accent);
-    margin-left: 2px; opacity: 0; transition: opacity .15s; }
-  html[data-dirty="1"] .dirty-dot { opacity: 1; }
-  #orz-brand {
-    display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
-    color: var(--c-fg); padding: 2px 7px; border-radius: 7px;
-  }
-  #orz-brand:hover { background: var(--c-hover); }
-  #orz-brand .orz-logo svg { height: 22px; width: auto; display: block; }
-  #orz-brand .orz-brand-name { font-weight: 700; font-size: 13px; letter-spacing: .01em; }
-  #orz-brand .orz-gh { display: inline-flex; opacity: .55; color: var(--c-muted); }
-  #orz-brand:hover .orz-gh { opacity: 1; color: var(--c-fg); }
-  #orz-brand .orz-gh svg { width: 15px; height: 15px; display: block; }
-  .bar-sep { width: 1px; height: 20px; background: var(--c-border); flex: 0 0 auto; }
-  select.theme-pick {
-    height: 30px; padding: 0 26px 0 10px; border: 1px solid var(--c-border); border-radius: 8px;
-    background: var(--c-bg) no-repeat right 8px center; color: var(--c-fg); font: inherit; cursor: pointer;
-    -webkit-appearance: none; appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  }
-
-  /* ---- stage: editor pane + preview iframe ---- */
-  #orz-stage { flex: 1; display: flex; min-height: 0; position: relative; }
-  #orz-editor { display: none; min-width: 0; height: 100%; background: var(--c-bg); }
-  #orz-frame { flex: 1; min-width: 0; height: 100%; width: 100%; border: 0; background: #fff; display: block; }
-
-  html[data-mode="read"]  #orz-editor { display: none; }
-  html[data-mode="read"]  #orz-frame  { flex: 1; }
-  html[data-mode="split"] #orz-editor { display: block; }
-  html[data-mode="split"] #orz-frame  { border-left: 1px solid var(--c-border); }
-
-  /* CodeMirror fills the editor pane */
-  #orz-editor .CodeMirror { height: 100%; font-family: "SF Mono", "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace; font-size: 13.5px; line-height: 1.6; }
-  #orz-textarea { width: 100%; height: 100%; box-sizing: border-box; border: 0; padding: 16px;
-    resize: none; outline: none; font: 13.5px/1.6 ui-monospace, Menlo, Consolas, monospace;
-    background: var(--c-bg); color: var(--c-fg); }
-
-  /* Split.js gutter */
-  .gutter { background: var(--c-border); position: relative; }
-  .gutter.gutter-horizontal { cursor: col-resize; width: 8px; }
-  .gutter.gutter-horizontal::after { content: ""; position: absolute; inset: 0 3px;
-    border-radius: 3px; background: transparent; transition: background .12s; }
-  .gutter.gutter-horizontal:hover::after { background: var(--c-accent); }
-
-  /* ---- floating reader tools (reading mode only) ---- */
-  #orz-reader-tools {
-    position: fixed; right: 18px; bottom: 18px; z-index: 30;
-    display: none; align-items: center; gap: 2px; padding: 4px;
-    border-radius: 24px; border: 1px solid var(--c-border);
-    background: var(--c-fab-bg); color: var(--c-fab-fg);
-    box-shadow: var(--c-shadow); backdrop-filter: blur(8px);
-    opacity: .6; transition: opacity .2s;
-  }
-  #orz-reader-tools:hover { opacity: 1; }
-  html[data-mode="read"] #orz-reader-tools { display: inline-flex; }
-  .rtool {
-    width: 34px; height: 34px; border: 0; border-radius: 50%;
-    background: transparent; color: inherit; cursor: pointer;
-    display: inline-flex; align-items: center; justify-content: center;
-    line-height: 1; transition: background .12s, transform .12s;
-  }
-  .rtool:hover { background: var(--c-hover); }
-  .rtool svg { width: 18px; height: 18px; }
-  .rtool.font { font-weight: 700; font-family: Georgia, "Times New Roman", serif; }
-  .rtool.edit { position: relative; background: var(--c-accent); color: #fff; }
-  .rtool.edit:hover { filter: brightness(1.06); transform: translateY(-1px); }
-  .rtool.edit::after {
-    content: ""; position: absolute; top: 0; right: 0; width: 11px; height: 11px;
-    border-radius: 50%; background: #e5534b; border: 2px solid var(--c-fab-bg);
-    opacity: 0; transition: opacity .15s;
-  }
-  html[data-dirty="1"] #orz-reader-tools { opacity: 1; }
-  html[data-dirty="1"] .rtool.edit::after { opacity: 1; }
 
   /* toast */
   #orz-toast {
@@ -290,46 +289,22 @@ export function buildHtml(opts: TemplateOptions): string {
 </head>
 <body>
 
-<div id="orz-bar" role="toolbar" aria-label="Editor toolbar">
-  ${BRAND}
-  <span class="bar-sep"></span>
-  <button class="icon-btn" id="orz-done" title="Done — back to reading" aria-label="Done">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M5 12l6-6M5 12l6 6"/></svg>
-  </button>
-  <span class="bar-title" id="orz-title">${escapeHtml(opts.title)}</span>
-  <span class="dirty-dot" title="Unsaved changes"></span>
-  <span class="bar-spring"></span>
+<div id="orz-preview"><iframe id="orz-frame" title="Preview"></iframe></div>
+<div id="orz-divider" title="Drag to resize"></div>
+<button id="orz-edit-fab" title="Edit this document" aria-label="Edit this document">${ICON.pencil}</button>
 
-  <button class="icon-btn" id="orz-sync" title="Sync scrolling" aria-label="Sync scrolling" aria-pressed="true">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-  </button>
-
-  <select class="theme-pick" id="orz-theme" title="Theme" aria-label="Theme">${themeOptions}</select>
-
-  <button class="icon-btn" id="orz-export-bar" title="Download a copy" aria-label="Download a copy">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-  </button>
-
-  <button class="text-btn primary" id="orz-save" title="Save (Cmd/Ctrl+S)">
-    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-    Save
-  </button>
-</div>
-
-<div id="orz-stage">
+<div id="orz-panel">
+  <div id="orz-toolbar" role="toolbar" aria-label="Editor toolbar">
+    ${BRAND}
+    <span class="orz-sep"></span>
+    <button class="ic primary" id="orz-save" title="Save (Cmd/Ctrl+S)" aria-label="Save">${ICON.save}</button>
+    <button class="ic" id="orz-download" title="Download a copy" aria-label="Download a copy">${ICON.download}</button>
+    <span class="orz-spacer"></span>
+    <button class="ic" id="orz-sync" title="Sync scrolling" aria-label="Sync scrolling" aria-pressed="true">${ICON.sync}</button>
+    <select class="theme-pick" id="orz-theme" title="Theme" aria-label="Theme">${themeOptions}</select>
+  </div>
+  <button id="orz-close" title="Close editor" aria-label="Close editor">${ICON.collapse}</button>
   <div id="orz-editor"><textarea id="orz-textarea" spellcheck="false"></textarea></div>
-  <iframe id="orz-frame" title="Preview"></iframe>
-</div>
-
-<div id="orz-reader-tools">
-  <button class="rtool font" id="orz-font-dec" title="Smaller text" aria-label="Decrease text size" style="font-size:13px">A</button>
-  <button class="rtool font" id="orz-font-inc" title="Larger text" aria-label="Increase text size" style="font-size:18px">A</button>
-  <button class="rtool" id="orz-export" title="Download a copy" aria-label="Download a copy">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
-  </button>
-  <button class="rtool edit" id="orz-fab" title="Edit this document" aria-label="Edit this document">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-  </button>
 </div>
 
 <div id="orz-update">

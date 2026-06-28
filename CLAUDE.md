@@ -42,10 +42,10 @@ for that.
   `dist/orzmd.browser.js`, then copies it into `browser/`. Browser-incompatible
   bits are shimmed in `build/shims/` (`fs`, `path`, the imsize fs reader).
 - `assets/app.js` — **the in-file runtime, plain JS** inlined into every
-  `.md.html`. Read/edit modes, iframe build, **morphdom** incremental preview,
-  themes, font size, scroll-sync (+toggle), save (FS Access API + IndexedDB
-  handle reuse), export, and the served-page save notice. Lazy-loads CodeMirror/
-  Split.js/morphdom on first edit.
+  `.md.html`. View/edit (slide-in popout) modes, iframe build, **morphdom**
+  incremental preview, themes, scroll-sync (+toggle), save (FS Access API +
+  IndexedDB handle reuse), export, and the served-page save notice. Lazy-loads
+  CodeMirror/morphdom on first edit.
 - `browser/` — the `orz-mdhtml-browser` package (`package.json` + `README.md`;
   the bundle is staged in by `npm run bundle`).
 - `orz-mdhtml-skills/` — the agent skill for using/creating `.md.html`.
@@ -54,7 +54,7 @@ for that.
 
 - **`assets/app.js` is plain JS** (backticks OK). It depends on element ids from
   `src/template.ts` (`#orz-src`, `#orz-frame`, `#orz-doc`, `#orz-editor`,
-  toolbar/reader-tool ids). Change them together.
+  `#orz-panel`, toolbar ids). Change them together.
 - **Escape `</script>`** in anything inlined into a `<script>` (template.ts
   `escapeForScript`, app.js `guard`). The embedded source is stored with
   `</script>` → `<\/script>` and reversed at runtime.

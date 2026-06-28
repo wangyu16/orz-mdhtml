@@ -10,15 +10,16 @@ your own copy to annotate. Nothing to install for the reader.
 ## What a `.md.html` does
 
 1. **Reads like a webpage.** The rendered document fills an isolated `<iframe>`
-   (full theme isolation, true WYSIWYG). The only chrome is a small floating
-   toolbar in the corner — a reader barely notices it.
+   (full theme isolation, true WYSIWYG). The only chrome is a single pencil
+   button in the corner — a reader barely notices it.
 2. **Edits in place.** Click the pencil for a minimal editor: a **CodeMirror**
    source pane beside a **live preview** that updates *incrementally*
    (only changed nodes repaint — scroll preserved, no flicker/reload).
 3. **Themes.** Switch among orz-markdown's built-in themes live; the chrome,
    editor, and preview all follow the theme's light/dark scheme.
-4. **Reader comfort.** Adjust font size (A− / A+) for comfortable reading;
-   the choice is remembered.
+4. **Stays out of the way.** The editor is a panel that slides in from the left
+   when you click the pencil, and slides away via a tab on its edge — the
+   document, not the chrome, is the default.
 5. **Copy as Markdown.** Selecting and copying rendered content yields Markdown
    source, not HTML (a table copies as a Markdown table, a TOC as its heading
    links, etc.).
@@ -69,8 +70,8 @@ Themes: `light-academic-1/2`, `light-neat-1/2`, `light-playful-1/2`,
 
 | Feature | Support |
 |---|---|
-| Read, theme switch, font size, copy-as-markdown, export (download) | All modern browsers |
-| Live editing (CodeMirror, incremental preview, Split.js) | All modern browsers |
+| Read, theme switch, copy-as-markdown, export (download) | All modern browsers |
+| Live editing (CodeMirror, incremental preview) | All modern browsers |
 | **Save in place** (File System Access API) | Chromium (Chrome/Edge); others fall back to Export/download |
 
 ## For teaching
@@ -105,7 +106,7 @@ whole-table/blockquote copy fix.
 ## Roadmap
 
 - [x] Document-first UI: read / edit, iframe preview, incremental live updates
-- [x] Theme picker, reader font size, export, scroll-sync toggle
+- [x] Theme picker, export, scroll-sync toggle
 - [x] copy-as-markdown via orz-markdown core
 - [x] Publish `orz-mdhtml` (the CLI) and `orz-mdhtml-browser` (CDN bundle) to npm
 - [ ] Optional fully-offline build (inline themes + editor libs)
