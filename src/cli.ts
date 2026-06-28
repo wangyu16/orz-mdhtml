@@ -21,17 +21,20 @@ import { getBrowserRuntimeScript } from 'orz-markdown/runtime';
 import { buildHtml, type ThemeEntry } from './template.js';
 
 /** orz-markdown's bundled themes (CDN-loaded), with light/dark scheme. */
+// Same set, names, and order as the orz-markdown PWA editor's theme menu.
 const THEME_DEFS: Array<Omit<ThemeEntry, 'href'>> = [
-  { id: 'light-academic-1', name: 'Academic I', scheme: 'light' },
-  { id: 'light-academic-2', name: 'Academic II', scheme: 'light' },
-  { id: 'light-neat-1', name: 'Neat I', scheme: 'light' },
-  { id: 'light-neat-2', name: 'Neat II', scheme: 'light' },
-  { id: 'light-playful-1', name: 'Playful I', scheme: 'light' },
-  { id: 'light-playful-2', name: 'Playful II', scheme: 'light' },
-  { id: 'beige-decent-1', name: 'Decent I', scheme: 'light' },
-  { id: 'beige-decent-2', name: 'Decent II', scheme: 'light' },
-  { id: 'dark-elegant-1', name: 'Elegant I', scheme: 'dark' },
-  { id: 'dark-elegant-2', name: 'Elegant II', scheme: 'dark' },
+  { id: 'light-neat-3', name: 'Orchard', scheme: 'light' },
+  { id: 'light-neat-1', name: 'Neat', scheme: 'light' },
+  { id: 'light-neat-2', name: 'Neat 2', scheme: 'light' },
+  { id: 'light-academic-1', name: 'Academic', scheme: 'light' },
+  { id: 'light-academic-2', name: 'Academic 2', scheme: 'light' },
+  { id: 'beige-decent-1', name: 'Beige', scheme: 'light' },
+  { id: 'beige-decent-2', name: 'Beige 2', scheme: 'light' },
+  { id: 'light-playful-1', name: 'Playful', scheme: 'light' },
+  { id: 'light-playful-2', name: 'Playful 2', scheme: 'light' },
+  { id: 'dark-elegant-1', name: 'Dark Elegant', scheme: 'dark' },
+  { id: 'dark-elegant-2', name: 'Dark Elegant 2', scheme: 'dark' },
+  { id: 'dark-elegant-3', name: 'Nocturne', scheme: 'dark' },
 ];
 
 const CDN = {
