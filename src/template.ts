@@ -250,6 +250,10 @@ export function buildHtml(opts: TemplateOptions): string {
   #orz-textarea { width: 100%; height: 100%; box-sizing: border-box; border: 0; padding: 14px;
     resize: none; outline: none; font: 13.5px/1.6 ui-monospace, Menlo, Consolas, monospace;
     background: #1f2228; color: #e6e8eb; }
+  #orz-foot { flex: 0 0 auto; height: 24px; display: flex; align-items: center; justify-content: center;
+    font: 11.5px/1 system-ui, sans-serif; color: #8b93a0; background: #23262c; border-top: 1px solid #34383f; gap: 4px; }
+  #orz-foot a { color: #9aa3b2; text-decoration: none; }
+  #orz-foot a:hover { color: #fff; text-decoration: underline; }
 
   /* banner buttons (update / served-note) */
   .text-btn { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px;
@@ -305,6 +309,7 @@ export function buildHtml(opts: TemplateOptions): string {
   </div>
   <button id="orz-close" title="Close editor" aria-label="Close editor">${ICON.collapse}</button>
   <div id="orz-editor"><textarea id="orz-textarea" spellcheck="false"></textarea></div>
+  <div id="orz-foot">© <a href="https://markdown.orz.how" target="_blank" rel="noopener noreferrer">orz-markdown</a></div>
 </div>
 
 <div id="orz-update">
