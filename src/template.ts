@@ -57,7 +57,6 @@ export interface TemplateOptions {
     codemirrorJs: string;
     codemirrorMarkdownJs: string;
     codemirrorContinuelistJs: string;
-    splitJs: string;
     morphdomJs: string;
   };
 }

@@ -163,7 +163,6 @@ function main(): void {
       codemirrorJs: `${CDN.cm}/codemirror.min.js`,
       codemirrorMarkdownJs: `${CDN.cm}/mode/markdown/markdown.min.js`,
       codemirrorContinuelistJs: `${CDN.cm}/addon/edit/continuelist.min.js`,
-      splitJs: 'https://cdnjs.cloudflare.com/ajax/libs/split.js/1.6.5/split.min.js',
       morphdomJs: 'https://cdn.jsdelivr.net/npm/morphdom@2.7.4/dist/morphdom-umd.min.js',
     },
   });
