@@ -7,7 +7,7 @@
  *
  * Options:
  *   -o, --out <file>      output path (default: <input>.md.html)
- *   --theme <name>        orz-markdown theme (default: light-academic-1)
+ *   --theme <name>        orz-markdown theme (default: light-neat-3)
  *   --cdn                 reference the renderer from jsDelivr (default; small files)
  *   --inline              embed the renderer bundle in the file (larger, no renderer fetch)
  *   --title <text>        document <title> (default: input filename)
@@ -84,7 +84,7 @@ interface Args {
 }
 
 function parseArgs(argv: string[]): Args {
-  const a: Args = { theme: 'light-academic-1', delivery: 'cdn' };
+  const a: Args = { theme: 'light-neat-3', delivery: 'cdn' };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '-o' || arg === '--out') a.out = argv[++i];

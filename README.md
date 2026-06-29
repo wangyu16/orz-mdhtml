@@ -53,7 +53,7 @@ To hack on it, clone the repo and use `npm run gen -- doc.md`.
 orz-mdhtml <input.md> [options]
 
   -o, --out <file>   output path (default: <input>.md.html)
-  --theme <name>     default theme id (default: light-academic-1)
+  --theme <name>     default theme id (default: light-neat-3)
   --cdn              reference the renderer from jsDelivr (default; small files)
   --inline           embed the renderer bundle (larger file, no renderer fetch)
   --title <text>     document <title> (default: input filename)
@@ -63,8 +63,8 @@ By default (`--cdn`), the renderer is fetched from jsDelivr on first open and
 cached, so generated files are small (~tens of KB). Use `--inline` to embed the
 renderer (~750 KB) when you want the file to carry its own renderer.
 
-Themes: `light-academic-1/2`, `light-neat-1/2`, `light-playful-1/2`,
-`beige-decent-1/2`, `dark-elegant-1/2`. (Readers can switch live in the editor.)
+Themes: `light-neat-1/2/3`, `light-academic-1/2`, `beige-decent-1/2`,
+`light-playful-1/2`, `dark-elegant-1/2/3`. (Readers can switch live in the editor.)
 
 ## Browser support
 

@@ -36,7 +36,7 @@ orz-mdhtml`, or `npm run gen --` in a clone:
 ```bash
 npx orz-mdhtml <input.md> [options]
   -o, --out <file>   output path (default: <input>.md.html)
-  --theme <name>     default theme id (default: light-academic-1)
+  --theme <name>     default theme id (default: light-neat-3)
   --cdn              reference the renderer from jsDelivr (default; small files)
   --inline           embed the renderer bundle (larger file, no renderer fetch)
   --title <text>     document <title>
@@ -47,8 +47,8 @@ Default `--cdn` produces small files that fetch the renderer
 `--inline` only when you want the file to carry its own renderer (~750 KB);
 note even `--inline` still fetches themes and editor libraries from CDN.
 
-Theme ids: `light-academic-1/2`, `light-neat-1/2`, `light-playful-1/2`,
-`beige-decent-1/2`, `dark-elegant-1/2`.
+Theme ids: `light-neat-1/2/3`, `light-academic-1/2`, `beige-decent-1/2`,
+`light-playful-1/2`, `dark-elegant-1/2/3`.
 
 ## Authoring the Markdown
 
@@ -80,7 +80,7 @@ morphdom. All are CDN-cached after first load.
   local copy** to edit and save. In-place Save only applies to `file://` copies
   they own.
 - **Editing/Save** needs a Chromium browser (Chrome/Edge); reading, themes,
-  font size, export, and copy-as-markdown work in all modern browsers.
+  export, and copy-as-markdown work in all modern browsers.
 
 ## Gotchas for agents
 
