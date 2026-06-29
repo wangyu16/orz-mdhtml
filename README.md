@@ -32,7 +32,7 @@ as the single source of truth; Save/Export re-serialize the whole document.
 
 > "Self-contained" means *works as one file*, not *zero network*. The renderer
 > is embedded, but themes and editor libraries (KaTeX, highlight.js, Mermaid,
-> CodeMirror, Split.js, morphdom) load from CDN, so **viewing needs internet**.
+> CodeMirror, morphdom) load from CDN, so **viewing needs internet**.
 > Editor libraries are lazy-loaded on first edit, so reading stays light.
 
 ## Install / generate
@@ -92,15 +92,15 @@ The orz-markdown family targets open-source publishing, especially teaching:
 
 - **Teachers** author in Markdown, generate a `.md.html`, and serve it as a web
   page (or hand out the file). They edit their local source in place.
-- **Students** open the page, adjust the font, read, then **Download** their own
-  copy to add personal notes — no account, no tooling.
+- **Students** open the page, read in any of the built-in themes, then
+  **Download** their own copy to add personal notes — no account, no tooling.
 
 ## How it works
 
 ```
 src/browser-entry.ts   exposes window.orzmd.render(); also stamps data-src-line
 build/bundle.ts        esbuild: orz-markdown + deps -> dist/orzmd.browser.js (IIFE)
-assets/app.js          in-file runtime: modes, live preview, themes, font, save, export, scroll-sync
+assets/app.js          in-file runtime: modes, live preview, themes, save, export, scroll-sync
 src/template.ts        builds the .md.html shell (chrome + iframe + embedded source)
 src/cli.ts             CLI: foo.md -> foo.md.html
 orz-mdhtml-skills/     agent skill describing how to create & use .md.html
@@ -112,8 +112,8 @@ morphdom; editor↔preview scroll-sync maps CodeMirror lines to `data-src-line`
 anchors (toggleable). Save is *self-reproducing*: it serializes the outer
 document with the latest embedded source.
 
-Requires `orz-markdown` ≥ 1.2.0 for copy-as-markdown; ≥ 1.2.1 for the
-whole-table/blockquote copy fix.
+Depends on `orz-markdown` (`^1.3.0`); copy-as-markdown needs ≥ 1.2.0 and the
+whole-table/blockquote copy fix landed in ≥ 1.2.1.
 
 ## Roadmap
 

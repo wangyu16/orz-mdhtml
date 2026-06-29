@@ -9,7 +9,7 @@ description: Create and use self-contained, editable .md.html documents from Mar
 
 - reads like a normal themed webpage (rendered in an isolated `<iframe>`),
 - can be **edited in the browser** (CodeMirror source + live incremental preview),
-- lets readers **switch themes**, **resize text**, **export a local copy**, and
+- lets readers **switch themes**, **export a local copy**, and
   **copy rendered content as Markdown source**,
 - **saves itself**: in place on local files (Chromium File System Access API),
   or as a download elsewhere.
@@ -69,7 +69,7 @@ edit the `.md` and regenerate (or edit in the browser and Save).
 "Self-contained" means *one file*, **not** *offline*. **Viewing requires
 internet**: the renderer (`orz-mdhtml-browser` from jsDelivr by default, or
 embedded with `--inline`), theme CSS (jsDelivr `orz-markdown/themes/...`), KaTeX
-CSS, highlight.js, Mermaid, and — only on first edit — CodeMirror, Split.js,
+CSS, highlight.js, Mermaid, and — only on first edit — CodeMirror and
 morphdom. All are CDN-cached after first load.
 
 ## Deploying / sharing
@@ -91,8 +91,8 @@ morphdom. All are CDN-cached after first load.
   `data-src-line` attributes** — they power copy-as-markdown and scroll-sync.
 - The embedded source guards `</script>` as `<\/script>`; read it back via the
   `#orz-src` element's `textContent` and reverse that escape.
-- Requires `orz-markdown` ≥ 1.2.0 (copy-as-markdown); ≥ 1.2.1 for the
-  whole-table/blockquote copy fix.
+- Depends on `orz-markdown` (`^1.3.0`); copy-as-markdown needs ≥ 1.2.0 and the
+  whole-table/blockquote copy fix landed in ≥ 1.2.1.
 
 ## Security
 
