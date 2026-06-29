@@ -66,6 +66,18 @@ renderer (~750 KB) when you want the file to carry its own renderer.
 Themes: `light-neat-1/2/3`, `light-academic-1/2`, `beige-decent-1/2`,
 `light-playful-1/2`, `dark-elegant-1/2/3`. (Readers can switch live in the editor.)
 
+## Use with an AI agent
+
+The package ships an **agent skill** that teaches an AI agent how to author and edit
+`.md.html` documents. The quickest way to use orz-mdhtml is to let an agent do it:
+
+- **Any agent** — point it at the skill, then describe what you want:
+  `https://cdn.jsdelivr.net/npm/orz-mdhtml/orz-mdhtml-skills/SKILL.md`
+- **Claude Code** — copy `orz-mdhtml-skills/` into `~/.claude/skills/orz-mdhtml/`
+  (or the installed copy under `node_modules/orz-mdhtml/orz-mdhtml-skills/`).
+
+More install routes (Claude.ai upload, etc.): <https://markdown.orz.how/agents.html>
+
 ## Browser support
 
 | Feature | Support |
