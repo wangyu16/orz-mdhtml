@@ -48,6 +48,7 @@ export interface TemplateOptions {
     hljsJs: string;
     mermaidJs: string;
     smilesJs: string;
+    chartJs: string;
   };
   /** CDN URLs for lazy-loaded editor libraries. */
   editorLibs: {

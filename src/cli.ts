@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { getBrowserRuntimeScript } from 'orz-markdown/runtime';
+import { PREVIEW_CDN } from 'orz-markdown/preview-frame';
 import { buildHtml, type ThemeEntry } from './template.js';
 
 /** orz-markdown's bundled themes (CDN-loaded), with light/dark scheme. */
@@ -38,7 +39,6 @@ const THEME_DEFS: Array<Omit<ThemeEntry, 'href'>> = [
 ];
 
 const CDN = {
-  hl: 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0',
   cm: 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16',
 };
 
@@ -149,12 +149,13 @@ function main(): void {
     defaultTheme,
     themes,
     frame: {
-      katexCss: 'https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css',
-      hljsLightCss: `${CDN.hl}/styles/github.min.css`,
-      hljsDarkCss: `${CDN.hl}/styles/atom-one-dark.min.css`,
-      hljsJs: `${CDN.hl}/highlight.min.js`,
-      mermaidJs: 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js',
-      smilesJs: 'https://cdn.jsdelivr.net/npm/smiles-drawer@1.0.10/dist/smiles-drawer.min.js',
+      katexCss: PREVIEW_CDN.katexCss,
+      hljsLightCss: PREVIEW_CDN.hljsLightCss,
+      hljsDarkCss: PREVIEW_CDN.hljsDarkCss,
+      hljsJs: PREVIEW_CDN.hljsJs,
+      mermaidJs: PREVIEW_CDN.mermaidJs,
+      smilesJs: PREVIEW_CDN.smilesJs,
+      chartJs: PREVIEW_CDN.chartJs,
     },
     editorLibs: {
       codemirrorCss: `${CDN.cm}/codemirror.min.css`,

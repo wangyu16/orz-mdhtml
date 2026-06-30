@@ -32,7 +32,8 @@ as the single source of truth; Save/Export re-serialize the whole document.
 
 > "Self-contained" means *works as one file*, not *zero network*. The renderer
 > is embedded, but themes and editor libraries (KaTeX, highlight.js, Mermaid,
-> CodeMirror, morphdom) load from CDN, so **viewing needs internet**.
+> SmilesDrawer, Chart.js, CodeMirror, morphdom) load from CDN, so **viewing needs
+> internet**.
 > Editor libraries are lazy-loaded on first edit, so reading stays light.
 
 ## Install / generate

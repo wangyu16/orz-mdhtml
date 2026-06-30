@@ -53,8 +53,8 @@ Theme ids: `light-neat-1/2/3`, `light-academic-1/2`, `beige-decent-1/2`,
 ## Authoring the Markdown
 
 The source is **orz-markdown** Markdown — standard Markdown plus KaTeX math,
-`{{name body}}` plugins (mermaid, smiles, qrcode, youtube, toc, …), `::: name`
-containers, and `{{attrs[#id .class]}}`. For the full syntax, read the
+`{{name body}}` plugins (mermaid, smiles, chart, qrcode, youtube, toc, …),
+`::: name` containers, and `{{attrs[#id .class]}}`. For the full syntax, read the
 orz-markdown skill, shipped at:
 
 ```
@@ -69,8 +69,8 @@ edit the `.md` and regenerate (or edit in the browser and Save).
 "Self-contained" means *one file*, **not** *offline*. **Viewing requires
 internet**: the renderer (`orz-mdhtml-browser` from jsDelivr by default, or
 embedded with `--inline`), theme CSS (jsDelivr `orz-markdown/themes/...`), KaTeX
-CSS, highlight.js, Mermaid, and — only on first edit — CodeMirror and
-morphdom. All are CDN-cached after first load.
+CSS, highlight.js, Mermaid, SmilesDrawer, Chart.js, and — only on first edit —
+CodeMirror and morphdom. All are CDN-cached after first load.
 
 ## Deploying / sharing
 

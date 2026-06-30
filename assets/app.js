@@ -62,6 +62,7 @@
       + '<script src="' + f.hljsJs + '"><\/script>'
       + '<script src="' + f.mermaidJs + '"><\/script>'
       + '<script src="' + f.smilesJs + '"><\/script>'
+      + '<script src="' + f.chartJs + '"><\/script>'
       + '<script>try{mermaid.initialize({startOnLoad:false})}catch(e){}<\/script>'
       + '<script>' + guard(CFG.runtime) + '<\/script>'
       + '<script>window.__orzEnhance=function(){'
@@ -70,6 +71,7 @@
       // SMILES: draw each canvas once (tracked via a JS prop so morphdom keeps
       // the drawn canvas across edits — DOM attributes stay identical).
       + 'try{if(window.SmilesDrawer){document.querySelectorAll("#orz-doc canvas[data-smiles]").forEach(function(c){if(c.__orzSmilesDone)return;var s=c.getAttribute("data-smiles");if(!s)return;if(c.__orzOrigW===undefined){c.__orzOrigW=c.width;c.__orzOrigH=c.height;}c.width=c.__orzOrigW;c.height=c.__orzOrigH;c.__orzSmilesDone=true;var dr=new window.SmilesDrawer.Drawer({width:c.__orzOrigW,height:c.__orzOrigH});window.SmilesDrawer.parse(s,function(t){try{dr.draw(t,c,window.__orzSmilesTheme||"light",false)}catch(e){}},function(){})})}}catch(e){}'
+      + 'try{if(window.Chart){document.querySelectorAll("#orz-doc canvas.orz-chart[data-chart]").forEach(function(c){if(c.__orzChartDone)return;c.__orzChartDone=true;var w=c.ownerDocument.createElement("div");w.style.cssText="position:relative;width:100%;max-width:520px;margin:.6em auto";c.parentNode.insertBefore(w,c);w.appendChild(c);c.removeAttribute("width");c.removeAttribute("height");try{var cfg=JSON.parse(c.getAttribute("data-chart")||"{}");cfg.options=Object.assign({responsive:true,maintainAspectRatio:true,animation:false},cfg.options||{});new window.Chart(c,cfg)}catch(e){}})}}catch(e){}'
       // Tabs init runs in the runtime on load (empty #orz-doc); re-run now that
       // content is injected, and after each incremental update. Idempotent.
       + 'try{if(window.OrzMarkdownRuntime&&window.OrzMarkdownRuntime.initTabs){window.OrzMarkdownRuntime.initTabs(document)}}catch(e){}'
