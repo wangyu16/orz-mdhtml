@@ -44,8 +44,10 @@ for that.
 - `assets/app.js` — **the in-file runtime, plain JS** inlined into every
   `.md.html`. View/edit (slide-in popout) modes, iframe build, **morphdom**
   incremental preview, themes, scroll-sync (+toggle), save (FS Access API +
-  IndexedDB handle reuse), export, and the served-page save notice. Lazy-loads
-  CodeMirror/morphdom on first edit.
+  IndexedDB handle reuse), export, the served-page save notice, and the
+  **host-embedding save hook** (`orz-host-save@1`, spec in `PROTOCOL.md` —
+  canonical for all three orz-family runtimes). Lazy-loads CodeMirror/morphdom
+  on first edit.
 - `browser/` — the `orz-mdhtml-browser` package (`package.json` + `README.md`;
   the bundle is staged in by `npm run bundle`).
 - `orz-mdhtml-skills/` — the agent skill for using/creating `.md.html`.

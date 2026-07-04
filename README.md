@@ -87,6 +87,17 @@ More install routes (Claude.ai upload, etc.): <https://markdown.orz.how/agents.h
 | Live editing (CodeMirror, incremental preview) | All modern browsers |
 | **Save in place** (File System Access API) | Chromium (Chrome/Edge); others fall back to Export/download |
 
+## Host embedding
+
+A platform can embed a `.md.html` in an iframe and receive its saves instead
+of the file system: the host announces itself with a `postMessage` handshake,
+and after that the file's **Save** posts `{ source, html }` (the same
+self-reproducing bytes a file save would write) to the host — Export and
+standalone behavior are unchanged, and nothing activates without the
+handshake. The versioned spec is [PROTOCOL.md](PROTOCOL.md)
+(`orz-host-save@1`), the canonical copy for all three orz-family runtimes
+(orz-mdhtml, orz-slides, orz-paged).
+
 ## For teaching
 
 The orz-markdown family targets open-source publishing, especially teaching:
