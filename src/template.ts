@@ -195,6 +195,9 @@ export function buildHtml(opts: TemplateOptions): string {
   #orz-brand { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; color: #cdd3df; padding: 2px 7px; border-radius: 7px; }
   #orz-brand:hover { color: #fff; background: #383d45; }
   #orz-brand .orz-logo svg { height: 22px; width: auto; display: block; }
+  /* hosted chrome: the embedding host shows its own orz logo — hide the file's
+     (set by the runtime after the orz-host-save handshake; unhosted files unchanged) */
+  [data-orz-hosted="1"] #orz-brand .orz-logo { display: none; }
   #orz-brand .orz-brand-name { font: 700 13px/1 system-ui, sans-serif; letter-spacing: .01em; }
   #orz-brand .orz-gh { display: inline-flex; opacity: .55; }
   #orz-brand:hover .orz-gh { opacity: 1; }
