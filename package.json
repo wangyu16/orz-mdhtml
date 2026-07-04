@@ -1,6 +1,6 @@
 {
   "name": "orz-mdhtml",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Generate self-contained, editable .md.html files from Markdown using orz-markdown — preview + edit modes, source-aware copy, in-place save.",
   "type": "module",
   "bin": {
