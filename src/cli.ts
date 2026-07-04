@@ -12,14 +12,19 @@
  *   --inline              embed the renderer bundle in the file (larger, no renderer fetch)
  *   --title <text>        document <title> (default: input filename)
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname, dirname, resolve, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { getBrowserRuntimeScript } from 'orz-markdown/runtime';
 import { PREVIEW_CDN } from 'orz-markdown/preview-frame';
 import { buildHtml, type ThemeEntry } from './template.js';
+import {
+  DEFAULT_THEME,
+  composeInlineMdHtml,
+  findAsset,
+  orzVersionOf,
+  selfVersionOf,
+} from './lib.js';
 
 /** orz-markdown's bundled themes (CDN-loaded), with light/dark scheme. */
 // Same set, names, and order as the orz-markdown PWA editor's theme menu.
@@ -42,39 +47,6 @@ const CDN = {
   cm: 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16',
 };
 
-const require = createRequire(import.meta.url);
-
-/** orz-markdown's `exports` hides ./package.json, so find it by walking up. */
-function orzVersionOf(): string {
-  let dir = dirname(require.resolve('orz-markdown'));
-  while (!existsSync(join(dir, 'package.json'))) dir = dirname(dir);
-  return (JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { version: string }).version;
-}
-const orzVersion = orzVersionOf();
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-
-/** orz-mdhtml's own version — pins the renderer bundle + version check. */
-function selfVersionOf(): string {
-  for (const p of [join(HERE, '..', 'package.json'), join(HERE, '..', '..', 'package.json')]) {
-    try {
-      const j = JSON.parse(readFileSync(p, 'utf8')) as { name?: string; version?: string };
-      if (j.name === 'orz-mdhtml' && j.version) return j.version;
-    } catch {
-      /* keep looking */
-    }
-  }
-  return '0.0.0';
-}
-const selfVersion = selfVersionOf();
-// assets/ sits next to dist/ when published, and next to src/ in dev.
-function findAsset(name: string): string {
-  for (const p of [join(HERE, '..', 'assets', name), join(HERE, '..', '..', 'assets', name)]) {
-    if (existsSync(p)) return p;
-  }
-  throw new Error(`asset not found: ${name}`);
-}
-
 interface Args {
   input?: string;
   out?: string;
@@ -84,7 +56,7 @@ interface Args {
 }
 
 function parseArgs(argv: string[]): Args {
-  const a: Args = { theme: 'light-neat-3', delivery: 'cdn' };
+  const a: Args = { theme: DEFAULT_THEME, delivery: 'cdn' };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '-o' || arg === '--out') a.out = argv[++i];
@@ -97,49 +69,33 @@ function parseArgs(argv: string[]): Args {
   return a;
 }
 
-function main(): void {
-  const args = parseArgs(process.argv.slice(2));
-  if (!args.input) {
-    console.error('Usage: orz-mdhtml <input.md> [-o out] [--theme name] [--inline|--cdn]');
-    process.exit(1);
-  }
-
-  const inputPath = resolve(args.input);
-  const source = readFileSync(inputPath, 'utf8');
-  const base = basename(inputPath, extname(inputPath));
-  const outPath = args.out ? resolve(args.out) : join(dirname(inputPath), `${base}.md.html`);
+/** The CDN delivery path — library builds are always inline, so this stays here. */
+function buildCdnMdHtml(opts: {
+  source: string;
+  title: string;
+  filename: string;
+  docId: string;
+  theme: string;
+}): string {
+  const orzVersion = orzVersionOf();
+  const selfVersion = selfVersionOf();
 
   const appJs = readFileSync(findAsset('app.js'), 'utf8');
 
   const themeBase = `https://cdn.jsdelivr.net/npm/orz-markdown@${orzVersion}/themes`;
   const themes: ThemeEntry[] = THEME_DEFS.map((t) => ({ ...t, href: `${themeBase}/${t.id}.css` }));
-  const defaultTheme = themes.some((t) => t.id === args.theme) ? args.theme : themes[0].id;
+  const defaultTheme = themes.some((t) => t.id === opts.theme) ? opts.theme : themes[0].id;
 
-  // Renderer delivery.
-  let renderer: Parameters<typeof buildHtml>[0]['renderer'];
-  if (args.delivery === 'inline') {
-    // dist/cli.js (published) → sibling; src/cli.ts (dev) → ../dist.
-    const bundlePath = [
-      join(HERE, 'orzmd.browser.js'),
-      join(HERE, '..', 'dist', 'orzmd.browser.js'),
-    ].find(existsSync);
-    if (!bundlePath) {
-      console.error('Inline mode needs the browser bundle. Run: npm run bundle');
-      process.exit(1);
-    }
-    renderer = { mode: 'inline', js: readFileSync(bundlePath, 'utf8') };
-  } else {
-    renderer = {
-      mode: 'cdn',
-      src: `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@${selfVersion}/orzmd.browser.js`,
-    };
-  }
+  const renderer: Parameters<typeof buildHtml>[0]['renderer'] = {
+    mode: 'cdn',
+    src: `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@${selfVersion}/orzmd.browser.js`,
+  };
 
-  const html = buildHtml({
-    source,
-    title: args.title ?? base,
-    filename: base,
-    docId: randomUUID(),
+  return buildHtml({
+    source: opts.source,
+    title: opts.title,
+    filename: opts.filename,
+    docId: opts.docId,
     rendererVersion: selfVersion,
     appJs,
     runtimeScript: getBrowserRuntimeScript(),
@@ -167,6 +123,42 @@ function main(): void {
       morphdomJs: 'https://cdn.jsdelivr.net/npm/morphdom@2.7.4/dist/morphdom-umd.min.js',
     },
   });
+}
+
+function main(): void {
+  const args = parseArgs(process.argv.slice(2));
+  if (!args.input) {
+    console.error('Usage: orz-mdhtml <input.md> [-o out] [--theme name] [--inline|--cdn]');
+    process.exit(1);
+  }
+
+  const inputPath = resolve(args.input);
+  const source = readFileSync(inputPath, 'utf8');
+  const base = basename(inputPath, extname(inputPath));
+  const outPath = args.out ? resolve(args.out) : join(dirname(inputPath), `${base}.md.html`);
+
+  const composeOpts = {
+    source,
+    title: args.title ?? base,
+    filename: base,
+    docId: randomUUID(),
+    theme: args.theme,
+  };
+
+  let html: string;
+  let defaultTheme: string;
+  try {
+    html =
+      args.delivery === 'inline'
+        ? composeInlineMdHtml(composeOpts)
+        : buildCdnMdHtml(composeOpts);
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
+  }
+
+  // Report the theme that was actually applied (unknown → default fallback).
+  defaultTheme = THEME_DEFS.some((t) => t.id === args.theme) ? args.theme : THEME_DEFS[0].id;
 
   writeFileSync(outPath, html, 'utf8');
   console.log(`Wrote ${outPath} (${args.delivery}, theme: ${defaultTheme})`);
