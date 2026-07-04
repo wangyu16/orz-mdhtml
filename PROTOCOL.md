@@ -56,18 +56,6 @@ file save would write**.
    `orz-host-dirty` on edit-state changes after the handshake, so the host can
    reflect unsaved changes.
 
-## Hosted chrome
-
-When the handshake completes (the runtime accepted a valid `orz-host-hello`
-and sent `orz-host-ready`), the runtime sets
-`document.documentElement.dataset.orzHosted = "1"` and the file's own chrome
-CSS hides the orz logo in the upper-left corner — a host platform typically
-shows the same orz branding in its own header, and duplicates look broken.
-Hosts get this automatically; there is no message field to request or decline
-it. The flag is runtime-only — it is stripped on serialization, so saved bytes
-never carry it — and unhosted files are unchanged. The `data-orz-hosted`
-attribute is the extension point for future hosted-chrome adjustments.
-
 ## Security rules
 
 These files are **executable HTML** (see the README security note), so the
