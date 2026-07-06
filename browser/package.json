@@ -1,6 +1,6 @@
 {
   "name": "orz-mdhtml-browser",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Prebuilt in-browser renderer for orz-mdhtml .md.html files (exposes window.orzmd.render). Served via CDN (jsDelivr).",
   "main": "orzmd.browser.js",
   "files": [

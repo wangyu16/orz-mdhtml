@@ -96,6 +96,10 @@ export interface ComposeOptions {
   docId: string;
   /** orz-markdown theme id (falls back to DEFAULT_THEME when unknown). */
   theme: string;
+  /** Renderer delivery: `inline` embeds the bundle (default, larger, offline);
+   *  `cdn` references it from jsDelivr (small file — the framework loads at
+   *  view time, and viewers get the published bundle without re-embedding it). */
+  delivery?: 'inline' | 'cdn';
 }
 
 /**
@@ -114,10 +118,16 @@ export function composeInlineMdHtml(opts: ComposeOptions): string {
   const themes: ThemeEntry[] = THEME_DEFS.map((t) => ({ ...t, href: `${themeBase}/${t.id}.css` }));
   const defaultTheme = themes.some((t) => t.id === opts.theme) ? opts.theme : themes[0].id;
 
-  const renderer: Parameters<typeof buildHtml>[0]['renderer'] = {
-    mode: 'inline',
-    js: readFileSync(findRendererBundle(), 'utf8'),
-  };
+  const renderer: Parameters<typeof buildHtml>[0]['renderer'] =
+    opts.delivery === 'cdn'
+      ? {
+          mode: 'cdn',
+          src: `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@${selfVersion}/orzmd.browser.js`,
+        }
+      : {
+          mode: 'inline',
+          js: readFileSync(findRendererBundle(), 'utf8'),
+        };
 
   return buildHtml({
     source: opts.source,
@@ -162,7 +172,14 @@ export function composeInlineMdHtml(opts: ComposeOptions): string {
  * (a fresh `randomUUID()` per call, which keys the per-document IndexedDB
  * save handle).
  */
-export function buildMdHtml(opts: { markdown: string; title?: string; theme?: string }): string {
+export function buildMdHtml(opts: {
+  markdown: string;
+  title?: string;
+  theme?: string;
+  /** `inline` (default) embeds the framework; `cdn` references it from jsDelivr
+   *  (small file — requires orz-mdhtml-browser to be published at this version). */
+  delivery?: 'inline' | 'cdn';
+}): string {
   const title = opts.title ?? 'Untitled';
   return composeInlineMdHtml({
     source: opts.markdown,
@@ -170,5 +187,6 @@ export function buildMdHtml(opts: { markdown: string; title?: string; theme?: st
     filename: 'Untitled',
     docId: randomUUID(),
     theme: opts.theme ?? DEFAULT_THEME,
+    delivery: opts.delivery,
   });
 }
