@@ -31,9 +31,9 @@ The Markdown source is embedded in the file (`<script type="text/markdown">`)
 as the single source of truth; Save/Export re-serialize the whole document.
 
 > "Self-contained" means *works as one file*, not *zero network*. The renderer
-> is embedded, but themes and editor libraries (KaTeX, highlight.js, Mermaid,
-> SmilesDrawer, Chart.js, CodeMirror, morphdom) load from CDN, so **viewing needs
-> internet**.
+> is loaded from jsDelivr by default (`--cdn`) or embedded with `--inline`, while
+> themes and editor libraries (KaTeX, highlight.js, Mermaid, SmilesDrawer,
+> Chart.js, CodeMirror, morphdom) load from CDN, so **viewing needs internet**.
 > Editor libraries are lazy-loaded on first edit, so reading stays light.
 
 ## Install / generate
@@ -124,8 +124,9 @@ morphdom; editor↔preview scroll-sync maps CodeMirror lines to `data-src-line`
 anchors (toggleable). Save is *self-reproducing*: it serializes the outer
 document with the latest embedded source.
 
-Depends on `orz-markdown` (`^1.3.0`); copy-as-markdown needs ≥ 1.2.0 and the
-whole-table/blockquote copy fix landed in ≥ 1.2.1.
+Depends on `orz-markdown` (`^1.3.2`); copy-as-markdown needs ≥ 1.2.0, the
+whole-table/blockquote copy fix landed in ≥ 1.2.1, and explicit image-size
+rendering is fixed in ≥ 1.3.2.
 
 ## Roadmap
 

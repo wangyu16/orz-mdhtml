@@ -91,8 +91,9 @@ CodeMirror and morphdom. All are CDN-cached after first load.
   `data-src-line` attributes** — they power copy-as-markdown and scroll-sync.
 - The embedded source guards `</script>` as `<\/script>`; read it back via the
   `#orz-src` element's `textContent` and reverse that escape.
-- Depends on `orz-markdown` (`^1.3.0`); copy-as-markdown needs ≥ 1.2.0 and the
-  whole-table/blockquote copy fix landed in ≥ 1.2.1.
+- Depends on `orz-markdown` (`^1.3.2`); copy-as-markdown needs ≥ 1.2.0, the
+  whole-table/blockquote copy fix landed in ≥ 1.2.1, and explicit image-size
+  rendering is fixed in ≥ 1.3.2.
 
 ## Security
 
