@@ -293,6 +293,20 @@ export function buildHtml(opts: TemplateOptions): string {
 </style>
 </head>
 <body>
+<!-- ═══════════ orz · editing this file with an AI agent ═══════════
+  This is a self-contained, EDITABLE orz-mdhtml document (.md.html). The editable
+  source of truth is the orz-markdown inside <script type="text/markdown"
+  id="orz-src"> below (kind: md, format: 1) — NOT the rendered HTML.
+
+  To edit it correctly, load the official orz-mdhtml agent skill first: it defines
+  the syntax and the IMMUTABLE {{attrs[#blk-...]}} block-ID rules, and guarantees a
+  byte-identical round-trip (extract source -> edit -> re-embed).
+    - Fetch the skill: https://cdn.jsdelivr.net/npm/orz-mdhtml/orz-mdhtml-skills/SKILL.md
+    - Install routes:  https://markdown.orz.how/agents.html
+
+  Rules: edit ONLY the embedded source; re-embed it in place; never add, remove,
+  reuse, or reformat a block-ID marker.
+═══════════════════════════════════════════════════════════════════ -->
 
 <div id="orz-preview"><iframe id="orz-frame" title="Preview"></iframe></div>
 <div id="orz-divider" title="Drag to resize"></div>

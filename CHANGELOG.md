@@ -16,6 +16,12 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
   current **`theme`** (the selected theme id) in its save message, so a host can
   persist the reader/author's theme choice (e.g. as a course-wide default). Purely
   additive — hosts that ignore it are unaffected, and standalone save is unchanged.
+- **Embedded agent guide.** Every generated `.md.html` carries an invisible HTML
+  comment (top of `<body>`) telling an AI agent how to edit it — what the file is,
+  where the editable source lives (`<script id="orz-src">`), the block-ID rules,
+  and how to fetch the official orz-mdhtml agent skill
+  (`https://cdn.jsdelivr.net/npm/orz-mdhtml/orz-mdhtml-skills/SKILL.md`). Invisible
+  to readers; readable by any external AI app opening the file's source.
 
 ## [0.6.1] — 2026-07-08
 
