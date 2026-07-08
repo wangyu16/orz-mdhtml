@@ -295,8 +295,8 @@ export function buildHtml(opts: TemplateOptions): string {
 <body>
 <!-- ═══════════ orz · editing this file with an AI agent ═══════════
   This is a self-contained, EDITABLE orz-mdhtml document (.md.html). The editable
-  source of truth is the orz-markdown inside <script type="text/markdown"
-  id="orz-src"> below (kind: md, format: 1) — NOT the rendered HTML.
+  source of truth is the orz-markdown in the embedded source island below
+  (kind: md, format: 1) — NOT the rendered HTML.
 
   To edit it correctly, load the official orz-mdhtml agent skill first: it defines
   the syntax and the IMMUTABLE {{attrs[#blk-...]}} block-ID rules, and guarantees a

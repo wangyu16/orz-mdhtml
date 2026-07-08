@@ -3,6 +3,17 @@
 All notable changes to **orz-mdhtml** are recorded here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] — 2026-07-08
+
+### Fixed
+
+- The 0.7.0 embedded agent-guide comment contained a literal
+  `<script … id="orz-src">` string, which a regex source-extractor could match as
+  if it were the real source island (extracting the comment instead of the
+  Markdown). The guide now refers to the "embedded source island" in prose, with
+  no tag literal. Runtime save (which reads the DOM element) was unaffected; this
+  fixes host-side re-import/adapt extraction.
+
 ## [0.7.0] — 2026-07-08
 
 ### Added
