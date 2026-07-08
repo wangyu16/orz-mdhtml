@@ -3,6 +3,20 @@
 All notable changes to **orz-mdhtml** are recorded here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-07-08
+
+### Added
+
+- **Page-wide AI assistant.** Alongside the *Improve selection* chip, the editor
+  toolbar gains an **AI button** (shown when the host advertises operations) that
+  runs an operation on the **whole document** — review/rewrite the entire file,
+  not just a selection. The AI popover now anchors to whatever opened it (the
+  selection or the toolbar button).
+- **Theme in the save handshake.** `orz-host-save` now includes the file's
+  current **`theme`** (the selected theme id) in its save message, so a host can
+  persist the reader/author's theme choice (e.g. as a course-wide default). Purely
+  additive — hosts that ignore it are unaffected, and standalone save is unchanged.
+
 ## [0.6.1] — 2026-07-08
 
 ### Fixed

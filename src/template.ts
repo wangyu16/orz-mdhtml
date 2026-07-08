@@ -92,6 +92,7 @@ const ICON = {
   sync: ic('<path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 0 1 0 10h-2"/><path d="M8 12h8"/>'),
   pencil: ic('<path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>'),
   collapse: ic('<path d="M15 6l-6 6 6 6"/>'),
+  ai: ic('<path d="M12 2l2.2 6.6L21 11l-6.8 2.4L12 20l-2.2-6.6L3 11l6.8-2.4z"/>'),
 };
 
 /** Editor-header brand: logo + app name + GitHub link (whole thing → repo). */
@@ -304,6 +305,7 @@ export function buildHtml(opts: TemplateOptions): string {
     <button class="ic primary" id="orz-save" title="Save (Cmd/Ctrl+S)" aria-label="Save">${ICON.save}</button>
     <button class="ic" id="orz-download" title="Download a copy" aria-label="Download a copy">${ICON.download}</button>
     <span class="orz-spacer"></span>
+    <button class="ic" id="orz-ai" title="AI assistant — improve the whole document" aria-label="AI assistant" style="display:none">${ICON.ai}</button>
     <button class="ic" id="orz-sync" title="Sync scrolling" aria-label="Sync scrolling" aria-pressed="true">${ICON.sync}</button>
     <select class="theme-pick" id="orz-theme" title="Theme" aria-label="Theme">${themeOptions}</select>
   </div>

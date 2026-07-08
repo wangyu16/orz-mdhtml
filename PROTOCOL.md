@@ -26,13 +26,15 @@ document's runtime, running in an iframe).
 |---|---|---|
 | `orz-host-hello` | host → file | `{ type, protocol: "orz-host-save", version: 1 }` |
 | `orz-host-ready` | file → host | `{ type, protocol: "orz-host-save", version: 1, kind: "md" \| "slides" \| "paged" }` |
-| `orz-host-save` | file → host | `{ type, protocol: "orz-host-save", version: 1, source, html }` |
+| `orz-host-save` | file → host | `{ type, protocol: "orz-host-save", version: 1, source, html, theme? }` |
 | `orz-host-saved` | host → file | `{ type, ok: true }` or `{ type, ok: false, error: string }` |
 | `orz-host-dirty` | file → host | `{ type, protocol: "orz-host-save", version: 1, dirty: boolean }` |
 
 `source` is the current embedded markdown source (the single source of truth);
 `html` is the full serialized self-reproducing document — **the same bytes a
-file save would write**.
+file save would write**. `theme` (optional, additive since 0.7.0) is the file's
+current theme id, so a host can persist the author's theme choice (e.g. a
+course-wide default); hosts that ignore it are unaffected.
 
 ## Handshake and save sequence
 
