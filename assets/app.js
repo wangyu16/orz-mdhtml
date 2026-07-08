@@ -426,11 +426,29 @@
     b.style.cssText = 'position:fixed;z-index:60;background:Canvas;color:CanvasText;border:1px solid GrayText;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.28);font:13px system-ui,sans-serif;padding:4px;';
     return b;
   }
+  // Position `el` (already in the DOM, so it can be measured) just below the
+  // selection end; if it would overflow the bottom, flip it ABOVE the selection;
+  // if it fits neither, pin near the top and let it scroll. Clamp horizontally.
   function aiPlace(el) {
-    if (!cm) return;
+    if (!cm || !el) return;
     var to = cm.cursorCoords(cm.getCursor('to'), 'window');
-    el.style.left = Math.max(6, Math.min(to.left, window.innerWidth - 280)) + 'px';
-    el.style.top = Math.min(to.bottom + 6, window.innerHeight - 60) + 'px';
+    var from = cm.cursorCoords(cm.getCursor('from'), 'window');
+    var w = el.offsetWidth || 240;
+    var h = el.offsetHeight || 40;
+    var left = Math.max(8, Math.min(to.left, window.innerWidth - w - 8));
+    var top = to.bottom + 6;
+    if (top + h > window.innerHeight - 8) {
+      var above = from.top - h - 6;
+      if (above >= 8) {
+        top = above;
+      } else {
+        top = 8;
+        el.style.maxHeight = (window.innerHeight - 16) + 'px';
+        el.style.overflowY = 'auto';
+      }
+    }
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
   }
   function aiHidePanel() { if (aiPanel) { try { aiPanel.remove(); } catch (e) {} aiPanel = null; } }
   function aiHideTrigger() { if (aiTrigger) { try { aiTrigger.remove(); } catch (e) {} aiTrigger = null; } }
@@ -448,8 +466,8 @@
       btn.onclick = function () { aiRun(op, sel); };
       aiPanel.appendChild(btn);
     });
-    aiPlace(aiPanel);
     document.body.appendChild(aiPanel);
+    aiPlace(aiPanel);
   }
 
   function aiRun(op, sel) {
@@ -458,12 +476,12 @@
     aiPanel.style.padding = '10px';
     aiPanel.style.width = '340px';
     aiPanel.textContent = 'Thinking…';
-    aiPlace(aiPanel);
     document.body.appendChild(aiPanel);
+    aiPlace(aiPanel);
     aiRequest(op.id, sel).then(function (r) {
       if (!aiPanel) return;
       aiPanel.textContent = '';
-      if (!r.ok) { aiPanel.textContent = r.error || 'That didn’t work.'; return; }
+      if (!r.ok) { aiPanel.textContent = r.error || 'That didn’t work.'; aiPlace(aiPanel); return; }
       var label = document.createElement('div');
       label.textContent = 'Suggested replacement — edit before applying';
       label.style.cssText = 'font-size:11px;opacity:.7;margin-bottom:4px;';
@@ -480,6 +498,7 @@
       apply.onclick = function () { cm.replaceSelection(ta.value); aiHidePanel(); markDirty(); scheduleUpdate(); };
       row.appendChild(cancel); row.appendChild(apply);
       aiPanel.appendChild(label); aiPanel.appendChild(ta); aiPanel.appendChild(row);
+      aiPlace(aiPanel);
       ta.focus();
     });
   }

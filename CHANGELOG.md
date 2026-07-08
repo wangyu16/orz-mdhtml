@@ -3,6 +3,17 @@
 All notable changes to **orz-mdhtml** are recorded here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] — 2026-07-08
+
+### Fixed
+
+- **AI assistant popover no longer runs off the bottom of the screen.** When the
+  selection ended low in the viewport, the *Improve selection* menu / suggestion
+  panel extended below the edge and was unreachable. It now measures itself and
+  **flips above the selection** when it would overflow the bottom (and pins +
+  scrolls if it fits neither). Positioning happens after the element is in the
+  DOM, and re-runs when the suggestion loads (the panel grows).
+
 ## [0.6.0] — 2026-07-08
 
 ### Added
