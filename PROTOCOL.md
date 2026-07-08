@@ -80,3 +80,52 @@ protocol is deliberately narrow:
   handshake).
 - Additive fields within a version are allowed; unknown fields must be
   ignored.
+
+---
+
+# `orz-host-ai` — the host-provided AI assistant protocol
+
+**Version 1** (`orz-host-ai@1`). A companion to `orz-host-save`, independent of
+it: a host can offer save, AI, both, or neither. When a host advertises AI
+operations, the file's editor shows an **assistant** (select text → "Improve
+selection" → pick an operation); the file sends the passage to the host, the
+host runs the model and returns a suggested replacement the user applies. **The
+file owns the UI; the host owns the model, the operation catalog, and any
+governance.** No host, no assistant — the file is unchanged.
+
+## Messages
+
+| Type | Direction | Payload |
+|---|---|---|
+| `orz-host-ai-hello` | host → file | `{ type, protocol: "orz-host-ai", version: 1, operations: [{ id, title, selection }] }` |
+| `orz-host-ai-ready` | file → host | `{ type, protocol: "orz-host-ai", version: 1 }` |
+| `orz-host-ai-request` | file → host | `{ type, protocol: "orz-host-ai", version: 1, requestId, op, text, selection }` |
+| `orz-host-ai-result` | host → file | `{ type, protocol: "orz-host-ai", version: 1, requestId, ok, proposed?, error? }` |
+
+- `operations` — the ops the host offers; the file renders them in its menu.
+  `id` is echoed back in a request; `selection: true` means the op runs on a
+  selected passage.
+- `op` — an advertised `id`. `text` — the content to operate on (the selection,
+  or the whole document). `requestId` — correlates concurrent requests.
+- `proposed` — the replacement text the file diffs and, on approval, applies.
+
+## Handshake
+
+1. The host posts `orz-host-ai-hello` (with `operations`) to the iframe, retried
+   until acknowledged (files behind a slow CDN boot late).
+2. The file accepts it **only from `window.parent`**, records the operations +
+   host origin, and replies `orz-host-ai-ready`.
+3. On an assistant action the file posts `orz-host-ai-request`; the host answers
+   `orz-host-ai-result` with the proposal (or `ok: false` + `error`). A request
+   with no reply within ~30s fails gracefully; the document is untouched until
+   the user applies a result.
+
+## Security & versioning
+
+Same posture as `orz-host-save`: messages accepted only from `window.parent`;
+payloads read as data, never evaluated; the assistant never auto-enables without
+the host's hello. The applied result is inserted into the editor as ordinary
+text — it then saves through `orz-host-save` (or the file's own Export), so it
+passes through whatever validation the host's save path enforces. Versioning
+follows the same rule (host announces; file replies with the highest it supports
+≤ the host's).

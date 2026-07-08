@@ -285,7 +285,8 @@
         'Ctrl-S': function () { save(); },
       },
     });
-    cm.on('change', function () { markDirty(); scheduleUpdate(); });
+    cm.on('change', function () { markDirty(); scheduleUpdate(); aiHideAll(); });
+    cm.on('cursorActivity', function () { aiRefresh(); });
     wireScrollSync();
   }
 
@@ -333,6 +334,7 @@
   }
   function exitEdit() {
     root.removeAttribute('data-mode');
+    aiHideAll();
     if (dirty) toast('Unsaved changes — press ' + (isMac() ? '⌘' : 'Ctrl') + '+S to save');
   }
   function isMac() { return /Mac|iPhone|iPad/.test(navigator.platform || ''); }
@@ -394,6 +396,114 @@
     }, 10000);
     hostPost({ type: 'orz-host-save', protocol: HOST_PROTOCOL, version: HOST_VERSION, source: src, html: html });
   }
+  // ---- host AI assistant (orz-host-ai@1) ------------------------------------
+  // When the host advertises AI operations, selecting text in the editor shows
+  // an "Improve selection" affordance; picking an op sends the passage to the
+  // host, which returns a suggested replacement to apply. File owns the UI; the
+  // host owns the model + governance. Additive — no host, no affordance.
+  var AI_PROTOCOL = 'orz-host-ai';
+  var AI_VERSION = 1;
+  var aiOps = null;      // advertised operations, or null when no AI host
+  var aiOrigin = null;   // recorded at the AI handshake
+  var aiSeq = 0;
+  var aiPending = {};    // requestId -> resolve
+  var aiTrigger = null;  // the floating "Improve selection" chip
+  var aiPanel = null;    // the menu / result popover
+
+  function aiTarget() { return aiOrigin && aiOrigin !== 'null' ? aiOrigin : '*'; }
+  function aiPost(msg) { try { window.parent.postMessage(msg, aiTarget()); } catch (e) {} }
+  function aiRequest(op, text) {
+    return new Promise(function (resolve) {
+      var id = 'ai' + (++aiSeq);
+      aiPending[id] = resolve;
+      aiPost({ type: 'orz-host-ai-request', protocol: AI_PROTOCOL, version: AI_VERSION, requestId: id, op: op, text: text, selection: true });
+      setTimeout(function () { if (aiPending[id]) { delete aiPending[id]; resolve({ ok: false, error: 'No response from the host.' }); } }, 30000);
+    });
+  }
+
+  function aiBox() {
+    var b = document.createElement('div');
+    b.style.cssText = 'position:fixed;z-index:60;background:Canvas;color:CanvasText;border:1px solid GrayText;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.28);font:13px system-ui,sans-serif;padding:4px;';
+    return b;
+  }
+  function aiPlace(el) {
+    if (!cm) return;
+    var to = cm.cursorCoords(cm.getCursor('to'), 'window');
+    el.style.left = Math.max(6, Math.min(to.left, window.innerWidth - 280)) + 'px';
+    el.style.top = Math.min(to.bottom + 6, window.innerHeight - 60) + 'px';
+  }
+  function aiHidePanel() { if (aiPanel) { try { aiPanel.remove(); } catch (e) {} aiPanel = null; } }
+  function aiHideTrigger() { if (aiTrigger) { try { aiTrigger.remove(); } catch (e) {} aiTrigger = null; } }
+  function aiHideAll() { aiHidePanel(); aiHideTrigger(); }
+
+  function aiShowMenu(sel) {
+    aiHideAll();
+    aiPanel = aiBox();
+    aiOps.forEach(function (op) {
+      var btn = document.createElement('button');
+      btn.textContent = op.title;
+      btn.style.cssText = 'display:block;width:220px;text-align:left;background:none;border:0;color:inherit;font:inherit;padding:6px 10px;border-radius:6px;cursor:pointer;';
+      btn.onmouseenter = function () { btn.style.background = 'rgba(127,127,127,.16)'; };
+      btn.onmouseleave = function () { btn.style.background = 'none'; };
+      btn.onclick = function () { aiRun(op, sel); };
+      aiPanel.appendChild(btn);
+    });
+    aiPlace(aiPanel);
+    document.body.appendChild(aiPanel);
+  }
+
+  function aiRun(op, sel) {
+    aiHideAll();
+    aiPanel = aiBox();
+    aiPanel.style.padding = '10px';
+    aiPanel.style.width = '340px';
+    aiPanel.textContent = 'Thinking…';
+    aiPlace(aiPanel);
+    document.body.appendChild(aiPanel);
+    aiRequest(op.id, sel).then(function (r) {
+      if (!aiPanel) return;
+      aiPanel.textContent = '';
+      if (!r.ok) { aiPanel.textContent = r.error || 'That didn’t work.'; return; }
+      var label = document.createElement('div');
+      label.textContent = 'Suggested replacement — edit before applying';
+      label.style.cssText = 'font-size:11px;opacity:.7;margin-bottom:4px;';
+      var ta = document.createElement('textarea');
+      ta.value = r.proposed || '';
+      ta.style.cssText = 'width:100%;height:130px;box-sizing:border-box;font:12px ui-monospace,monospace;resize:vertical;';
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:flex-end;gap:6px;margin-top:6px;';
+      var cancel = document.createElement('button');
+      cancel.textContent = 'Cancel'; cancel.style.cssText = 'padding:4px 10px;cursor:pointer;';
+      cancel.onclick = aiHidePanel;
+      var apply = document.createElement('button');
+      apply.textContent = 'Replace'; apply.style.cssText = 'padding:4px 10px;cursor:pointer;font-weight:600;';
+      apply.onclick = function () { cm.replaceSelection(ta.value); aiHidePanel(); markDirty(); scheduleUpdate(); };
+      row.appendChild(cancel); row.appendChild(apply);
+      aiPanel.appendChild(label); aiPanel.appendChild(ta); aiPanel.appendChild(row);
+      ta.focus();
+    });
+  }
+
+  // Called on selection change: show the chip when there's a usable selection.
+  function aiRefresh() {
+    if (!aiOps || !aiOps.length || !cm || !isEdit()) { aiHideAll(); return; }
+    if (aiPanel) return; // don't fight an open menu/result
+    var sel = cm.getSelection();
+    if (!sel || sel.trim().length < 2) { aiHideTrigger(); return; }
+    if (!aiTrigger) {
+      aiTrigger = document.createElement('button');
+      aiTrigger.textContent = '✦ Improve selection';
+      aiTrigger.style.cssText = 'position:fixed;z-index:55;background:Canvas;color:CanvasText;border:1px solid GrayText;border-radius:999px;font:12px system-ui,sans-serif;padding:4px 10px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.22);';
+      aiTrigger.onmousedown = function (e) { e.preventDefault(); }; // keep the cm selection
+      aiTrigger.onclick = function (e) { e.stopPropagation(); aiShowMenu(cm.getSelection()); };
+      document.body.appendChild(aiTrigger);
+    }
+    aiPlace(aiTrigger);
+  }
+  document.addEventListener('mousedown', function (e) {
+    if (aiPanel && !aiPanel.contains(e.target)) aiHidePanel();
+  });
+
   function onHostMessage(event) {
     // only the embedding parent may speak the protocol
     if (window.parent === window || event.source !== window.parent) return;
@@ -410,6 +520,13 @@
       clearTimeout(hostSaveTimer); hostSaveTimer = null;
       if (d.ok) { clearDirty(); toast('Saved'); }
       else { toast('Save failed' + (d.error ? ' — ' + String(d.error) : '')); }
+    } else if (d.type === 'orz-host-ai-hello' && d.protocol === AI_PROTOCOL && Array.isArray(d.operations)) {
+      aiOrigin = event.origin;
+      aiOps = d.operations.filter(function (o) { return o && o.id && o.title; });
+      aiPost({ type: 'orz-host-ai-ready', protocol: AI_PROTOCOL, version: AI_VERSION });
+    } else if (d.type === 'orz-host-ai-result' && d.requestId && aiPending[d.requestId]) {
+      var aiRes = aiPending[d.requestId]; delete aiPending[d.requestId];
+      aiRes({ ok: !!d.ok, proposed: d.proposed, error: d.error });
     }
   }
   // listen from script load so an early hello isn't missed
