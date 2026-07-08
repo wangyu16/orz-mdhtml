@@ -98,6 +98,14 @@ handshake. The versioned spec is [PROTOCOL.md](PROTOCOL.md)
 (`orz-host-save@1`), the canonical copy for all three orz-family runtimes
 (orz-mdhtml, orz-slides, orz-paged).
 
+A second, independent protocol — **`orz-host-ai@1`** (same
+[PROTOCOL.md](PROTOCOL.md)) — lets a host provide an **AI assistant**. When the
+host advertises operations, selecting text in the editor shows an *Improve
+selection* affordance; the file sends the passage to the host, which runs the
+model and returns a suggestion the user applies. The **file owns the UI, the
+host owns the model** — so any embedder (including a bring-your-own-key page)
+can offer AI. No host, no assistant; the file is unchanged.
+
 ## For teaching
 
 The orz-markdown family targets open-source publishing, especially teaching:

@@ -87,3 +87,7 @@ for that.
 the CLI options, the in-file UI/runtime, delivery defaults, or the release flow,
 make sure `README.md` and `orz-mdhtml-skills/SKILL.md` still match reality (and
 that the orz-markdown dependency note is current). Stale docs/skill are bugs.
+
+## Release
+
+- Before each publishing, always check coherency and consistency, update docs and agent skills, update the example/sample/testing dual extension name files to current version.

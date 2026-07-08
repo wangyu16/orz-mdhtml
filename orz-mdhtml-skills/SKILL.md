@@ -82,6 +82,22 @@ CodeMirror and morphdom. All are CDN-cached after first load.
 - **Editing/Save** needs a Chromium browser (Chrome/Edge); reading, themes,
   export, and copy-as-markdown work in all modern browsers.
 
+## Host integration (save + AI)
+
+When a platform embeds the file in an iframe, two independent `postMessage`
+protocols activate after a handshake (nothing changes standalone):
+
+- **`orz-host-save@1`** — the file's Save posts to the host instead of the file
+  system.
+- **`orz-host-ai@1`** — if the host advertises AI operations, selecting text
+  shows an *"Improve selection"* assistant; the file sends the passage to the
+  host and applies the returned suggestion. The file owns the UI; the host owns
+  the model.
+
+Both are specified in [PROTOCOL.md](../PROTOCOL.md). As a file author you don't
+write any of this — it's built into the runtime; just know the file *can* be
+edited with host-provided save + AI.
+
 ## Gotchas for agents
 
 - Edit the `.md` and regenerate; never restructure the generated HTML by hand —
