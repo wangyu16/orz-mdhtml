@@ -1,6 +1,6 @@
 {
   "name": "orz-mdhtml",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Generate self-contained, editable .md.html files from Markdown using orz-markdown — preview + edit modes, source-aware copy, in-place save.",
   "type": "module",
   "main": "./dist/lib.js",
@@ -17,7 +17,8 @@
   "files": [
     "dist",
     "assets",
-    "orz-mdhtml-skills"
+    "orz-mdhtml-skills",
+    "PROTOCOL.md"
   ],
   "scripts": {
     "build": "tsc && npm run bundle",
@@ -37,11 +38,11 @@
   "author": "Yu Wang <yuwang@orz.how>",
   "license": "MIT",
   "dependencies": {
-    "orz-markdown": "^1.4.0"
+    "orz-markdown": "^1.4.1"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "esbuild": "^0.21.5",
+    "esbuild": "^0.28.1",
     "path-browserify": "^1.0.1",
     "tsx": "^4.7.0",
     "typescript": "^5.4.0"

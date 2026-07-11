@@ -3,6 +3,31 @@
 All notable changes to **orz-mdhtml** are recorded here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.8.1] — 2026-07-11
+
+### Fixed
+
+- CDN and inline CLI generation now use the same composition path, so the
+  default `--cdn` mode applies metadata extraction exactly like `--inline`.
+
+### Security
+
+- Updated the build-only `esbuild` dependency to `^0.28.1`.
+
+### Packaging
+
+- Ship the MIT license in both npm packages and include `PROTOCOL.md` in the CLI
+  tarball so README and agent-skill links work after installation.
+
+## [0.8.0] — 2026-07-11
+
+### Added
+
+- Portable document metadata. A source-level `{{nyml kind: meta}}` block is
+  consumed at generation time and emitted as standard `<head>` tags plus an
+  `#orz-meta` JSON island. Programmatic callers can pass `metadata` to
+  `buildMdHtml`; host values win field by field. Requires `orz-markdown ^1.4.0`.
+
 ## [0.7.1] — 2026-07-08
 
 ### Fixed

@@ -28,7 +28,8 @@ for that.
 
 ## Architecture
 
-- `src/cli.ts` — CLI. Reads the `.md`, builds config, calls `buildHtml`.
+- `src/cli.ts` — CLI. Reads the `.md`, builds config, calls the shared
+  `composeInlineMdHtml` path for both delivery modes.
   `orzVersion` = orz-markdown (for theme CDN URLs); `selfVersion` = this
   package (for the renderer bundle URL + version check). **`--cdn` is the
   default** (small files; renderer from jsDelivr); `--inline` embeds the bundle.
@@ -64,6 +65,9 @@ for that.
   bump the `orz-markdown` dep, `npm install`, then `npm run bundle`.
 - **Preserve `data-md` and `data-src-line`** if you post-process rendered HTML
   (copy-as-markdown and scroll-sync depend on them).
+- `{{nyml kind: meta}}` is consumed before rendering; normalized metadata lives
+  in `<head>` and `#orz-meta`. Keep CDN and inline generation on the shared
+  composition path so their metadata behavior cannot drift.
 - **`dist/` and `browser/orzmd.browser.js` are gitignored** build artifacts;
   `browser/package.json` and `browser/README.md` are tracked.
 - A generated file needs internet to view (renderer/themes/KaTeX/etc. from CDN);

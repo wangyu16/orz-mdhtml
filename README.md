@@ -67,6 +67,31 @@ renderer (~750 KB) when you want the file to carry its own renderer.
 Themes: `light-neat-1/2/3`, `light-academic-1/2`, `beige-decent-1/2`,
 `light-playful-1/2`, `dark-elegant-1/2/3`. (Readers can switch live in the editor.)
 
+### Portable metadata
+
+Add a leading `{{nyml kind: meta}}` block when the generated file should carry
+author, license, canonical source, date, description, or keywords:
+
+```markdown
+{{nyml
+kind: meta
+title: Field Notes
+author: Your Name
+license: CC-BY-4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+source: https://example.org/field-notes
+date: 2026-07-11
+}}
+```
+
+Generation consumes this block and writes normalized `<head>` tags plus an
+`#orz-meta` JSON island. The emitted metadata survives later in-browser saves
+and framework updates. Programmatic callers may pass `metadata` to
+`buildMdHtml`; those host values win field by field.
+
+See [`examples/metadata.md`](examples/metadata.md) and its generated
+[`metadata.md.html`](examples/metadata.md.html) for a complete CDN-mode example.
+
 ## Use with an AI agent
 
 The package ships an **agent skill** that teaches an AI agent how to author and edit
@@ -132,9 +157,9 @@ morphdom; editor↔preview scroll-sync maps CodeMirror lines to `data-src-line`
 anchors (toggleable). Save is *self-reproducing*: it serializes the outer
 document with the latest embedded source.
 
-Depends on `orz-markdown` (`^1.3.2`); copy-as-markdown needs ≥ 1.2.0, the
+Depends on `orz-markdown` (`^1.4.1`); copy-as-markdown needs ≥ 1.2.0, the
 whole-table/blockquote copy fix landed in ≥ 1.2.1, and explicit image-size
-rendering is fixed in ≥ 1.3.2.
+rendering is fixed in ≥ 1.3.2. Portable document metadata requires ≥ 1.4.0.
 
 ## Roadmap
 
@@ -143,7 +168,7 @@ rendering is fixed in ≥ 1.3.2.
 - [x] copy-as-markdown via orz-markdown core
 - [x] Publish `orz-mdhtml` (the CLI) and `orz-mdhtml-browser` (CDN bundle) to npm
 - [ ] Optional fully-offline build (inline themes + editor libs)
-- [ ] Mermaid/KaTeX live re-render parity in the editor
+- [x] Mermaid/KaTeX/SMILES/chart enhancement after live preview updates
 
 ## Security — treat these as programs, not documents
 

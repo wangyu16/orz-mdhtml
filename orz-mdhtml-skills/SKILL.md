@@ -50,6 +50,30 @@ note even `--inline` still fetches themes and editor libraries from CDN.
 Theme ids: `light-neat-1/2/3`, `light-academic-1/2`, `beige-decent-1/2`,
 `light-playful-1/2`, `dark-elegant-1/2/3`.
 
+### Portable metadata
+
+To give a generated file machine-readable authorship, license, canonical source,
+date, description, or keywords, put a leading `{{nyml kind: meta}}` block in the
+Markdown. The builder consumes it and writes standard `<head>` tags plus an
+`#orz-meta` JSON island; those emitted records survive later browser saves and
+framework updates.
+
+```markdown
+{{nyml
+kind: meta
+title: Field Notes
+author: Your Name
+license: CC-BY-4.0
+license_url: https://creativecommons.org/licenses/by/4.0/
+source: https://example.org/field-notes
+date: 2026-07-11
+}}
+```
+
+Programmatic hosts may pass `metadata` to `buildMdHtml`; host values win field
+by field. Do not duplicate the metadata block after generation: the normalized
+`#orz-meta` island is the generated file's persistent metadata record.
+
 ## Authoring the Markdown
 
 The source is **orz-markdown** Markdown — standard Markdown plus KaTeX math,
@@ -107,9 +131,9 @@ edited with host-provided save + AI.
   `data-src-line` attributes** — they power copy-as-markdown and scroll-sync.
 - The embedded source guards `</script>` as `<\/script>`; read it back via the
   `#orz-src` element's `textContent` and reverse that escape.
-- Depends on `orz-markdown` (`^1.3.2`); copy-as-markdown needs ≥ 1.2.0, the
+- Depends on `orz-markdown` (`^1.4.1`); copy-as-markdown needs ≥ 1.2.0, the
   whole-table/blockquote copy fix landed in ≥ 1.2.1, and explicit image-size
-  rendering is fixed in ≥ 1.3.2.
+  rendering is fixed in ≥ 1.3.2. Portable document metadata requires ≥ 1.4.0.
 
 ## Security
 
