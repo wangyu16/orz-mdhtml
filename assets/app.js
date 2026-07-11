@@ -93,7 +93,9 @@
   }
 
   function renderHtml(src) {
-    return (window.orzmd && window.orzmd.render) ? window.orzmd.render(src) : '';
+    ensureIncludes(src); // async: fetch any un-cached web includes via the host
+    var s = applyIncludes(src); // sync: inline what's already cached
+    return (window.orzmd && window.orzmd.render) ? window.orzmd.render(s) : '';
   }
 
   function enhance() {
@@ -538,6 +540,62 @@
     if (aiPanel && !aiPanel.contains(e.target)) aiHidePanel();
   });
 
+  // ---- host-provided includes (orz-host-include@1) --------------------------
+  // When a host offers include resolution, `{{md-include URL}}` / `{{markdown
+  // URL}}` directives are resolved by the host (which owns the fetch + allowlist)
+  // and inlined into the PREVIEW render only. The editable source keeps the
+  // directive. STANDALONE (no host) the directives are left as-is — the file
+  // NEVER auto-fetches a URL from the viewer's browser.
+  var INCLUDE_PROTOCOL = 'orz-host-include';
+  var INCLUDE_VERSION = 1;
+  var includeOrigin = null;     // set at the include handshake; null = no host
+  var includeSeq = 0;
+  var includePending = {};      // requestId -> resolve
+  var includeCache = {};        // url -> markdown | null (null = declined)
+  var includeInflight = {};     // url -> true while a request is outstanding
+
+  function includeTarget() { return includeOrigin && includeOrigin !== 'null' ? includeOrigin : '*'; }
+  function includePost(msg) { try { window.parent.postMessage(msg, includeTarget()); } catch (e) {} }
+
+  function includeRequest(url) {
+    return new Promise(function (resolve) {
+      var id = 'inc' + (++includeSeq);
+      includePending[id] = resolve;
+      includePost({ type: 'orz-host-include-request', protocol: INCLUDE_PROTOCOL, version: INCLUDE_VERSION, requestId: id, url: url });
+      setTimeout(function () { if (includePending[id]) { delete includePending[id]; resolve(null); } }, 30000);
+    });
+  }
+
+  // Sync: substitute each cached include directive; leave un-cached ones as-is
+  // (they render empty via the fs include plugin — a transient "loading" state).
+  function applyIncludes(src) {
+    if (includeOrigin === null) return src; // unhosted → never resolve
+    return src.replace(/\{\{(?:markdown|md-include)\s+(https?:\/\/[^\s}]+)\}\}/g, function (whole, url) {
+      var v = includeCache[url];
+      return (typeof v === 'string') ? v : whole;
+    });
+  }
+
+  // Async: request any include URL not yet cached; on arrival, cache + re-render.
+  function ensureIncludes(src) {
+    if (includeOrigin === null) return;
+    var re = /\{\{(?:markdown|md-include)\s+(https?:\/\/[^\s}]+)\}\}/g;
+    var m, seen = {};
+    while ((m = re.exec(src))) {
+      var url = m[1];
+      if (seen[url]) continue; seen[url] = true;
+      if (Object.prototype.hasOwnProperty.call(includeCache, url) || includeInflight[url]) continue;
+      includeInflight[url] = true;
+      (function (u) {
+        includeRequest(u).then(function (md) {
+          includeCache[u] = (typeof md === 'string') ? md : null;
+          delete includeInflight[u];
+          scheduleUpdate(); // re-render with the now-cached content
+        });
+      })(url);
+    }
+  }
+
   function onHostMessage(event) {
     // only the embedding parent may speak the protocol
     if (window.parent === window || event.source !== window.parent) return;
@@ -567,6 +625,13 @@
     } else if (d.type === 'orz-host-ai-result' && d.requestId && aiPending[d.requestId]) {
       var aiRes = aiPending[d.requestId]; delete aiPending[d.requestId];
       aiRes({ ok: !!d.ok, proposed: d.proposed, error: d.error });
+    } else if (d.type === 'orz-host-include-hello' && d.protocol === INCLUDE_PROTOCOL && typeof d.version === 'number' && d.version >= 1) {
+      includeOrigin = event.origin;
+      includePost({ type: 'orz-host-include-ready', protocol: INCLUDE_PROTOCOL, version: INCLUDE_VERSION, kind: 'md' });
+      scheduleUpdate(); // re-render now that web includes can resolve
+    } else if (d.type === 'orz-host-include-result' && d.requestId && includePending[d.requestId]) {
+      var incRes = includePending[d.requestId]; delete includePending[d.requestId];
+      incRes(d.ok ? d.markdown : null);
     }
   }
   // listen from script load so an early hello isn't missed

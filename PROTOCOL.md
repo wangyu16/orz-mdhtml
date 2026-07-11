@@ -131,3 +131,52 @@ text — it then saves through `orz-host-save` (or the file's own Export), so it
 passes through whatever validation the host's save path enforces. Versioning
 follows the same rule (host announces; file replies with the highest it supports
 ≤ the host's).
+
+---
+
+# `orz-host-include` — host-provided web transclusion
+
+**Version 1** (`orz-host-include@1`). A companion to `orz-host-save` /
+`orz-host-ai`, independent of both. Lets the host resolve URL-based markdown
+includes (`{{md-include https://…}}` / `{{markdown https://…}}`) for the file's
+PREVIEW render, so an editor hosted in a trusted app shows included content
+without the standalone file ever fetching author-chosen URLs itself.
+
+## Purpose
+
+The editable source of record keeps the directive (single source of truth). A
+hosted file delegates resolution to the host, which owns the fetch and its own
+allowlist/policy. **A standalone file (no host) never resolves and never
+auto-fetches** — the directive is left as-is (and renders empty via the built-in
+filesystem include, which cannot read a URL in the browser). This avoids a
+tracking/privacy footgun where opening any file would ping arbitrary hosts.
+
+## Messages
+
+| Message | Direction | Payload |
+| --- | --- | --- |
+| `orz-host-include-hello` | host → file | `{ type, protocol: "orz-host-include", version: 1 }` |
+| `orz-host-include-ready` | file → host | `{ type, protocol, version, kind: "md" \| "slides" \| "paged" }` |
+| `orz-host-include-request` | file → host | `{ type, protocol, version, requestId, url }` |
+| `orz-host-include-result` | host → file | `{ type, protocol, version, requestId, ok, markdown?, error? }` |
+
+## Handshake and resolution
+
+1. The host posts `orz-host-include-hello` to the iframe, retried until the file
+   replies (files behind a slow CDN boot late).
+2. The file records the host origin and replies `orz-host-include-ready`, then
+   re-renders its preview.
+3. For each distinct include URL in the source, the file posts an
+   `orz-host-include-request`. The host resolves it (under its own allowlist)
+   and replies `orz-host-include-result` with the markdown, or `ok: false`.
+4. The file caches the result, inlines it into the PREVIEW render only (the
+   source keeps the directive), and re-renders. A request with no reply within
+   ~30s resolves as unresolved; the directive is left in place.
+
+## Security & versioning
+
+Same posture as the siblings: messages accepted only from `window.parent` after
+the origin is fixed at the handshake; payloads are inlined as markdown source
+for rendering, never evaluated; no host means no resolution and no network
+request. Versioning follows the same rule (host announces; file replies with the
+highest it supports ≤ the host's).
