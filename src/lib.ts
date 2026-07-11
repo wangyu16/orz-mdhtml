@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto';
 import { getBrowserRuntimeScript } from 'orz-markdown/runtime';
 import { PREVIEW_CDN } from 'orz-markdown/preview-frame';
 import { buildHtml, type ThemeEntry } from './template.js';
+import { extractDocMeta, mergeDocMeta, renderDocMetaHead, renderDocMetaIsland, type DocMeta } from 'orz-markdown/doc-meta';
 
 /** orz-markdown's bundled themes (CDN-loaded), with light/dark scheme. */
 // Same set, names, and order as the orz-markdown PWA editor's theme menu.
@@ -100,6 +101,8 @@ export interface ComposeOptions {
    *  `cdn` references it from jsDelivr (small file — the framework loads at
    *  view time, and viewers get the published bundle without re-embedding it). */
   delivery?: 'inline' | 'cdn';
+  /** Document metadata injected by the host; wins over an in-source meta block. */
+  metadata?: DocMeta;
 }
 
 /**
@@ -111,6 +114,12 @@ export interface ComposeOptions {
 export function composeInlineMdHtml(opts: ComposeOptions): string {
   const orzVersion = orzVersionOf();
   const selfVersion = selfVersionOf();
+
+  // Read + strip any `{{nyml kind: meta}}` block; host metadata wins field by
+  // field. The stripped body is what the in-file editor embeds and renders.
+  const extracted = extractDocMeta(opts.source);
+  const meta = mergeDocMeta(extracted.meta, opts.metadata);
+  const source = extracted.body;
 
   const appJs = readFileSync(findAsset('app.js'), 'utf8');
 
@@ -130,7 +139,9 @@ export function composeInlineMdHtml(opts: ComposeOptions): string {
         };
 
   return buildHtml({
-    source: opts.source,
+    source,
+    metaHead: renderDocMetaHead(meta),
+    metaIsland: renderDocMetaIsland(meta),
     title: opts.title,
     filename: opts.filename,
     docId: opts.docId,
@@ -179,6 +190,8 @@ export function buildMdHtml(opts: {
   /** `inline` (default) embeds the framework; `cdn` references it from jsDelivr
    *  (small file — requires orz-mdhtml-browser to be published at this version). */
   delivery?: 'inline' | 'cdn';
+  /** Document metadata (license, author, source …) injected by the host. */
+  metadata?: DocMeta;
 }): string {
   const title = opts.title ?? 'Untitled';
   return composeInlineMdHtml({
@@ -188,5 +201,6 @@ export function buildMdHtml(opts: {
     docId: randomUUID(),
     theme: opts.theme ?? DEFAULT_THEME,
     delivery: opts.delivery,
+    metadata: opts.metadata,
   });
 }

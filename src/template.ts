@@ -20,6 +20,10 @@ export interface ThemeEntry {
 export interface TemplateOptions {
   /** Raw markdown source. */
   source: string;
+  /** document-metadata `<head>` tags (meta/link rel=license), or '' if none. */
+  metaHead?: string;
+  /** document-metadata JSON island, or '' if none. */
+  metaIsland?: string;
   /** Document <title>. */
   title: string;
   /** Base filename (no extension) used as the save suggestion. */
@@ -141,7 +145,7 @@ export function buildHtml(opts: TemplateOptions): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(opts.title)}</title>
-<meta name="generator" content="orz-mdhtml">
+<meta name="generator" content="orz-mdhtml">${opts.metaHead ? '\n' + opts.metaHead : ''}${opts.metaIsland ? '\n' + opts.metaIsland : ''}
 <style>
   :root {
     --orz-split: 44%;
