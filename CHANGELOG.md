@@ -3,6 +3,19 @@
 All notable changes to **orz-mdhtml** are recorded here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] — 2026-07-11
+
+### Added
+
+- **`orz-host-include@1`** — the in-file editor now delegates URL-based markdown
+  transclusion (`{{md-include https://…}}` / `{{markdown https://…}}`) to a
+  trusted host for its PREVIEW render. When a host answers the hello, each
+  distinct include URL is resolved by the host (which owns the fetch + its own
+  allowlist) and inlined into the preview via a URL→markdown cache; the editable
+  source keeps the directive. A **standalone file never resolves and never
+  auto-fetches** an author URL from the viewer's browser — the directive is left
+  in place. Sibling of `orz-host-save` / `orz-host-ai`; see PROTOCOL.md.
+
 ## [0.8.1] — 2026-07-11
 
 ### Fixed
