@@ -1,7 +1,10 @@
 # orz-mdhtml
 
-Turn a Markdown file into a **single, self-contained `.md.html`** — a page that
-reads like a normal themed website but is *quietly editable*. Powered by
+**Markdown that edits itself.**
+
+Turn a Markdown file into a single **`.md.html`** — a page that reads like a
+normal themed website and edits itself in the browser: the Markdown source
+rides inside the file and saves back in place. Powered by
 [orz-markdown](https://www.npmjs.com/package/orz-markdown).
 
 One file. Open it in a browser to read. Click the pencil to edit it. Download
