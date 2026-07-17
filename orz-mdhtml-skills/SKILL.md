@@ -1,9 +1,9 @@
 ---
 name: orz-mdhtml
-description: Create and use self-contained, editable .md.html documents from Markdown (orz-mdhtml). Use when a user wants a single shareable HTML file that reads like a webpage but can be edited and saved in the browser — e.g. teaching handouts, notes, or published articles.
+description: Create and use single-file, self-editing .md.html documents from Markdown (orz-mdhtml). Use when a user wants a shareable HTML file that reads like a webpage but can be edited and saved in the browser — e.g. teaching handouts, notes, or published articles.
 ---
 
-# orz-mdhtml — self-contained editable `.md.html`
+# orz-mdhtml — single-file, self-editing `.md.html`
 
 `orz-mdhtml` turns a Markdown file into **one `.md.html` file** that:
 
@@ -137,7 +137,7 @@ edited with host-provided save + AI.
 
 ## Security
 
-`.md.html` files are **self-contained executable HTML** — opening one runs its
+`.md.html` files are **single-file executable HTML** — opening one runs its
 embedded JavaScript. Treat them like programs: only open or edit files from a
 trusted source, and advise users the same. The one-click framework update is
 opt-in (edit view only, explicit confirm) and always fetches from the hardcoded

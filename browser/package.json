@@ -1,6 +1,6 @@
 {
   "name": "orz-mdhtml-browser",
-  "version": "0.9.0",
+  "version": "0.9.3",
   "description": "Prebuilt in-browser renderer for orz-mdhtml .md.html files (exposes window.orzmd.render). Served via CDN (jsDelivr).",
   "main": "orzmd.browser.js",
   "files": [
@@ -20,6 +20,8 @@
     "type": "git",
     "url": "git+https://github.com/wangyu16/orz-mdhtml.git"
   },
+  "homepage": "https://markdown.orz.how/family.html#mdhtml",
+  "bugs": "https://github.com/wangyu16/orz-mdhtml/issues",
   "publishConfig": {
     "access": "public"
   }
