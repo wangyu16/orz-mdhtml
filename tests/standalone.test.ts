@@ -1,10 +1,10 @@
 /**
- * Rebuild steps 3–4 — the assembled file in real Chrome (claims R.1–R.9):
+ * Rebuild steps 3–5 — the assembled file in real Chrome (claims R.1–R.10):
  * the read view, the shell's shape, edit and save, header settings, New
  * document / Save as new copy, a host frame, reader preferences, the quiet
- * update. Files are assembled with the real bundle and opened over `file:`
- * (and http:); jsDelivr is routed to local files; the picker returns real
- * OPFS handles.
+ * update, leaving with unsaved changes, editors mounted on the file. Files
+ * are assembled with the real bundle and opened over `file:` (and http:);
+ * jsDelivr is routed to local files; the picker returns real OPFS handles.
  */
 import { describe, it, expect, afterAll } from 'vitest';
 import { editHeader, extract, lintHeader, readDocument, UID_PATTERN } from 'orz-markdown/carrier';
@@ -397,6 +397,119 @@ chrome('host frame and quiet update (real Chrome)', () => {
     expect(ex).toMatchObject({ shell: '9.9.9', delivery: 'inline', kind: 'md' });
     expect(written).toContain(`<script id="orz-engine">${next.iife}</script>`);
     expect(log.filter((u) => u.endsWith('/release.json'))).toHaveLength(1);
+    await ctx.close();
+  }, 120_000);
+});
+
+chrome('leaving with unsaved changes, editors mounted on the file (real Chrome)', () => {
+  /** Record dialogs (and dismiss them: a dismissed beforeunload keeps the page). */
+  const dialogsOf = (page: Page): string[] => {
+    const seen: string[] = [];
+    page.on('dialog', (d) => { seen.push(d.type()); void d.dismiss().catch(() => undefined); });
+    return seen;
+  };
+  /** Ask the page to close as a reader would (beforeunload runs); true when it stayed open. */
+  const tryClose = async (page: Page): Promise<boolean> => {
+    await page.close({ runBeforeUnload: true });
+    await new Promise((r) => setTimeout(r, 500));
+    return !page.isClosed();
+  };
+
+  it('[R.9] a top-level file with unsaved changes asks before the page goes (typed or a header setting); clean, saved or after the update\'s reload it does not', async () => {
+    const ctx = await context();
+    const text = CORPUS.find((c) => c.path === 'md/minimal.md')!.text;
+    const html = await assembleReal(text);
+    // clean: nothing asked
+    const clean = await openFile(ctx, 'leave-clean.md.html', html);
+    const cleanDialogs = dialogsOf(clean);
+    await clean.mouse.click(400, 300); // sticky user activation: Chrome asks only after the reader interacted
+    expect(await tryClose(clean)).toBe(false);
+    expect(cleanDialogs).toEqual([]);
+
+    // typed in the editor: asked, and dismissing keeps the page and the text; after a save: not asked
+    const typed = await openFile(ctx, 'leave-typed.md.html', html);
+    const typedDialogs = dialogsOf(typed);
+    await typed.getByRole('button', { name: 'Edit', exact: true }).click();
+    await typed.evaluate(`${APP}.editor().ready`);
+    await typed.evaluate(`${APP}.editor().focus()`);
+    await typed.keyboard.type('Unsaved words.');
+    expect(await typed.evaluate(`${APP}.isDirty()`)).toBe(true);
+    expect(await tryClose(typed)).toBe(true);
+    expect(typedDialogs).toEqual(['beforeunload']);
+    expect(await typed.evaluate(`${APP}.getText()`)).toContain('Unsaved words.');
+    await typed.keyboard.press(`${MOD}+s`);
+    await typed.waitForFunction(`!${APP}.isDirty()`);
+    expect(await tryClose(typed)).toBe(false);
+    expect(typedDialogs).toEqual(['beforeunload']);
+
+    // a header setting outside edit mode makes the document unsaved: asked; undone back to the saved text: not asked
+    const setting = await openFile(ctx, 'leave-setting.md.html', html);
+    const settingDialogs = dialogsOf(setting);
+    await setting.mouse.click(400, 300);
+    await setting.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
+    expect(await setting.evaluate(`${APP}.isDirty()`)).toBe(true);
+    expect(await tryClose(setting)).toBe(true);
+    expect(settingDialogs).toEqual(['beforeunload']);
+    await setting.evaluate(`${APP}.undo()`);
+    expect(await setting.evaluate(`${APP}.isDirty()`)).toBe(false);
+    expect(await tryClose(setting)).toBe(false);
+    expect(settingDialogs).toEqual(['beforeunload']);
+    await ctx.close();
+
+    // the quiet update writes the current (unsaved) text into the opened file, then reloads: nothing asked
+    const next = await bundle('9.9.9');
+    const uctx = await context({ latest: { release: next.release, bundle: next.iife, version: '9.9.9' } });
+    const page = await openFile(uctx, 'leave-update.md.html', html);
+    const updateDialogs = dialogsOf(page);
+    await page.mouse.click(400, 300);
+    await page.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
+    const current = await page.evaluate(`${APP}.getText()`) as string;
+    const indicator = page.getByRole('button', { name: 'Update available: 9.9.9' });
+    await indicator.waitFor();
+    await indicator.click();
+    const reloaded = page.waitForEvent('load');
+    await page.getByRole('button', { name: 'Update now' }).click();
+    await reloaded;
+    expect(updateDialogs).toEqual([]);
+    const written = extract((await readOpfs(page, 'leave-update.md.html'))!)!;
+    expect(written.text === current).toBe(true);
+    expect(written.shell).toBe('9.9.9');
+    await uctx.close();
+  }, 120_000);
+
+  it('[R.10] an editor mounted on the file (OrzCarrier.mountEditor, no hooks.save) is the document being edited: Cmd/Ctrl+S on the page saves it (a newer-format one writes nothing), never the page\'s other copy; its unsaved changes ask before leaving; destroyed, the page\'s keys are its own again', async () => {
+    const ctx = await context();
+    const text = CORPUS.find((c) => c.path === 'md/minimal.md')!.text;
+    const page = await openFile(ctx, 'attached.md.html', await assembleReal(text));
+    const dialogs = dialogsOf(page);
+    const mount = (t: string): Promise<unknown> => page.evaluate(`(async () => {
+      const el = document.createElement('div'); el.style.cssText = 'width: 900px; height: 500px'; document.body.append(el);
+      window.__attached = globalThis.OrzCarrier.mountEditor(el, { text: ${JSON.stringify(t)} });
+      await window.__attached.ready;
+    })()`);
+    // a newer-format text: read-only (its focus() cannot take the focus), Cmd/Ctrl+S on the page writes nothing
+    const newer = '{{nyml\nkind: document\nformat: 2\n}}\n\nFrom a newer release.\n';
+    await mount(newer);
+    await page.mouse.click(5, 5);
+    await page.keyboard.press(`${MOD}+s`);
+    await page.waitForTimeout(600);
+    expect(await picks(page)).toHaveLength(0);
+    expect(await readOpfs(page, 'attached.md.html')).toBe(await assembleReal(text)); // the opened file, untouched
+    await page.evaluate('window.__attached.destroy()');
+    // a writable one, changed: Cmd/Ctrl+S with the focus outside it saves ITS text into the file
+    await mount(text);
+    await page.evaluate(`window.__attached.setText(${JSON.stringify(`${text}Attached edit.\n`)})`);
+    expect(await tryClose(page)).toBe(true);
+    expect(dialogs).toEqual(['beforeunload']);
+    await page.mouse.click(5, 5);
+    await page.keyboard.press(`${MOD}+s`);
+    await page.waitForFunction('!window.__attached.isDirty()');
+    expect(await readOpfs(page, 'attached.md.html') === assemble(`${text}Attached edit.\n`, { engineSource: b.iife })).toBe(true);
+    expect(await page.evaluate(`${APP}.getText()`)).toBe(text); // the page's own copy was not the one saved
+    // destroyed: Cmd/Ctrl+E edits the page's document again
+    await page.evaluate('window.__attached.destroy()');
+    await page.keyboard.press(`${MOD}+e`);
+    expect(await page.evaluate(`!!${APP}.editor()`)).toBe(true);
     await ctx.close();
   }, 120_000);
 });

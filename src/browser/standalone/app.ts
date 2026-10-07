@@ -20,6 +20,8 @@
  * - **Host** (framed): `connectHost` (file side, all three protocols): saves
  *   go to the host, AI operations become the editor's AI hook, includes are
  *   resolved by the host for the read view and the preview.
+ * - **Leaving with unsaved changes** (top-level files): `beforeunload` asks
+ *   (the browser's own prompt); never for the update's reload.
  * - **Quiet update** (top-level files only, the kit's who-checks rule):
  *   `checkForUpdate` → `mountUpdateIndicator` → `performUpdate`; the editor
  *   is read-only while it runs; the page reloads only when the kit says so.
@@ -82,6 +84,13 @@ export interface StandaloneApp {
   saveAsCopy(): Promise<SaveResult>;
   /** The context the file gives an editor mounted on it (`OrzCarrier.mountEditor` without `hooks.save`). */
   editorContext(): StandaloneContext;
+  /**
+   * Register an editor mounted on this file's context (it saves through the file's saver): while
+   * one is attached, the page's own shortcuts defer to it — Cmd/Ctrl+S saves that editor, never
+   * the page's other copy of the text — and its unsaved changes count for leaving the page.
+   * Returns the detach function (call it when the editor is destroyed).
+   */
+  attach(editor: EditorShell): () => void;
   /** The chrome's shadow root. */
   readonly root: ShadowRoot;
   readonly host: HostConnection | undefined;
@@ -109,6 +118,12 @@ export function bootStandalone(k: StandaloneKind, win: Window = window): Standal
   const redoStack: string[] = [];
   const currentText = (): string => (editor ? editor.getText() : text);
   const isDirty = (): boolean => (editor ? editor.isDirty() : text !== saved);
+  /** Editors mounted on this file's context through `OrzCarrier.mountEditor` (not the Edit button's). */
+  const attached: EditorShell[] = [];
+  const attach = (ed: EditorShell): (() => void) => {
+    attached.push(ed);
+    return () => { const i = attached.indexOf(ed); if (i >= 0) attached.splice(i, 1); };
+  };
 
   // ── the file's own assembly: its delivery and includes (FC-19 §8.5); the opened bytes (content proof) ──
   const engineSource = file.engine ?? undefined;
@@ -418,16 +433,34 @@ export function bootStandalone(k: StandaloneKind, win: Window = window): Standal
 
   // keyboard outside the editor: Cmd/Ctrl+S saves, Cmd/Ctrl+Z / Shift+Z undo / redo header settings, Cmd/Ctrl+E edits
   win.addEventListener('keydown', (e) => {
-    if (editor) return; // the editor has its own keymap
+    // the file's editor has its own keymap; a key another editor on the page (OrzCarrier.mountEditor)
+    // or any other handler already took is not ours either — never save this file for it
+    if (editor || e.defaultPrevented) return;
     const mod = isMac(win) ? e.metaKey : e.ctrlKey;
     if (!mod || e.altKey) return;
     const target = e.composedPath()[0] as HTMLElement | undefined;
     const typing = !!target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName ?? ''));
     const key = e.key.toLowerCase();
-    if (key === 's') { e.preventDefault(); void save(); }
+    // an editor mounted on this file (its focus elsewhere, e.g. a read-only one) is the document being edited
+    const other = attached[attached.length - 1];
+    if (key === 's') { e.preventDefault(); void (other ? other.save() : save()); }
+    else if (other) return;
     else if (key === 'e' && !typing) { e.preventDefault(); edit(); }
     else if (key === 'z' && !typing) { if (e.shiftKey ? redo() : undo()) e.preventDefault(); }
   });
+
+  // ── data-loss protection: leaving a top-level file with unsaved changes asks first ──
+  // (the browser's own "Leave site?" prompt; a framed file's host owns that decision, it is told
+  // the dirty state through orz-host-save@1). The quiet update's reload never asks: the kit
+  // reloads only after the update wrote the current text into the opened file.
+  let leavingForUpdate = false;
+  if (!framed) {
+    win.addEventListener('beforeunload', (e) => {
+      if (leavingForUpdate || !(isDirty() || attached.some((ed) => ed.isDirty()))) return;
+      e.preventDefault();
+      e.returnValue = ''; // Chromium before 119 asks only when returnValue is set
+    });
+  }
 
   // ── the quiet update (FD-05): only a top-level standalone file checks (the kit's guards) ──
   async function runUpdate(info: UpdateInfo): Promise<void> {
@@ -454,6 +487,7 @@ export function bootStandalone(k: StandaloneKind, win: Window = window): Standal
       if (!r.save.ok) throw new Error(r.save.error ?? 'The updated file could not be saved.');
       if (r.reload) {
         reloading = true;
+        leavingForUpdate = true;
         saved = r.text;
         win.location.reload();
         return;
@@ -493,6 +527,7 @@ export function bootStandalone(k: StandaloneKind, win: Window = window): Standal
     newDocument,
     saveAsCopy,
     editorContext,
+    attach,
     root,
     host,
     ready,

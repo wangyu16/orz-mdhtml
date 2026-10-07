@@ -1,7 +1,7 @@
 {
   "name": "orz-mdhtml",
   "version": "0.9.3",
-  "description": "Generate single-file, self-editing .md.html documents from Markdown with live preview, source-aware copy, and in-place save.",
+  "description": "Markdown that edits itself: text twins (x.md) and their single-file, self-editing x.md.html (orz text format 1) — CLI and Node library.",
   "type": "module",
   "main": "./dist/lib.js",
   "types": "./dist/lib.d.ts",
@@ -9,14 +9,14 @@
     ".": {
       "types": "./dist/lib.d.ts",
       "default": "./dist/lib.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "bin": {
     "orz-mdhtml": "dist/cli.js"
   },
   "files": [
     "dist",
-    "assets",
     "orz-mdhtml-skills",
     "PROTOCOL.md"
   ],

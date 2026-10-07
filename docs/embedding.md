@@ -86,7 +86,11 @@ undoable edit, FC-18 §9 rules) · `undo()` / `redo()` · `isDirty()` /
 | `mintUid()` | `editor.ensureUid()` when the header has no `uid` | a `doc-[0-9a-z]{10,32}` id from your registry (FC-18 §10) |
 
 Without `hooks.save` the editor saves like a standalone file: an inline
-`.md.html` through the File System Access picker, else a download.
+`.md.html` through the File System Access picker, else a download. (Mounted
+inside an assembled `.md.html` page, it is an editor of that file: it saves
+through the file's own saver, delivery, includes and host, the page's
+Cmd/Ctrl+S saves it, and its unsaved changes make the page ask before it
+closes.)
 
 ## Content-Security-Policy (FC-19 §8.4)
 

@@ -1,80 +1,474 @@
 #!/usr/bin/env node
 /**
- * orz-mdhtml — generate a self-contained, editable .md.html from a .md file.
+ * The orz-mdhtml CLI (FC-10; REBUILD §3a): text twins (`x.md`) and their
+ * self-editing files (`x.md.html`, FC-18 text format 1).
  *
- * Usage:
- *   orz-mdhtml <input.md> [options]
+ *   orz-mdhtml new [file.md] [--title T] [--theme id] [--measure m] [--lang l] [--html] [--cdn]
+ *   orz-mdhtml assemble <file.md> [-o out] [--cdn]      (also: orz-mdhtml <file.md>)
+ *   orz-mdhtml extract <file.md.html> [-o out]
+ *   orz-mdhtml upgrade <old.md.html> [-o out] [--text out.md | --no-text]
+ *   orz-mdhtml inspect <file> [--json]
  *
- * Options:
- *   -o, --out <file>      output path (default: <input>.md.html)
- *   --theme <name>        orz-markdown theme (default: light-neat-3)
- *   --cdn                 reference the renderer from jsDelivr (default; small files)
- *   --inline              embed the renderer bundle in the file (larger, no renderer fetch)
- *   --title <text>        document <title> (default: input filename)
+ * Inline delivery is the default (FD-02); `--cdn` loads the engine from
+ * jsDelivr (web publishing). Content — title, theme, measure, language,
+ * metadata — comes only from the text's header: `assemble` has no content
+ * options. Every command takes `--json` (one JSON object on stdout, for
+ * agents), `--help`; exit status 0 = done, 1 = refused or failed, 2 = usage.
+ * Files are never overwritten when that could lose work (see `--force`).
  */
-import { readFileSync, writeFileSync } from 'node:fs';
-import { basename, extname, dirname, resolve, join } from 'node:path';
-import { randomUUID } from 'node:crypto';
-import { composeInlineMdHtml } from './lib.js';
-import { DEFAULT_THEME, isThemeId } from './themes.js';
+import { existsSync, readFileSync, renameSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
+import { decodeText, kindFromFilename, twinName, type Lint } from 'orz-markdown/carrier';
+import { assemble, extract, inspect, newDocument, readDocument, readLegacy, upgrade, ORZ_MARKDOWN_VERSION, THEMES, MEASURES, VERSION, type InspectReport } from './lib.js';
 
+const EXIT_OK = 0;
+const EXIT_FAILED = 1;
+const EXIT_USAGE = 2;
 
-interface Args {
-  input?: string;
-  out?: string;
-  theme: string;
-  delivery: 'inline' | 'cdn';
-  title?: string;
+/** An expected failure: printed as a message (or `{ ok: false }` with --json), never as a stack. */
+class CliError extends Error {
+  constructor(message: string, readonly code: number = EXIT_FAILED) { super(message); }
 }
 
-function parseArgs(argv: string[]): Args {
-  const a: Args = { theme: DEFAULT_THEME, delivery: 'cdn' };
+// ── help ────────────────────────────────────────────────────────────────────
+
+const USAGE = `orz-mdhtml ${VERSION} — Markdown that edits itself.
+A document is its text twin (x.md); its self-editing file (x.md.html) is assembled from it.
+
+Usage:
+  orz-mdhtml new [file.md] [--title T] [--theme id] [--measure m] [--lang l] [--html] [--cdn]
+  orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn]
+  orz-mdhtml <file.md> [-o out.md.html] [--cdn]          same as assemble
+  orz-mdhtml extract <file.md.html> [-o out.md]
+  orz-mdhtml upgrade <old.md.html> [-o out.md.html] [--text out.md | --no-text] [--cdn]
+  orz-mdhtml inspect <file> [--json]
+  orz-mdhtml themes
+
+Commands:
+  new        write a new text twin (header with a fresh uid); --html also assembles it;
+             without a file the text goes to stdout
+  assemble   write the .md.html of a text twin (x.md -> x.md.html); inline by default
+  extract    write the exact text twin of a .md.html (x.md.html -> x.md)
+  upgrade    turn an old file (0.x, or an older 1.x shell) into a file of this version,
+             in place by default, and write its text twin (x.md) unless --no-text
+  inspect    diagnose a text or a file: kind, format, shell, delivery, uid, lint, advice
+  themes     list the theme ids a header may name
+
+Options:
+  -o, --out <path>  output path ("-" = stdout for assemble and extract)
+  --cdn             load the engine from jsDelivr (small files, for the web); default: inline
+  --inline          the default delivery: the engine inside the file (no engine download)
+  --force           overwrite even when that could lose work (see below)
+  --json            print one JSON object (the result, or {"ok": false, "error"}) for agents
+  -h, --help        help (also: orz-mdhtml <command> --help)
+  -v, --version     the version
+
+Content (title, theme, measure, lang, metadata) comes only from the text's {{nyml}} header;
+assemble has no content options. Without --force nothing is overwritten that could hold
+other work: an output that is not an orz file, a .md.html changed after its text, a text
+twin changed after its file, or (new) any existing file.
+Exit status: 0 done, 1 refused or failed, 2 usage error.`;
+
+const HELP: Record<string, string> = {
+  new: `orz-mdhtml new [file.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn] [--force] [--json]
+
+Writes a new format-1 text twin: a header (kind: document, carrier: md, a fresh uid,
+the given title/theme/measure/lang), then a starter body. Without a file the text is
+printed to stdout. --html also writes its assembled file (file.md.html; --cdn for a
+small web file). Refuses to overwrite an existing file unless --force.
+Themes: ${THEMES.map((t) => t.id).join(', ')}.`,
+  assemble: `orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn] [--force] [--json]
+orz-mdhtml <file.md> [-o out.md.html] [--cdn] [--force] [--json]
+
+Writes the self-editing file of a text twin: x.md -> x.md.html (FC-18 §3), the text
+stored exactly (line endings, BOM). Inline by default (this release's engine inside the
+file); --cdn loads it from jsDelivr. Everything about the document — title, theme,
+measure, lang, metadata — comes from the text's header; there are no content options.
+Refuses (unless --force) to overwrite an output that is not an orz file, or a .md.html
+whose text differs and that was changed after the text (edited in the browser: run
+\`orz-mdhtml extract\` first).`,
+  extract: `orz-mdhtml extract <file.md.html> [-o out.md] [--force] [--json]
+
+Writes the exact text twin of an assembled file: x.md.html -> x.md, byte for byte the
+text that was assembled (CR LF and BOM kept). A 0.x file (before text format 1) is
+refused: use \`orz-mdhtml upgrade <file>\`, which writes its format-1 text twin.
+Refuses (unless --force) to overwrite a text twin that differs and was changed after
+the file.`,
+  upgrade: `orz-mdhtml upgrade <old.md.html> [-o out.md.html] [--text out.md | --no-text] [--cdn] [--force] [--json]
+
+Turns an orz-mdhtml file into a file of this version. A 0.x file: its source is kept
+exactly and its metadata, title and theme move into a format-1 header (with carrier: md
+and a uid). A format-1 file: re-assembled with this shell, text and includes unchanged.
+Writes the file in place (or to -o) and its text twin (twin of the output, or --text;
+--no-text skips it). Keeps the old file's delivery (--cdn / --inline to choose).
+Refuses (unless --force) to overwrite an existing text twin that differs.`,
+  inspect: `orz-mdhtml inspect <file> [--json]
+
+Diagnoses a text twin, an assembled file, a 0.x file or any HTML: kind, text format,
+shell version and how it compares to this tool, delivery, uid, title, theme, header
+keys, includes, header lint, and advice (the commands to run). Human-readable by
+default; --json prints the report object.`,
+  themes: `orz-mdhtml themes [--json]
+
+Lists the theme ids a header's \`theme\` key may name (default first).`,
+};
+
+// ── arguments ───────────────────────────────────────────────────────────────
+
+type Spec = Record<string, 'value' | 'flag'>;
+
+interface Parsed {
+  positional: string[];
+  values: Record<string, string>;
+  flags: Set<string>;
+}
+
+const COMMON: Spec = { '--json': 'flag', '--help': 'flag', '-h': 'flag', '--force': 'flag' };
+const ALIASES: Record<string, string> = { '-o': '--out', '-h': '--help' };
+const SPECS: Record<string, Spec> = {
+  new: { ...COMMON, '--title': 'value', '--theme': 'value', '--measure': 'value', '--lang': 'value', '--html': 'flag', '--cdn': 'flag', '--inline': 'flag' },
+  assemble: { ...COMMON, '--out': 'value', '-o': 'value', '--cdn': 'flag', '--inline': 'flag' },
+  extract: { ...COMMON, '--out': 'value', '-o': 'value' },
+  upgrade: { ...COMMON, '--out': 'value', '-o': 'value', '--text': 'value', '--no-text': 'flag', '--cdn': 'flag', '--inline': 'flag' },
+  inspect: { ...COMMON },
+  themes: { ...COMMON },
+};
+/** Options of 0.x `orz-mdhtml <file.md>` that set content: removed, the header holds it. */
+const CONTENT_OPTIONS = ['--theme', '--title', '--measure', '--lang', '--author', '--uid'];
+
+function parse(command: string, argv: string[]): Parsed {
+  const spec = SPECS[command];
+  const out: Parsed = { positional: [], values: {}, flags: new Set() };
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === '-o' || arg === '--out') a.out = argv[++i];
-    else if (arg === '--theme') a.theme = argv[++i];
-    else if (arg === '--inline') a.delivery = 'inline';
-    else if (arg === '--cdn') a.delivery = 'cdn';
-    else if (arg === '--title') a.title = argv[++i];
-    else if (!arg.startsWith('-')) a.input = arg;
+    const raw = argv[i];
+    if (raw === '--') { out.positional.push(...argv.slice(i + 1)); break; }
+    if (!raw.startsWith('-') || raw === '-') { out.positional.push(raw); continue; }
+    const eq = raw.startsWith('--') ? raw.indexOf('=') : -1;
+    const name = eq > 0 ? raw.slice(0, eq) : raw;
+    const kind = spec[name];
+    const key = ALIASES[name] ?? name;
+    if (!kind) {
+      if (command === 'assemble' && CONTENT_OPTIONS.includes(name)) {
+        const what = name.slice(2);
+        throw new CliError(
+          `${name} is not an assemble option: since 1.0 the ${what} comes from the text itself. `
+          + `Put \`${what}: …\` in the {{nyml}} header at the top of the text (or create the text with \`orz-mdhtml new ${name} …\`), then assemble again.`,
+          EXIT_USAGE,
+        );
+      }
+      throw new CliError(`unknown option ${name} for \`orz-mdhtml ${command}\` (see \`orz-mdhtml ${command} --help\`)`, EXIT_USAGE);
+    }
+    if (kind === 'flag') {
+      if (eq > 0) throw new CliError(`${name} takes no value`, EXIT_USAGE);
+      out.flags.add(key);
+    } else {
+      const value = eq > 0 ? raw.slice(eq + 1) : argv[++i];
+      if (value === undefined || (eq < 0 && value.startsWith('-') && value !== '-')) throw new CliError(`${name} needs a value`, EXIT_USAGE);
+      out.values[key] = value;
+    }
   }
-  return a;
+  if (out.flags.has('--cdn') && out.flags.has('--inline')) throw new CliError('--cdn and --inline exclude each other', EXIT_USAGE);
+  return out;
 }
 
-function main(): void {
-  const args = parseArgs(process.argv.slice(2));
-  if (!args.input) {
-    console.error('Usage: orz-mdhtml <input.md> [-o out] [--theme name] [--inline|--cdn]');
-    process.exit(1);
+const one = (p: Parsed, what: string, command: string): string => {
+  if (p.positional.length === 0) throw new CliError(`\`orz-mdhtml ${command}\` needs ${what} (see \`orz-mdhtml ${command} --help\`)`, EXIT_USAGE);
+  if (p.positional.length > 1) throw new CliError(`\`orz-mdhtml ${command}\` takes one ${what}, got ${p.positional.length}: ${p.positional.join(' ')}`, EXIT_USAGE);
+  return p.positional[0];
+};
+
+// ── files ───────────────────────────────────────────────────────────────────
+
+/** Read a file as text exactly (UTF-8, BOM kept, invalid UTF-8 refused; FC-18 §3 `decodeText`). */
+function readText(path: string): string {
+  let bytes: Buffer;
+  try { bytes = readFileSync(path); } catch (e) {
+    const code = (e as NodeJS.ErrnoException).code;
+    throw new CliError(code === 'ENOENT' ? `${path}: no such file` : code === 'EISDIR' ? `${path} is a folder` : `${path}: ${(e as Error).message}`);
   }
+  try { return decodeText(bytes, { fatal: true }); } catch { throw new CliError(`${path} is not valid UTF-8`); }
+}
 
-  const inputPath = resolve(args.input);
-  const source = readFileSync(inputPath, 'utf8');
-  const base = basename(inputPath, extname(inputPath));
-  const outPath = args.out ? resolve(args.out) : join(dirname(inputPath), `${base}.md.html`);
-
-  const composeOpts = {
-    source,
-    title: args.title ?? base,
-    filename: base,
-    docId: randomUUID(),
-    theme: args.theme,
-  };
-
-  let html: string;
-  let defaultTheme: string;
+/** Write a file atomically (a temporary file next to it, then rename), so a failure never leaves half a file. */
+function writeOut(path: string, data: string): void {
+  const tmp = join(dirname(path), `.${basename(path)}.orz-${process.pid}.tmp`);
   try {
-    html = composeInlineMdHtml({ ...composeOpts, delivery: args.delivery });
-  } catch (err) {
-    console.error((err as Error).message);
-    process.exit(1);
+    writeFileSync(tmp, data, 'utf8');
+    renameSync(tmp, path);
+  } catch (e) {
+    try { unlinkSync(tmp); } catch { /* not created */ }
+    throw new CliError(`could not write ${path}: ${(e as Error).message}`);
   }
-
-  // Report the theme that was actually applied (unknown → default fallback).
-  defaultTheme = isThemeId(args.theme) ? args.theme : DEFAULT_THEME;
-
-  writeFileSync(outPath, html, 'utf8');
-  console.log(`Wrote ${outPath} (${args.delivery}, theme: ${defaultTheme})`);
 }
 
-main();
+const mtime = (path: string): number => statSync(path).mtimeMs;
+const looksHtml = (s: string): boolean => /^\uFEFF?\s*(?:<!doctype\s+html|<html[\s>])/i.test(s.slice(0, 1024));
+
+/** The text an existing orz file holds (format 1 or 0.x), or null when it is not one. */
+function documentTextOf(html: string): string | null {
+  const ex = extract(html);
+  if (ex) return ex.text;
+  return readLegacy(html)?.text ?? null;
+}
+
+/**
+ * May `out` (an assembled file) be replaced by the assembly of `text` read from `input`?
+ * Not when it is not an orz file, or when its text differs and it changed after the input.
+ */
+function guardAssembledOutput(out: string, input: string | null, text: string, force: boolean): void {
+  if (force || !existsSync(out)) return;
+  const existing = readText(out);
+  const held = looksHtml(existing) ? documentTextOf(existing) : null;
+  if (held === null) throw new CliError(`${out} exists and is not an orz file; not overwritten (pass --force to replace it, or -o another path)`);
+  if (held !== text && input !== null && mtime(out) > mtime(input)) {
+    throw new CliError(`${out} was changed after ${input} and holds a different text (edited in the browser?); not overwritten. Run \`orz-mdhtml extract ${out}\` to bring those changes into the text, or pass --force to replace it`);
+  }
+}
+
+/** May the text twin `out` be replaced by `text`? Not when it differs and (when `newerThan` is given) changed after it. */
+function guardTextOutput(out: string, text: string, force: boolean, newerThan: string | null, advice: string): void {
+  if (force || !existsSync(out)) return;
+  const existing = readText(out);
+  if (existing === text) return;
+  if (newerThan === null || mtime(out) > mtime(newerThan)) throw new CliError(`${out} exists and holds a different text${newerThan ? `, changed after ${newerThan}` : ''}; not overwritten. ${advice}`);
+}
+
+const errors = (lint: Lint[]): string[] => lint.filter((l) => l.level === 'error').map((l) => `header: ${l.message} (${l.code}${l.line ? `, line ${l.line}` : ''})`);
+const warnings = (lint: Lint[]): string[] => lint.filter((l) => l.level === 'warning').map((l) => `header: ${l.message} (${l.code}${l.line ? `, line ${l.line}` : ''})`);
+
+// ── output ──────────────────────────────────────────────────────────────────
+
+interface Io {
+  json: boolean;
+  /** Human lines (stdout). */
+  say(line: string): void;
+  /** Warnings (stderr; in --json mode they go into the result instead). */
+  warn(line: string): void;
+  warned: string[];
+}
+
+function io(json: boolean): Io {
+  const warned: string[] = [];
+  return {
+    json,
+    warned,
+    say(line) { if (!json) process.stdout.write(`${line}\n`); },
+    warn(line) { warned.push(line); if (!json) process.stderr.write(`orz-mdhtml: warning: ${line}\n`); },
+  };
+}
+
+const emit = (o: Io, result: Record<string, unknown>): void => {
+  if (o.json) process.stdout.write(`${JSON.stringify({ ok: true, ...result, warnings: o.warned }, null, 2)}\n`);
+};
+
+const delivery = (p: Parsed, fallback: 'inline' | 'cdn' = 'inline'): 'inline' | 'cdn' => (p.flags.has('--cdn') ? 'cdn' : p.flags.has('--inline') ? 'inline' : fallback);
+
+// ── commands ────────────────────────────────────────────────────────────────
+
+function cmdNew(p: Parsed, o: Io): void {
+  if (p.positional.length > 1) throw new CliError(`\`orz-mdhtml new\` takes at most one file, got ${p.positional.length}`, EXIT_USAGE);
+  const file = p.positional[0];
+  const force = p.flags.has('--force');
+  let text: string;
+  try {
+    text = newDocument({
+      ...(p.values['--title'] !== undefined ? { title: p.values['--title'] } : {}),
+      ...(p.values['--theme'] !== undefined ? { theme: p.values['--theme'] } : {}),
+      ...(p.values['--measure'] !== undefined ? { measure: p.values['--measure'] as (typeof MEASURES)[number] } : {}),
+      ...(p.values['--lang'] !== undefined ? { lang: p.values['--lang'] } : {}),
+    });
+  } catch (e) {
+    throw new CliError(`${(e as Error).message.replace(/^orz-mdhtml: /, '')}${/theme/.test((e as Error).message) ? ` (themes: ${THEMES.map((t) => t.id).join(', ')})` : ''}`, EXIT_USAGE);
+  }
+  const info = readDocument(text);
+  const facts = { kind: 'md', format: info.format, uid: info.meta.uid ?? null, title: info.title, theme: info.theme ?? null };
+  if (!file) {
+    if (p.flags.has('--html')) throw new CliError('--html needs a file name (orz-mdhtml new notes.md --html)', EXIT_USAGE);
+    if (o.json) emit(o, { command: 'new', file: null, html: null, ...facts, text });
+    else process.stdout.write(text);
+    return;
+  }
+  const path = resolve(file);
+  const k = kindFromFilename(path);
+  if (k !== 'md' || path.endsWith('.md.html')) {
+    throw new CliError(k === 'slides' || k === 'paged' ? `${file} names an orz ${k} document: use orz-${k}` : `${file}: a text twin's name ends in .md (e.g. notes.md)`, EXIT_USAGE);
+  }
+  const htmlPath = p.flags.has('--html') ? twinName(path)! : null;
+  if (!force) {
+    for (const f of [path, htmlPath]) if (f && existsSync(f)) throw new CliError(`${f} already exists; not overwritten (pass --force to replace it)`);
+  }
+  const html = htmlPath ? assemble(text, { delivery: delivery(p) }) : null;
+  writeOut(path, text);
+  o.say(`Wrote ${path}`);
+  if (htmlPath && html !== null) {
+    writeOut(htmlPath, html);
+    o.say(`Wrote ${htmlPath} (${delivery(p)})`);
+  }
+  emit(o, { command: 'new', file: path, html: htmlPath, ...facts, ...(htmlPath ? { delivery: delivery(p), shell: VERSION } : {}) });
+}
+
+function cmdAssemble(p: Parsed, o: Io): void {
+  const file = one(p, 'a text file (file.md)', 'assemble');
+  const input = resolve(file);
+  const kind = kindFromFilename(input);
+  if (kind === 'slides' || kind === 'paged') throw new CliError(`${file} is an orz ${kind} text: use orz-${kind}`);
+  const text = readText(input);
+  if (looksHtml(text) && documentTextOf(text) !== null) {
+    throw new CliError(`${file} is an assembled file, not a text: \`orz-mdhtml extract ${file}\` gives its text; \`orz-mdhtml upgrade ${file}\` re-assembles it with this version`);
+  }
+  const outArg = p.values['--out'];
+  const toStdout = outArg === '-';
+  if (toStdout && o.json) throw new CliError('-o - (stdout) and --json exclude each other', EXIT_USAGE);
+  const out = toStdout ? null : outArg !== undefined ? resolve(outArg) : (kind === 'md' && !input.endsWith('.md.html') ? twinName(input) : null);
+  if (!toStdout && out === null) throw new CliError(`cannot name the output of ${file} (a text twin's name ends in .md): pass -o out.md.html`, EXIT_USAGE);
+  if (out === input) throw new CliError('the output would overwrite the input', EXIT_USAGE);
+  const info = readDocument(text);
+  if (info.kind !== 'md' && kind === null) throw new CliError(`${file}: the header says carrier: ${info.kind}; use orz-${info.kind}`);
+  const d = delivery(p);
+  let html: string;
+  try { html = assemble(text, { delivery: d }); } catch (e) { throw new CliError(`${file}: ${(e as Error).message.replace(/^orz-mdhtml: /, '')}`); }
+  for (const w of errors(info.lint)) o.warn(w);
+  for (const w of warnings(info.lint)) o.warn(w);
+  if (toStdout) { process.stdout.write(html); return; }
+  guardAssembledOutput(out!, input, text, p.flags.has('--force'));
+  writeOut(out!, html);
+  o.say(`Wrote ${out} (${d}, orz-mdhtml ${VERSION})`);
+  emit(o, { command: 'assemble', input, output: out, kind: 'md', format: info.format, shell: VERSION, delivery: d, uid: info.meta.uid ?? null, title: info.title, theme: info.theme ?? null, bytes: Buffer.byteLength(html, 'utf8') });
+}
+
+function cmdExtract(p: Parsed, o: Io): void {
+  const file = one(p, 'an assembled file (file.md.html)', 'extract');
+  const input = resolve(file);
+  const html = readText(input);
+  const legacy = readLegacy(html);
+  const ex = legacy ? null : extract(html);
+  if (legacy) {
+    throw new CliError(`${file} is an orz-mdhtml ${legacy.version ?? '0.x'} file (before text format 1): run \`orz-mdhtml upgrade ${file}\` — it writes the format-1 text twin (the source exactly, metadata moved into the header) and a file of this version`);
+  }
+  if (!ex) throw new CliError(`${file} holds no orz document (no #orz-src island); \`orz-mdhtml inspect ${file}\` says what it is`);
+  if (ex.shell === '') o.warn(`${file} has an #orz-src island but no #orz-shell: an unknown writer; the island was read as format 1 would be — check the text`);
+  const outArg = p.values['--out'];
+  const toStdout = outArg === '-';
+  if (toStdout && o.json) throw new CliError('-o - (stdout) and --json exclude each other', EXIT_USAGE);
+  if (toStdout) { process.stdout.write(ex.text); return; }
+  const out = outArg !== undefined ? resolve(outArg) : twinName(input);
+  if (out === null) throw new CliError(`cannot name the text twin of ${file} (an assembled file's name ends in .md.html): pass -o out.md`, EXIT_USAGE);
+  if (out === input) throw new CliError('the output would overwrite the input', EXIT_USAGE);
+  guardTextOutput(out, ex.text, p.flags.has('--force'), input, `Its changes would be lost: merge them by hand, -o another path, or pass --force`);
+  writeOut(out, ex.text);
+  const info = readDocument(ex.text, { kind: ex.kind });
+  o.say(`Wrote ${out} (${ex.kind}, text format ${ex.format}, from orz-${ex.kind === 'md' ? 'mdhtml' : ex.kind} ${ex.shell || 'unknown'})`);
+  emit(o, { command: 'extract', input, output: out, kind: ex.kind, format: ex.format, shell: ex.shell || null, delivery: ex.delivery || null, uid: info.meta.uid ?? null, title: info.title, includes: ex.includes ? Object.keys(ex.includes).length : 0, bytes: Buffer.byteLength(ex.text, 'utf8') });
+}
+
+function cmdUpgrade(p: Parsed, o: Io): void {
+  const file = one(p, 'a file (old.md.html)', 'upgrade');
+  const input = resolve(file);
+  const html = readText(input);
+  const legacy = readLegacy(html);
+  const ex = legacy ? null : extract(html);
+  const oldDelivery: 'inline' | 'cdn' = legacy ? (legacy.delivery ?? 'inline') : ex?.delivery === 'cdn' ? 'cdn' : 'inline';
+  const d = delivery(p, oldDelivery);
+  let r: ReturnType<typeof upgrade>;
+  try { r = upgrade(html, { delivery: d }); } catch (e) { throw new CliError(`${file}: ${(e as Error).message.replace(/^orz-mdhtml( upgrade)?: /, '')}`); }
+  const out = p.values['--out'] !== undefined ? resolve(p.values['--out']) : input;
+  if (p.flags.has('--no-text') && p.values['--text'] !== undefined) throw new CliError('--text and --no-text exclude each other', EXIT_USAGE);
+  const textOut = p.flags.has('--no-text') ? null : p.values['--text'] !== undefined ? resolve(p.values['--text']) : twinName(out);
+  if (!p.flags.has('--no-text') && textOut === null) throw new CliError(`cannot name the text twin of ${out}: pass --text out.md (or --no-text)`, EXIT_USAGE);
+  if (textOut === out || textOut === input) throw new CliError('the text twin would overwrite the file', EXIT_USAGE);
+  const force = p.flags.has('--force');
+  // check every output before writing any
+  if (out !== input && !force && existsSync(out)) {
+    const held = looksHtml(readText(out)) ? documentTextOf(readText(out)) : null;
+    if (held === null) throw new CliError(`${out} exists and is not an orz file; not overwritten (pass --force)`);
+    if (held !== r.text) throw new CliError(`${out} exists and holds another text; not overwritten (pass --force, or -o another path)`);
+  }
+  if (textOut) guardTextOutput(textOut, r.text, force, null, `Pass --text another.md, --no-text, or --force to replace it`);
+  writeOut(out, r.html);
+  if (textOut) writeOut(textOut, r.text);
+  for (const n of r.notes) o.warn(n);
+  const info = readDocument(r.text);
+  o.say(`Upgraded ${input}${out !== input ? ` -> ${out}` : ''} (from ${r.from === 'legacy' ? `orz-mdhtml ${legacy?.version ?? '0.x'}` : `orz-mdhtml ${ex?.shell ?? '?'}`} to ${VERSION}, ${d})`);
+  if (textOut) o.say(`Wrote ${textOut} (the text twin)`);
+  const moved = Object.keys(r.moved);
+  if (moved.length > 0) o.say(`Moved into the header: ${moved.join(', ')}`);
+  emit(o, { command: 'upgrade', input, output: out, text: textOut, from: r.from, previous: r.from === 'legacy' ? legacy?.version ?? null : ex?.shell ?? null, shell: VERSION, delivery: d, uid: info.meta.uid ?? null, title: info.title, moved: r.moved, notes: r.notes });
+}
+
+function humanInspect(file: string, r: InspectReport): string {
+  const rows: Array<[string, string]> = [['file', file]];
+  const inputs: Record<InspectReport['input'], string> = { text: 'a text (twin or plain Markdown)', assembled: 'an assembled file (text format 1)', legacy: 'an orz-mdhtml 0.x file (before text format 1)', html: 'HTML that is not an orz document' };
+  rows.push(['input', inputs[r.input]]);
+  if (r.kind) rows.push(['kind', `${r.kind}${r.format !== null ? `, text format ${r.format}` : ''}`]);
+  if (r.shell) rows.push(['shell', `orz-mdhtml ${r.shell.version} (${r.shell.relation === 'same' ? 'this version' : r.shell.relation === 'older' ? `older than this tool, ${VERSION}` : r.shell.relation === 'newer' ? `newer than this tool, ${VERSION}` : 'unknown'}), ${r.shell.delivery} delivery`]);
+  if (r.legacy) rows.push(['legacy', `orz-mdhtml ${r.legacy.version ?? '0.x'}, ${r.legacy.delivery ?? 'unknown'} delivery${r.legacy.theme ? `, theme ${r.legacy.theme}` : ''}${r.legacy.metaKeys.length ? `, #orz-meta: ${r.legacy.metaKeys.join(', ')}` : ''}`]);
+  if (r.kind) {
+    rows.push(['uid', r.uid ?? '(none)']);
+    rows.push(['title', r.title ?? '']);
+    rows.push(['theme', r.theme ?? '(default)']);
+    if (r.header) rows.push(['header', r.header.present ? `${r.header.keys.join(', ')}${r.header.legacy ? ` (legacy ${r.header.legacy} block)` : ''}` : '(none)']);
+    if (r.input === 'assembled') rows.push(['includes', String(r.includes)]);
+    rows.push(['writable', r.writable ? 'yes' : 'no']);
+    rows.push(['lint', r.lint.length === 0 ? 'clean' : r.lint.map((l) => `${l.level} ${l.code}${l.line ? ` (line ${l.line})` : ''}`).join('; ')]);
+  }
+  const w = Math.max(...rows.map(([k]) => k.length));
+  const lines = rows.map(([k, v]) => `${k.padEnd(w)}  ${v}`);
+  if (r.advice.length) lines.push('', 'advice:', ...r.advice.map((a) => `  - ${a}`));
+  if (r.notes.length) lines.push('', 'notes:', ...r.notes.map((n) => `  - ${n}`));
+  return lines.join('\n');
+}
+
+function cmdInspect(p: Parsed, o: Io): void {
+  const file = one(p, 'a file', 'inspect');
+  const path = resolve(file);
+  const r = inspect(readText(path), { filename: basename(path) });
+  if (o.json) process.stdout.write(`${JSON.stringify(r, null, 2)}\n`);
+  else process.stdout.write(`${humanInspect(file, r)}\n`);
+}
+
+function cmdThemes(p: Parsed, o: Io): void {
+  if (p.positional.length) throw new CliError('`orz-mdhtml themes` takes no arguments', EXIT_USAGE);
+  if (o.json) { emit(o, { command: 'themes', themes: THEMES.map((t, i) => ({ ...t, default: i === 0 })) }); return; }
+  const w = Math.max(...THEMES.map((t) => t.id.length));
+  for (const [i, t] of THEMES.entries()) o.say(`${t.id.padEnd(w)}  ${t.name} (${t.scheme})${i === 0 ? '  [default]' : ''}`);
+}
+
+const COMMANDS: Record<string, (p: Parsed, o: Io) => void> = { new: cmdNew, assemble: cmdAssemble, extract: cmdExtract, upgrade: cmdUpgrade, inspect: cmdInspect, themes: cmdThemes };
+
+// ── main ────────────────────────────────────────────────────────────────────
+
+export function main(argv: string[]): number {
+  const json = argv.includes('--json');
+  let command = 'assemble';
+  try {
+    const first = argv[0];
+    if (first === undefined) { process.stderr.write(`${USAGE}\n`); return EXIT_USAGE; }
+    if (first === '-h' || first === '--help' || first === 'help') {
+      const topic = first === 'help' ? argv[1] : undefined;
+      process.stdout.write(`${topic && HELP[topic] ? HELP[topic] : USAGE}\n`);
+      return EXIT_OK;
+    }
+    if (first === '-v' || first === '--version' || first === 'version') {
+      if (json) process.stdout.write(`${JSON.stringify({ name: 'orz-mdhtml', version: VERSION, orzMarkdown: ORZ_MARKDOWN_VERSION, formats: [1] }, null, 2)}\n`);
+      else process.stdout.write(`orz-mdhtml ${VERSION} (orz-markdown ${ORZ_MARKDOWN_VERSION}, text format 1)\n`);
+      return EXIT_OK;
+    }
+    let rest = argv;
+    if (COMMANDS[first]) { command = first; rest = argv.slice(1); }
+    else if (first.startsWith('-') && first !== '-') {
+      // `orz-mdhtml --cdn x.md`: options before the file, the assemble shorthand
+      command = 'assemble';
+    }
+    if (rest.includes('--help') || rest.includes('-h')) { process.stdout.write(`${HELP[command]}\n`); return EXIT_OK; }
+    const parsed = parse(command, rest);
+    COMMANDS[command](parsed, io(json));
+    return EXIT_OK;
+  } catch (e) {
+    const err = e instanceof CliError ? e : new CliError(e instanceof Error ? e.message : String(e));
+    if (json) process.stdout.write(`${JSON.stringify({ ok: false, command, error: err.message, exitCode: err.code }, null, 2)}\n`);
+    else process.stderr.write(`orz-mdhtml ${command}: ${err.message}\n${err.code === EXIT_USAGE ? `(see orz-mdhtml ${command} --help)\n` : ''}`);
+    return err.code;
+  }
+}
+
+process.exitCode = main(process.argv.slice(2));

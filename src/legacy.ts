@@ -4,7 +4,7 @@
  * (REBUILD §3a): no compatibility shim — `upgrade` and `inspect` are the way
  * forward.
  *
- * A 0.x file (src/template.ts + assets/app.js, kept until rebuild step 4):
+ * A 0.x file (written by the 0.x `src/template.ts` + `assets/app.js`, removed in 1.0):
  * - the source in `<script type="text/markdown" id="orz-src">`, written as
  *   `"\n" + source + "\n"` with every `</script` (any case) as `<\/script`
  *   (and nothing else escaped); the in-file save writes the same;

@@ -96,6 +96,34 @@ update, chrome), `spec/host-protocols.md`, the family plan `../docs/REBUILD.md`
 | R.6 | In a host frame (cross-origin, `orz-host-save@1`, `-ai@1`, `-include@1`): saves from the read view and from the editor go to the host with `source` = the exact text and `html` = Node `assemble(source)` with the file's includes; the dirty state is posted; the host's AI operations appear in the editor's toolbar and a reviewed proposal applies as one edit; the host's include resolution wins in the read view; no picker, no manifest request, no indicator. | real |
 | R.7 | Reader preferences (view mode, split ratio) are stored only under `orz-pref:<uid>:…`, never in the file (the saved file is `assemble(text)` and holds no preference), and come back when the file is reopened. | real |
 | R.8 | The quiet update: with a newer release advertised (jsDelivr routed), a top-level `file:` page shows "Update available" next to the brand after one manifest request; Update now writes the new release's assembly of the exact text (its shell version, its bundle inline) into the opened file and reloads the page. | real |
+| R.9 | A top-level file with unsaved changes (typed in the editor, or a header setting outside it) asks before the page goes (`beforeunload`, the browser's own prompt; dismissing keeps the page and the text); a clean or saved file, a setting undone back to the saved text, and the quiet update's reload (after it wrote the current text) do not ask. | real |
+| R.10 | An editor mounted on the file through `OrzCarrier.mountEditor` without `hooks.save` is the document being edited: Cmd/Ctrl+S on the page saves that editor (a newer-format one writes nothing), never the page's other copy of the text; its unsaved changes ask before leaving; once destroyed, the page's shortcuts are its own again. | real |
+
+## P — the Node library (rebuild step 5)
+
+| ID | Claim | Oracle |
+|---|---|---|
+| P.1 | Inline assembly needs no engine from callers: the library's `assemble` and `upgrade` inline this release's browser bundle — the copy in `dist/` that the build stages from the same bytes as `orz-mdhtml-browser`'s `orz-mdhtml.browser.js`, equal to the in-memory build — so they equal the isomorphic `assemble` with that engine (and the browser's `OrzCarrier.assemble`, A.9); the engine is checked against its `release.json` first, and a missing, stale (another version), altered (integrity) or script-unsafe one is refused with the rebuild command, never inlined. | scenario |
+| P.2 | The package is the 1.0 surface: the main export holds exactly the format-1 API (`assemble`, `extract`, `readDocument`, `newDocument`, `inspect`, `upgrade`, `readLegacy`, `THEMES`, `DEFAULT_THEME`, `isThemeId`, `MEASURES`, `DEFAULT_MEASURE`, `VERSION`, `ORZ_MARKDOWN_VERSION`, `FORMATS`, `BUNDLE_FILE`, `cdnBundleUrl`, `engineSource`, `engineFiles`) and none of the 0.9 API; the 0.9 runtime (`assets/app.js`, `src/template.ts`, `src/browser-entry.ts`, the `orzmd.browser.js` build) is gone; `bin` is `dist/cli.js`, `exports` `.` is `dist/lib.js`, `files` hold no `assets`. | conformance |
+
+## T — the CLI (FC-10, REBUILD §3a)
+
+| ID | Claim | Oracle |
+|---|---|---|
+| T.1 | `orz-mdhtml assemble x.md` and `orz-mdhtml x.md` write `x.md.html` (FC-18 §3 twin name) = the library's `assemble` of the file's exact text — inline by default, `--cdn` for jsDelivr, `-o path`, `-o -` to stdout; the cdn output of the golden text equals the checked-in golden file. | scenario |
+| T.2 | `orz-mdhtml new [x.md]` writes a lint-clean text twin (header `kind: document`, `carrier: md`, a fresh uid, then the given `--title`/`--theme`/`--measure`/`--lang`) and with `--html` its assembled file; without a file it prints the text; it refuses an existing file (unless `--force`), an unknown theme or measure (exit 2) and another kind's file name. | scenario |
+| T.3 | `orz-mdhtml extract x.md.html` writes the exact text twin: a text made by `new`, saved with CR LF and a BOM, assembled (inline and cdn) and extracted is byte-identical; includes are reported; a 0.x file is refused (exit 1) with the advice to run `upgrade`, and nothing is written. | scenario |
+| T.4 | `orz-mdhtml upgrade old.md.html` writes, in place (or `-o`), the library's `upgrade` of a 0.x file and its text twin (`x.md`, `--text`, `--no-text`), keeping the file's delivery unless `--cdn`/`--inline`; a format-1 file of an older shell is re-assembled with its text and includes; an existing, different text twin is refused before anything is written. | scenario |
+| T.5 | `orz-mdhtml inspect <file>` prints a human-readable report (golden) and with `--json` exactly the library's `inspect` report, for 0.x files, assembled files, texts, another kind's text and plain HTML. | scenario |
+| T.6 | Every command answers `--help`/`-h` (and `help <command>`), `--version` (and `--version --json`), prints one JSON object with `--json` (`{ ok: false, error, exitCode }` on failure) and exits 0 (done), 1 (refused or failed: a missing or non-UTF-8 file, a newer text format, an assembled file given to `assemble`) or 2 (usage); `assemble` has no content options: `--theme`, `--title`, `--measure`, `--lang` are refused with a message that points to the header, and nothing is written. | scenario |
+| T.7 | Nothing is overwritten that could lose work unless `--force`: `assemble` keeps an output that is not an orz file and a `.md.html` that holds a different text and changed after its text twin (advice: `extract`); `extract` keeps a text twin that differs and changed after the file; the output never replaces the input; files are written through a temporary file and a rename, none left behind. | scenario |
+
+## H — the conformance harness (rebuild step 6)
+
+| ID | Claim | Oracle |
+|---|---|---|
+| H.1 | orz-markdown's carrier conformance harness (`registerConformance`, no `allowSkips`) passes against the real carrier: all 45 checks of `CHECK_IDS` ran in real Chrome and passed, `C.update.from-previous` being not applicable (`firstRelease`: 1.0 is the first release of text format 1 and of `release.json`; 0.x files are upgraded, not updated — owner decision 1), and the final `[conformant]` test is green. The one local adaptation is marked `KIT GAP` in tests/conformance.test.ts (the shell head's own stylesheet URLs kept out of the harness's "bundle request" count; they stay offline). | conformance |
+| H.2 | The harness target is the real carrier: `bundle`/`release` are the library's verified `dist/` engine (= the build = `browser/`), `assemble` is the Node library's, `create` is `newDocument`, `editor` is the opened file's own editor (`OrzCarrier.standalone.edit()`), `protocols` both, `next` this build with the patch number bumped (identical but for its version), `firstRelease: true`, no `previous`. | conformance |
 
 ## X — web apps (FD-06, REBUILD §3a "web apps first")
 

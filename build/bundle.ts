@@ -18,8 +18,10 @@
  * `\ce{…}` is registered on the KaTeX that renders (as orz-markdown's
  * conformance stub build does).
  *
- * Also (until rebuild step 5 switches the CLI): the 0.9 renderer
- * `dist/orzmd.browser.js` the old CLI path inlines. Nothing new depends on it.
+ * The same IIFE and `release.json` are also staged into `dist/` (the
+ * `orz-mdhtml` package): the Node library's `assemble` inlines exactly that
+ * file (src/engine.ts checks it against the manifest), so an inline file made
+ * by the CLI carries the very bytes `orz-mdhtml-browser` publishes.
  *
  * `buildBrowser({ version })` builds in memory (tests; a `next` release with a
  * higher version for the conformance harness): the version replaces
@@ -112,14 +114,13 @@ export function writeBrowser(b: BrowserBuild, dir = join(ROOT, 'browser')): { bu
   return paths;
 }
 
-/** The 0.9 renderer for the old CLI path (removed in rebuild step 5). */
-async function buildLegacyRenderer(): Promise<void> {
-  mkdirSync(join(ROOT, 'dist'), { recursive: true });
-  await build({
-    entryPoints: [join(ROOT, 'src/browser-entry.ts')], bundle: true, format: 'iife', platform: 'browser', target: ['es2020'],
-    outfile: join(ROOT, 'dist', 'orzmd.browser.js'), minify: true, logLevel: 'silent', plugins: [oneKatex],
-    define: { __ORZMD_VERSION__: JSON.stringify(ORZ_MARKDOWN_VERSION) },
-  });
+/** Stage the IIFE and release.json into the `orz-mdhtml` package (dist/), for the Node library (src/engine.ts). */
+export function writeLibEngine(b: BrowserBuild, dir = join(ROOT, 'dist')): { bundle: string; release: string } {
+  mkdirSync(dir, { recursive: true });
+  const paths = { bundle: join(dir, BUNDLE_FILE), release: join(dir, 'release.json') };
+  writeFileSync(paths.bundle, b.iife, 'utf8');
+  writeFileSync(paths.release, b.release, 'utf8');
+  return paths;
 }
 
 const kb = (s: string): string => `${(Buffer.byteLength(s, 'utf8') / 1024).toFixed(1)} KiB (gzip ${(gzipSync(s).length / 1024).toFixed(1)} KiB)`;
@@ -127,10 +128,10 @@ const kb = (s: string): string => `${(Buffer.byteLength(s, 'utf8') / 1024).toFix
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const b = await buildBrowser();
   const paths = writeBrowser(b);
-  await buildLegacyRenderer();
+  const lib = writeLibEngine(b);
   console.log(`orz-mdhtml-browser ${b.version} (orz-markdown ${ORZ_MARKDOWN_VERSION}):`);
   console.log(`  ${paths.bundle}  ${kb(b.iife)}  ${b.integrity}`);
   console.log(`  ${paths.esm}  ${kb(b.esm)}`);
   console.log(`  ${paths.release}`);
-  console.log('  dist/orzmd.browser.js (0.9 CLI renderer, until step 5)');
+  console.log(`  ${lib.bundle} + ${lib.release} (the Node library's engine, same bytes)`);
 }

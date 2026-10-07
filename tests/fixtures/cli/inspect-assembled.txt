@@ -1,0 +1,11 @@
+file      assembled.md.html
+input     an assembled file (text format 1)
+kind      md, text format 1
+shell     orz-mdhtml {{VERSION}} (this version), cdn delivery
+uid       doc-hazard0crlf01
+title     CR LF
+theme     (default)
+header    carrier, title, uid
+includes  1
+writable  yes
+lint      clean

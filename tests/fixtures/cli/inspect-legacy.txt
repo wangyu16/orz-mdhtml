@@ -1,0 +1,13 @@
+file      legacy-fixtures-sample-md-html.md.html
+input     an orz-mdhtml 0.x file (before text format 1)
+kind      md
+legacy    orz-mdhtml 0.7.1, cdn delivery, theme light-neat-3
+uid       (none)
+title     orz-mdhtml
+theme     (default)
+header    (none)
+writable  no
+lint      clean
+
+advice:
+  - legacy orz-mdhtml 0.7.1 file (experimental, before text format 1; no compatibility shim): run `orz-mdhtml upgrade <file>` for its format-1 text twin and a new file; the source is kept exactly and its metadata, title and theme move into the header

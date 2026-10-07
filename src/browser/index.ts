@@ -27,10 +27,20 @@ const OrzCarrier = {
   /**
    * FC-19 `mountEditor`. Without `hooks.save`, in an assembled file, the
    * editor saves through the file's own saver, host connection, delivery and
-   * includes (FC-19 §4: a carrier never opens a second host connection).
+   * includes (FC-19 §4: a carrier never opens a second host connection), and
+   * the file's keyboard save (Cmd/Ctrl+S on the page) saves that editor.
    */
-  mountEditor: (element: HTMLElement, options: api.EditorOptions): api.Editor =>
-    api.mountEditor(element, options, app && !options?.hooks?.save ? app.editorContext() : undefined),
+  mountEditor: (element: HTMLElement, options: api.EditorOptions): api.Editor => {
+    const file = app && !options?.hooks?.save ? app : null;
+    const editor = api.mountEditor(element, options, file ? file.editorContext() : undefined);
+    if (file) {
+      // an editor of this file: the page's shortcuts and its leave warning defer to it until it is destroyed
+      const detach = file.attach(editor);
+      const destroy = editor.destroy.bind(editor);
+      editor.destroy = () => { detach(); destroy(); };
+    }
+    return editor;
+  },
   renderPreview: api.renderPreview,
   /** The booted file's handle (null outside an assembled file). Not part of FC-19: tests and the conformance driver use it. */
   get standalone(): StandaloneApp | null { return app; },

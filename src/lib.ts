@@ -1,184 +1,59 @@
 /**
- * orz-mdhtml — programmatic library entry.
+ * orz-mdhtml — the Node library (the package's main export).
  *
- * Generates a self-contained, editable `.md.html` document in-process, without
- * shelling out to the CLI. The library always produces a fully-inline document
- * (inlined renderer bundle + embedded source) — the same output as the CLI's
- * `--inline` delivery.
+ * Text format 1 (FC-18): a document is its text twin (`x.md`); its
+ * self-editing file (`x.md.html`) is `assemble(text)`. Everything here is the
+ * isomorphic code of src/assemble.ts, src/inspect.ts and src/legacy.ts — the
+ * same functions the browser bundle runs — except that an inline assembly
+ * needs no engine from the caller: it carries this release's browser bundle
+ * (src/engine.ts: the copy staged in `dist/` by the build, verified against
+ * its `release.json`), so Node writes the bytes the browser writes.
+ *
+ * 1.0.0 replaces the 0.9 API (`buildMdHtml`, `composeInlineMdHtml`,
+ * `findRendererBundle`, `findAsset`, `orzVersionOf`, `selfVersionOf`): content
+ * (title, theme, metadata) now comes only from the text's header.
  */
-import { readFileSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
-import { getBrowserRuntimeScript } from 'orz-markdown/runtime';
-import { PREVIEW_CDN } from 'orz-markdown/preview-frame';
 import { VERSION as ORZ_MARKDOWN_VERSION } from 'orz-markdown/version';
-import { buildHtml, type ThemeEntry } from './template.js';
-import { extractDocMeta, mergeDocMeta, renderDocMetaHead, renderDocMetaIsland, type DocMeta } from 'orz-markdown/doc-meta';
-import { THEMES, DEFAULT_THEME } from './themes.js';
-import { VERSION } from './version.js';
+import { assemble as assembleText, type AssembleOptions } from './assemble.js';
+import { upgrade as upgradeFile, type UpgradeOptions, type UpgradeResult } from './legacy.js';
+import { engineSource } from './engine.js';
 
-// The 1.0 format-1 API (isomorphic; FC-18). The 0.9 composition below is the
-// old runtime path, replaced in rebuild steps 3–5.
-export { assemble, extract, readDocument, newDocument, cdnBundleUrl, BUNDLE_FILE, type AssembleOptions, type NewDocumentOptions } from './assemble.js';
+export { extract, readDocument, newDocument, cdnBundleUrl, BUNDLE_FILE, FORMATS, type AssembleOptions, type NewDocumentOptions, type Extracted, type DocumentInfo, type Kind } from './assemble.js';
 export { inspect, type InspectReport } from './inspect.js';
-export { upgrade, readLegacy, type LegacyFile, type UpgradeResult } from './legacy.js';
+export { readLegacy, type LegacyFile, type UpgradeResult, type UpgradeOptions } from './legacy.js';
 export { THEMES, DEFAULT_THEME, isThemeId, type ThemeInfo } from './themes.js';
+export { MEASURES, DEFAULT_MEASURE, type Measure } from './presentation.js';
 export { VERSION } from './version.js';
+export { engineSource, engineFiles, type EngineFiles } from './engine.js';
 
-const CDN = {
-  cm: 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16',
-};
+/** The orz-markdown version this release renders with (its themes, KaTeX and CodeMirror pins). */
+export { ORZ_MARKDOWN_VERSION };
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-
-/** The orz-markdown version (for theme CDN URLs). */
-export function orzVersionOf(): string {
-  return ORZ_MARKDOWN_VERSION;
-}
-
-/** orz-mdhtml's own version — pins the renderer bundle + version check. */
-export function selfVersionOf(): string {
-  return VERSION;
-}
-
-// assets/ sits next to dist/ when published, and next to src/ in dev.
-export function findAsset(name: string): string {
-  for (const p of [join(HERE, '..', 'assets', name), join(HERE, '..', '..', 'assets', name)]) {
-    if (existsSync(p)) return p;
-  }
-  throw new Error(`asset not found: ${name}`);
-}
-
-/** Locate the inlined browser renderer bundle (published sibling; dev ../dist). */
-export function findRendererBundle(): string {
-  // dist/lib.js (published) → sibling; src/lib.ts (dev) → ../dist.
-  const bundlePath = [
-    join(HERE, 'orzmd.browser.js'),
-    join(HERE, '..', 'dist', 'orzmd.browser.js'),
-  ].find(existsSync);
-  if (!bundlePath) {
-    throw new Error('Inline mode needs the browser bundle. Run: npm run bundle');
-  }
-  return bundlePath;
-}
-
-/** Inputs to the single shared composition path. */
-export interface ComposeOptions {
-  /** Raw markdown source. */
-  source: string;
-  /** Document <title>. */
-  title: string;
-  /** Base filename (no extension) used as the save suggestion. */
-  filename: string;
-  /** Stable per-document id — passed in so callers control determinism. */
-  docId: string;
-  /** orz-markdown theme id (falls back to DEFAULT_THEME when unknown). */
-  theme: string;
-  /** Renderer delivery: `inline` embeds the bundle (default, larger, offline);
-   *  `cdn` references it from jsDelivr (small file — the framework loads at
-   *  view time, and viewers get the published bundle without re-embedding it). */
-  delivery?: 'inline' | 'cdn';
-  /** Document metadata injected by the host; wins over an in-source meta block. */
-  metadata?: DocMeta;
-}
+/** The engine of an inline assembly: the caller's, else this release's bundle. */
+const withEngine = <T extends AssembleOptions>(o: T): T =>
+  (o.delivery ?? 'inline') === 'inline' && o.engineSource === undefined ? { ...o, engineSource: engineSource() } : o;
 
 /**
- * The one composition path for a fully-inline `.md.html` document. Both the
- * library entry (`buildMdHtml`) and the CLI's `--inline` delivery call this,
- * so given the same `docId` + `source` + `title` + `theme` the output is
- * byte-identical.
- */
-export function composeInlineMdHtml(opts: ComposeOptions): string {
-  const orzVersion = orzVersionOf();
-  const selfVersion = selfVersionOf();
-
-  // Read + strip any `{{nyml kind: meta}}` block; host metadata wins field by
-  // field. The stripped body is what the in-file editor embeds and renders.
-  const extracted = extractDocMeta(opts.source);
-  const meta = mergeDocMeta(extracted.meta, opts.metadata);
-  const source = extracted.body;
-
-  const appJs = readFileSync(findAsset('app.js'), 'utf8');
-
-  const themeBase = `https://cdn.jsdelivr.net/npm/orz-markdown@${orzVersion}/themes`;
-  const themes: ThemeEntry[] = THEMES.map((t) => ({ ...t, href: `${themeBase}/${t.id}.css` }));
-  const defaultTheme = themes.some((t) => t.id === opts.theme) ? opts.theme : themes[0].id;
-
-  const renderer: Parameters<typeof buildHtml>[0]['renderer'] =
-    opts.delivery === 'cdn'
-      ? {
-          mode: 'cdn',
-          src: `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@${selfVersion}/orzmd.browser.js`,
-        }
-      : {
-          mode: 'inline',
-          js: readFileSync(findRendererBundle(), 'utf8'),
-        };
-
-  return buildHtml({
-    source,
-    metaHead: renderDocMetaHead(meta),
-    metaIsland: renderDocMetaIsland(meta),
-    title: opts.title,
-    filename: opts.filename,
-    docId: opts.docId,
-    rendererVersion: selfVersion,
-    appJs,
-    runtimeScript: getBrowserRuntimeScript(),
-    renderer,
-    versionManifest:
-      'https://data.jsdelivr.com/v1/packages/npm/orz-mdhtml-browser/resolved',
-    defaultTheme,
-    themes,
-    frame: {
-      katexCss: PREVIEW_CDN.katexCss,
-      hljsLightCss: PREVIEW_CDN.hljsLightCss,
-      hljsDarkCss: PREVIEW_CDN.hljsDarkCss,
-      hljsJs: PREVIEW_CDN.hljsJs,
-      mermaidJs: PREVIEW_CDN.mermaidJs,
-      smilesJs: PREVIEW_CDN.smilesJs,
-      chartJs: PREVIEW_CDN.chartJs,
-    },
-    editorLibs: {
-      codemirrorCss: `${CDN.cm}/codemirror.min.css`,
-      codemirrorLightThemeCss: `${CDN.cm}/theme/eclipse.min.css`,
-      codemirrorDarkThemeCss: `${CDN.cm}/theme/material-darker.min.css`,
-      codemirrorJs: `${CDN.cm}/codemirror.min.js`,
-      codemirrorMarkdownJs: `${CDN.cm}/mode/markdown/markdown.min.js`,
-      codemirrorContinuelistJs: `${CDN.cm}/addon/edit/continuelist.min.js`,
-      morphdomJs: 'https://cdn.jsdelivr.net/npm/morphdom@2.7.4/dist/morphdom-umd.min.js',
-    },
-  });
-}
-
-/**
- * Build a self-contained, fully-inline `.md.html` document from a markdown
- * string, in-process. Returns the complete document as a string.
+ * Assemble the `.md.html` file of a text (FC-18 §8, FC-19 §2): `inline`
+ * (default) carries this release's browser bundle, `cdn` loads it from
+ * jsDelivr. `includes` are stored in `#orz-includes` as given. Equal to the
+ * browser bundle's `OrzCarrier.assemble` for the same text and options.
  *
- * Output is byte-identical to the CLI's `--inline` delivery for the same
- * markdown / title / theme; the only source of nondeterminism is `docId`
- * (a fresh `randomUUID()` per call, which keys the per-document IndexedDB
- * save handle).
+ * Throws for a text the envelope refuses (NUL, a lone surrogate, a header
+ * `format` above 1), an unknown delivery, and when the engine is missing or
+ * not this release's (src/engine.ts).
  */
-export function buildMdHtml(opts: {
-  markdown: string;
-  title?: string;
-  theme?: string;
-  /** `inline` (default) embeds the framework; `cdn` references it from jsDelivr
-   *  (small file — requires orz-mdhtml-browser to be published at this version). */
-  delivery?: 'inline' | 'cdn';
-  /** Document metadata (license, author, source …) injected by the host. */
-  metadata?: DocMeta;
-}): string {
-  const title = opts.title ?? 'Untitled';
-  return composeInlineMdHtml({
-    source: opts.markdown,
-    title,
-    filename: 'Untitled',
-    docId: randomUUID(),
-    theme: opts.theme ?? DEFAULT_THEME,
-    delivery: opts.delivery,
-    metadata: opts.metadata,
-  });
+export function assemble(text: string, options: AssembleOptions = {}): string {
+  return assembleText(text, withEngine(options));
+}
+
+/**
+ * Upgrade an orz-mdhtml file to text format 1 with this shell: a legacy 0.x
+ * file becomes a format-1 text (its source exactly, its metadata, title and
+ * theme moved into the header) and that text's file; a format-1 file is
+ * re-assembled with its text and includes unchanged. Inline by default (this
+ * release's bundle), like {@link assemble}.
+ */
+export function upgrade(html: string, options: UpgradeOptions = {}): UpgradeResult {
+  return upgradeFile(html, withEngine(options));
 }
