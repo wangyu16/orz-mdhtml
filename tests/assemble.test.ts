@@ -1,14 +1,18 @@
 /**
  * The isomorphic assembler (src/assemble.ts) against the FC-18 laws on the
- * shared golden corpus and hazard texts (claims A.1–A.10).
+ * shared golden corpus and hazard texts (claims A.1–A.10; A.9, Chrome
+ * parity with the real bundle, is in bundle.test.ts).
  */
-import { describe, it, expect, vi, afterAll } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import * as kit from 'orz-markdown/carrier';
 import { bundleUrl } from 'orz-markdown/carrier/shell';
 import { assemble, extract, readDocument, shellParts, cdnBundleUrl, BUNDLE_FILE, type AssembleOptions } from '../src/assemble.js';
 import { VERSION } from '../src/version.js';
-import { corpus, HAZARDS, ENGINE, launchChrome } from './helpers.js';
+import { presentationOf } from '../src/presentation.js';
+import { DEFAULT_THEME, themeOf } from '../src/themes.js';
+import { VERSION as ORZ_MARKDOWN_VERSION } from 'orz-markdown/version';
+import { corpus, HAZARDS, ENGINE } from './helpers.js';
 
 const CORPUS = corpus('md');
 const TEXTS: Array<[string, string, Record<string, string> | undefined]> = [
@@ -58,7 +62,7 @@ describe('FC-18 laws', () => {
   });
 
   it('[A.2] the assembler modules read no clock, randomness or environment', () => {
-    for (const file of ['src/assemble.ts', 'src/inspect.ts', 'src/legacy.ts', 'src/themes.ts', 'src/version.ts']) {
+    for (const file of ['src/assemble.ts', 'src/presentation.ts', 'src/inspect.ts', 'src/legacy.ts', 'src/themes.ts', 'src/version.ts']) {
       const code = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
       expect(code, file).not.toMatch(/\bDate\b|Math\.random|\bprocess\b|\bnavigator\b|\blocation\b|performance\.now|crypto\./);
     }
@@ -76,7 +80,7 @@ describe('FC-18 laws', () => {
     }
   });
 
-  it('[A.4] content independence: the shell parts do not depend on the text, the document parts not on the delivery', () => {
+  it('[A.4] content independence: the shell parts depend only on the options and the header\'s theme and measure; the document parts not on the delivery', () => {
     const headPart = (html: string): string => /id="orz-shell">[^<]*<\/script>\n([\s\S]*?)\n<\/head>/.exec(html)![1];
     const tail = (html: string): string => {
       const island = html.indexOf('id="orz-src"');
@@ -84,15 +88,38 @@ describe('FC-18 laws', () => {
       if (html.startsWith('\n<script type="application/json" id="orz-includes">', end)) end = html.indexOf('</script>', end + 1) + '</script>'.length;
       return html.slice(end);
     };
+    const presKey = (t: string): string => { const p = presentationOf(t); return `${p.theme.id}/${p.measure}`; };
     for (const [, o] of OPTION_SETS) {
-      const heads = new Set(TEXTS.map(([, t]) => headPart(assemble(t, o))));
-      const tails = new Set(TEXTS.map(([, t]) => tail(assemble(t, o))));
-      expect(heads.size).toBe(1);
-      expect(tails.size).toBe(1);
-      // and they carry nothing of a document (uid, title)
-      expect([...heads, ...tails].join('')).not.toMatch(/doc-[0-9a-z]{10}|Lab Safety|Acids, Bases/);
+      const groups = new Map<string, Set<string>>();
+      for (const [, t] of TEXTS) {
+        const html = assemble(t, o);
+        const k = presKey(t);
+        if (!groups.has(k)) groups.set(k, new Set());
+        groups.get(k)!.add(`${headPart(html)}\u0000${tail(html)}`);
+        // exactly the parts of shellParts for the text's presentation
+        const parts = shellParts(o, presentationOf(t));
+        expect(headPart(html)).toBe(parts.headHtml);
+        expect(tail(html)).toBe(`\n${parts.bodyHtml}\n</body>\n</html>\n`);
+      }
+      for (const [k, set] of groups) expect(set.size, k).toBe(1);
+      // and they carry nothing of a document (uid, title, body)
+      expect([...groups.values()].flatMap((g) => [...g]).join('')).not.toMatch(/doc-[0-9a-z]{10}|Lab Safety|Acids, Bases/);
     }
-    const docPart = (html: string): string => html.replace(/"delivery":"(inline|cdn)"/, '"delivery":"*"').replace(/<script id="orz-engine"[^>]*>[\s\S]*?<\/script>/, '<engine>');
+    // the presentation comes from the header only: a body that says "theme: …" changes nothing
+    const plain = presentationOf('# T\n\ntheme: dark-elegant-1\nmeasure: full\n');
+    expect(plain).toEqual({ theme: themeOf(DEFAULT_THEME), measure: 'normal' });
+    const dark = assemble('{{nyml\nkind: document\ntheme: dark-elegant-1\nmeasure: wide\n}}\n\n# T\n', { delivery: 'cdn' });
+    expect(dark).toContain(`<link rel="stylesheet" id="orz-theme" href="https://cdn.jsdelivr.net/npm/orz-markdown@${ORZ_MARKDOWN_VERSION}/themes/dark-elegant-1.css">`);
+    expect(dark).toContain('<meta name="color-scheme" content="dark">');
+    expect(dark).toContain('atom-one-dark.min.css');
+    expect(dark).toContain('<article id="orz-doc" class="markdown-body measure-wide"></article>');
+    // an unknown theme or measure is the default (the header still holds what the author wrote)
+    const unknown = assemble('{{nyml\nkind: document\ntheme: no-such\nmeasure: huge\n}}\n', { delivery: 'cdn' });
+    expect(unknown).toContain(`themes/${DEFAULT_THEME}.css`);
+    expect(unknown).toContain('<article id="orz-doc" class="markdown-body"></article>');
+    const docPart = (html: string): string => html
+      .replace(/"delivery":"(inline|cdn)"/, '"delivery":"*"')
+      .replace(/<script id="orz-engine"[^>]*>[\s\S]*?<\/script>/, '<engine>');
     for (const [id, text] of TEXTS) {
       const a = docPart(assemble(text, { engineSource: ENGINE }));
       expect(docPart(assemble(text, { delivery: 'cdn' })), id).toBe(a);
@@ -107,7 +134,7 @@ describe('the envelope and the shell parts', () => {
       for (const [, o] of OPTION_SETS) {
         const opts = withOwn(o, own);
         const html = assemble(text, opts);
-        expect(html, id).toBe(kit.assembleEnvelope(text, shellParts(opts)));
+        expect(html, id).toBe(kit.assembleEnvelope(text, shellParts(opts, presentationOf(text))));
         const delivery = opts.delivery ?? 'inline';
         expect(html).toContain(`<script type="application/json" id="orz-shell">{"kind":"md","format":1,"shell":"${VERSION}","delivery":"${delivery}"}</script>`);
         expect(html).toContain(`<meta name="generator" content="orz-md ${VERSION}">`);
@@ -119,6 +146,9 @@ describe('the envelope and the shell parts', () => {
     }
     const parts = shellParts({ engineSource: ENGINE });
     expect(parts).toMatchObject({ kind: 'md', shellVersion: VERSION, delivery: 'inline' });
+    // the 1.0 shell: head = viewport, colour scheme, theme / KaTeX / highlight.js stylesheets; body = read view, chrome mount, engine
+    expect(parts.headHtml.split('\n').map((l) => /^<(meta name="[a-z-]+"|link rel="stylesheet" id="[a-z-]+")/.exec(l)?.[1])).toEqual(['meta name="viewport"', 'meta name="color-scheme"', 'link rel="stylesheet" id="orz-theme"', 'link rel="stylesheet" id="orz-katex"', 'link rel="stylesheet" id="orz-hljs"']);
+    expect(parts.bodyHtml).toBe(`<main id="orz-view" class="orz-view" data-orz-theme="${DEFAULT_THEME}"><article id="orz-doc" class="markdown-body"></article></main>\n<div id="orz-chrome"></div>\n<script id="orz-engine">${ENGINE}</script>`);
     expect(shellParts({ engineSource: ENGINE, includes: {} })).not.toHaveProperty('includes');
     // the header decides <title>, lang and #orz-meta
     const doc = CORPUS.find((c) => c.path === 'md/every-construct.md')!;
@@ -163,17 +193,7 @@ describe('the envelope and the shell parts', () => {
 
 // ── isomorphic: no Node built-ins, and the same bytes in real Chrome ────────
 
-const MODULES = ['src/assemble.ts', 'src/inspect.ts', 'src/legacy.ts', 'src/themes.ts', 'src/version.ts'];
-
-async function browserBundle(): Promise<string> {
-  const { build } = await import('esbuild');
-  const entry = `export { assemble } from './src/assemble.ts'; export { inspect } from './src/inspect.ts'; export { upgrade } from './src/legacy.ts';`;
-  const out = await build({
-    stdin: { contents: entry, resolveDir: process.cwd(), loader: 'ts' },
-    bundle: true, platform: 'browser', format: 'iife', globalName: 'OrzMdhtmlTest', target: ['es2020'], write: false, logLevel: 'silent', charset: 'utf8',
-  });
-  return out.outputFiles[0].text;
-}
+const MODULES = ['src/assemble.ts', 'src/presentation.ts', 'src/inspect.ts', 'src/legacy.ts', 'src/themes.ts', 'src/version.ts'];
 
 describe('isomorphic', () => {
   it('[A.8] the assembler modules bundle for the browser with no Node built-in', async () => {
@@ -188,21 +208,3 @@ describe('isomorphic', () => {
   });
 });
 
-const browser = await launchChrome();
-const chrome = browser ? describe : describe.skip;
-afterAll(async () => {
-  await browser?.close();
-});
-
-chrome('real Chrome (playwright-core, channel chrome)', () => {
-  it('[A.9] browser parity: Chrome writes the same bytes as Node for every md corpus file and hazard text', async () => {
-    const code = await browserBundle();
-    const page = await browser!.newPage();
-    await page.setContent('<!doctype html><html><body></body></html>');
-    await page.addScriptTag({ content: code });
-    const cases = TEXTS.flatMap(([id, text, own]) => OPTION_SETS.map(([name, o]) => ({ id: `${id} ${name}`, text, opts: withOwn(o, own) })));
-    const fromChrome = await page.evaluate((cs) => cs.map((c) => (globalThis as unknown as { OrzMdhtmlTest: { assemble(t: string, o: unknown): string } }).OrzMdhtmlTest.assemble(c.text, c.opts)), cases);
-    cases.forEach((c, i) => expect(fromChrome[i] === assemble(c.text, c.opts), c.id).toBe(true));
-    await page.close();
-  }, 120_000);
-});

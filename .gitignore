@@ -4,3 +4,6 @@ out/
 browser/orzmd.browser.js
 *.tgz
 .DS_Store
+browser/orz-mdhtml.browser.js
+browser/esm/
+browser/release.json

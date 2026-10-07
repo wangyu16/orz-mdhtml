@@ -1,20 +1,26 @@
 # orz-mdhtml-browser
 
-Prebuilt **in-browser renderer** for [orz-mdhtml](https://github.com/wangyu16/orz-mdhtml)
-`.md.html` files. It bundles [orz-markdown](https://www.npmjs.com/package/orz-markdown)
-for the browser and exposes `window.orzmd.render(markdown)`.
+The browser engine and editor component of [orz-mdhtml](https://github.com/wangyu16/orz-mdhtml):
+the same editor every `.md.html` file carries, for web apps too (orz family
+contract FC-19).
 
-This package exists to be served over a CDN. Generated `.md.html` files in
-`--cdn` mode reference it from jsDelivr, so the renderer is fetched from the web
-on first open and browser-cached:
+| File | What |
+|---|---|
+| `orz-mdhtml.browser.js` | IIFE: sets `globalThis.OrzCarrier` = `{ kind, version, formats, assemble, extract, readDocument, mountEditor, renderPreview }`; inside an assembled `.md.html` it also starts that file (read view, chrome, editing, saving, quiet update) |
+| `esm/orz-mdhtml.browser.mjs` | the same API as ES module exports (`import { mountEditor } from 'orz-mdhtml-browser'`) |
+| `release.json` | the release manifest the quiet update reads (version, formats, SHA-384 of the bundle) |
+| `index.d.ts` | types |
 
-```html
-<script src="https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orzmd.browser.js"></script>
+```js
+import { mountEditor } from 'orz-mdhtml-browser';
+const editor = mountEditor(element, { text, hooks: { async save(text) { /* store the text */ } } });
 ```
 
-It is produced from `orz-mdhtml`'s `build/bundle.ts` and versioned in lockstep
-with `orz-mdhtml`. You normally don't depend on it directly — generate files
-with the `orz-mdhtml` CLI.
+`.md.html` files load the bundle inline or from
+`https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js`.
+Embedding guide (hooks, CSP, versions):
+[docs/embedding.md](https://github.com/wangyu16/orz-mdhtml/blob/main/docs/embedding.md).
+Versioned in lockstep with `orz-mdhtml`; built by its `build/bundle.ts`.
 
 ## License
 

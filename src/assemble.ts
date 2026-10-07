@@ -18,6 +18,7 @@
 import { assembleEnvelope, editHeader, lintHeader, mintUid, UID_PATTERN, type HeaderChange, type ShellParts } from 'orz-markdown/carrier';
 import { bundleUrl, isScriptSafe } from 'orz-markdown/carrier/shell';
 import { isThemeId } from './themes.js';
+import { isMeasure, presentationOf, readViewMarkup, shellHead, type Measure, type Presentation } from './presentation.js';
 import { VERSION } from './version.js';
 
 export { extract, readDocument } from 'orz-markdown/carrier';
@@ -50,21 +51,18 @@ export interface AssembleOptions {
 }
 
 /**
- * The 1.0 shell's head part. PLACEHOLDER (rebuild step 2): the final chrome,
- * theme styles and runtime come with the browser engine (steps 3–4).
+ * The id of the element the standalone chrome mounts on (its shadow root holds
+ * every control; the page's own CSS never reaches it).
  */
-const SHELL_HEAD = '<meta name="viewport" content="width=device-width, initial-scale=1">';
-
-/**
- * The 1.0 shell's body part around the engine. PLACEHOLDER (rebuild step 2):
- * the read view container the engine renders the document into (in the page,
- * not an iframe — owner decision 3, REBUILD §3a).
- */
-const SHELL_BODY = '<main id="orz-view" class="orz-view" aria-live="polite"></main>';
+export const CHROME_MOUNT_ID = 'orz-chrome';
 
 /**
  * Assemble the `.md.html` file of a text (FC-18 §8): the kit's envelope with
- * kind `md`, shell version {@link VERSION}, and the 1.0 shell parts.
+ * kind `md`, shell version {@link VERSION}, and the 1.0 shell parts — in
+ * `<head>` the viewport, colour scheme and the stylesheets the header's
+ * `theme` names; in `<body>` the read view (`#orz-view` / `#orz-doc`, with the
+ * header's `measure`), the chrome mount point (`#orz-chrome`) and the engine
+ * (`#orz-engine`, inline or from jsDelivr).
  *
  * Deterministic: the same text, options and version give the same bytes.
  * Throws for a text the envelope refuses (NUL, a lone surrogate, a header
@@ -72,17 +70,18 @@ const SHELL_BODY = '<main id="orz-view" class="orz-view" aria-live="polite"></ma
  * `engineSource` for inline delivery.
  */
 export function assemble(text: string, options: AssembleOptions = {}): string {
-  return assembleEnvelope(text, shellParts(options));
+  return assembleEnvelope(text, shellParts(options, presentationOf(text)));
 }
 
 /**
  * The shell parts {@link assemble} hands to the kit's `assembleEnvelope`: kind
  * `md`, shell version {@link VERSION}, delivery, head and body parts, and the
- * includes. They depend on the options only, never on the text (FC-18 law 4,
- * no document data in the shell). Throws as {@link assemble} does for the
- * options.
+ * includes. They depend on the options and on the presentation (the header's
+ * `theme` and `measure`, resolved by `presentationOf`) only — never on other
+ * document data (FC-18 §8.1: theme presentation is applied by the shell parts,
+ * not the envelope). Throws as {@link assemble} does for the options.
  */
-export function shellParts(options: AssembleOptions = {}): ShellParts {
+export function shellParts(options: AssembleOptions = {}, presentation: Presentation = presentationOf('')): ShellParts {
   const delivery = options.delivery ?? 'inline';
   let engine: string;
   if (delivery === 'inline') {
@@ -100,8 +99,8 @@ export function shellParts(options: AssembleOptions = {}): ShellParts {
     kind: 'md',
     shellVersion: VERSION,
     delivery,
-    headHtml: SHELL_HEAD,
-    bodyHtml: `${SHELL_BODY}\n${engine}`,
+    headHtml: shellHead(presentation),
+    bodyHtml: `${readViewMarkup(presentation)}\n<div id="${CHROME_MOUNT_ID}"></div>\n${engine}`,
     ...(includes ? { includes } : {}),
   };
 }
@@ -112,14 +111,12 @@ export interface NewDocumentOptions {
   /** A theme id of {@link THEMES}. */
   theme?: string;
   /** `normal` / `wide` / `full`. */
-  measure?: 'normal' | 'wide' | 'full';
+  measure?: Measure;
   /** BCP 47 language of the content. */
   lang?: string;
   /** The document id; minted with the kit's `mintUid` when absent (tests inject one). */
   uid?: string;
 }
-
-const MEASURES = new Set(['normal', 'wide', 'full']);
 
 /**
  * A new format-1 `md` text (FC-18 §3, §10): a header `{{nyml` / `kind:
@@ -132,7 +129,7 @@ const MEASURES = new Set(['normal', 'wide', 'full']);
 export function newDocument(options: NewDocumentOptions = {}): string {
   const { title, theme, measure, lang } = options;
   if (theme !== undefined && !isThemeId(theme)) throw new Error(`orz-mdhtml: unknown theme ${JSON.stringify(theme)}`);
-  if (measure !== undefined && !MEASURES.has(measure)) throw new Error(`orz-mdhtml: unknown measure ${JSON.stringify(measure)} (normal, wide or full)`);
+  if (measure !== undefined && !isMeasure(measure)) throw new Error(`orz-mdhtml: unknown measure ${JSON.stringify(measure)} (normal, wide or full)`);
   const uid = options.uid ?? mintUid();
   if (!UID_PATTERN.test(uid)) throw new Error(`orz-mdhtml: malformed uid ${JSON.stringify(uid)} (doc- and 10 to 32 of [0-9a-z])`);
   const heading = title !== undefined && title.trim() !== '' ? title.trim() : 'Untitled';
