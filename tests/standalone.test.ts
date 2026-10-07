@@ -181,6 +181,23 @@ chrome('edit, settings and saves (real Chrome)', () => {
     await ctx.close();
   });
 
+  it('[R.3] a served page (http:) is not saved in place: Save returns { ok: false, via: \'served-notice\' }, says to use Download a copy, and writes nothing', async () => {
+    const ctx = await context();
+    const text = CORPUS.find((c) => c.path === 'md/minimal.md')!.text;
+    files.write('served.md.html', await assembleReal(text));
+    const page = await ctx.newPage();
+    await page.goto(`${site.url}/served.md.html`);
+    await bootDone(page);
+    await page.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
+    const r = await page.evaluate(`${APP}.save()`);
+    expect(r).toEqual({ ok: false, via: 'served-notice', error: 'served page' });
+    expect(await picks(page)).toHaveLength(0);
+    expect(await page.evaluate(`${APP}.isDirty()`)).toBe(true);
+    const toast = await page.evaluate(`Array.from(${APP}.root.querySelectorAll('.orz-toast')).map((t) => t.textContent).join(' | ')`) as string;
+    expect(toast).toMatch(/served from the web.*Download a copy/);
+    await ctx.close();
+  });
+
   it('[R.3] a save keeps the file\'s form: a cdn file stays cdn, a file\'s includes are kept, a CR LF + BOM text stays exact', async () => {
     const ctx = await context();
     const inc = CORPUS.find((c) => c.path === 'md/includes.md')!;
@@ -316,6 +333,8 @@ chrome('edit, settings and saves (real Chrome)', () => {
     expect(withoutEngine).not.toMatch(/viewMode|splitRatio|0\.3/);
     const again = await openFile(ctx, 'prefs.md.html', saved);
     expect(await again.evaluate(`${APP}.edit().getMode()`)).toBe('preview');
+    // the file's one preference store is what an editor mounted on the file gets
+    expect(await again.evaluate(`${APP}.editorContext().preferences.get('viewMode')`)).toBe('preview');
     await ctx.close();
   });
 });
@@ -477,7 +496,7 @@ chrome('leaving with unsaved changes, editors mounted on the file (real Chrome)'
     await uctx.close();
   }, 120_000);
 
-  it('[R.10] an editor mounted on the file (OrzCarrier.mountEditor, no hooks.save) is the document being edited: Cmd/Ctrl+S on the page saves it (a newer-format one writes nothing), never the page\'s other copy; its unsaved changes ask before leaving; destroyed, the page\'s keys are its own again', async () => {
+  it('[R.10] an editor mounted on the file (OrzCarrier.mountEditor, no hooks.save) is the document being edited: Cmd/Ctrl+S on the page or in it saves it (a newer-format one is read-only — it may take the focus — and writes nothing), never the page\'s other copy; its unsaved changes ask before leaving; destroyed, the page\'s text and keys are its own again', async () => {
     const ctx = await context();
     const text = CORPUS.find((c) => c.path === 'md/minimal.md')!.text;
     const page = await openFile(ctx, 'attached.md.html', await assembleReal(text));
@@ -487,13 +506,17 @@ chrome('leaving with unsaved changes, editors mounted on the file (real Chrome)'
       window.__attached = globalThis.OrzCarrier.mountEditor(el, { text: ${JSON.stringify(t)} });
       await window.__attached.ready;
     })()`);
-    // a newer-format text: read-only (its focus() cannot take the focus), Cmd/Ctrl+S on the page writes nothing
+    // a newer-format text: read-only (it may take the focus, for selection and copy); Cmd/Ctrl+S in it or on the page writes nothing
     const newer = '{{nyml\nkind: document\nformat: 2\n}}\n\nFrom a newer release.\n';
     await mount(newer);
+    expect(await page.evaluate('window.__attached.isReadOnly ? window.__attached.isReadOnly() : true')).toBe(true);
+    await page.evaluate('window.__attached.focus()');
+    await page.keyboard.press(`${MOD}+s`);
     await page.mouse.click(5, 5);
     await page.keyboard.press(`${MOD}+s`);
     await page.waitForTimeout(600);
     expect(await picks(page)).toHaveLength(0);
+    expect(await page.evaluate('window.__attached.getText()')).toBe(newer);
     expect(await readOpfs(page, 'attached.md.html')).toBe(await assembleReal(text)); // the opened file, untouched
     await page.evaluate('window.__attached.destroy()');
     // a writable one, changed: Cmd/Ctrl+S with the focus outside it saves ITS text into the file
@@ -505,9 +528,10 @@ chrome('leaving with unsaved changes, editors mounted on the file (real Chrome)'
     await page.keyboard.press(`${MOD}+s`);
     await page.waitForFunction('!window.__attached.isDirty()');
     expect(await readOpfs(page, 'attached.md.html') === assemble(`${text}Attached edit.\n`, { engineSource: b.iife })).toBe(true);
-    expect(await page.evaluate(`${APP}.getText()`)).toBe(text); // the page's own copy was not the one saved
-    // destroyed: Cmd/Ctrl+E edits the page's document again
+    expect(await page.evaluate(`${APP}.getText()`)).toBe(`${text}Attached edit.\n`); // while attached, the editor's text is the document
+    // destroyed: the page's own copy of the text (never saved over the editor's) and Cmd/Ctrl+E are the page's again
     await page.evaluate('window.__attached.destroy()');
+    expect(await page.evaluate(`${APP}.getText()`)).toBe(text);
     await page.keyboard.press(`${MOD}+e`);
     expect(await page.evaluate(`!!${APP}.editor()`)).toBe(true);
     await ctx.close();

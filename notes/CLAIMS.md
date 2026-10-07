@@ -25,8 +25,8 @@ update, chrome), `spec/host-protocols.md`, the family plan `../docs/REBUILD.md`
 
 | ID | Claim | Oracle |
 |---|---|---|
-| B.1 | The package depends on orz-markdown `^2.1.0` and builds without shims or aliases: no `build/shims`, no `path-browserify`, no injected `process`; the orz-markdown version comes from `orz-markdown/version`, never from a `package.json` walk. | conformance |
-| B.2 | There is one theme list (`src/themes.ts`); its ids are exactly the theme stylesheets orz-markdown ships (`themes/*.css` except `common.css`), and the default theme is one of them. | conformance |
+| B.1 | The package depends on orz-markdown `^2.2.0` and builds without shims or aliases: no `build/shims`, no `path-browserify`, no injected `process`; the orz-markdown version comes from `orz-markdown/version`, never from a `package.json` walk. | conformance |
+| B.2 | There is one theme list, the kit's (`orz-markdown/themes`: `THEMES`, `DEFAULT_THEME`, `themeInfo`, re-exported by `src/themes.ts`, no copy in `src/`); its ids are exactly the theme stylesheets orz-markdown ships (`themes/*.css` except `common.css`), and the default theme is one of them. | conformance |
 | B.3 | `VERSION` (src/version.ts, the shell version every file records) equals the package version. | conformance |
 
 ## A — the isomorphic assembler (FC-18 §2, §8)
@@ -67,7 +67,7 @@ update, chrome), `spec/host-protocols.md`, the family plan `../docs/REBUILD.md`
 
 | ID | Claim | Oracle |
 |---|---|---|
-| U.1 | Text preserved: for every legacy file (the repo's examples and fixtures, and synthetic ones), the upgraded text is a format-1 header followed by the legacy source exactly (the island unescaped the 0.x way, its wrapper removed); for files whose source text is at hand, that is the original `.md` body byte for byte. | scenario |
+| U.1 | Text preserved: for every legacy file (the fixtures in `tests/fixtures/legacy/`, among them the 0.8 example `metadata.md.html`, and synthetic ones), the upgraded text is a format-1 header followed by the legacy source exactly (the island unescaped the 0.x way, its wrapper removed); for files whose source text is at hand, that is the original `.md` body byte for byte. | scenario |
 | U.2 | Metadata moved: `#orz-meta` (title, author, description, date, keywords, source, licence) becomes header keys; the header names `carrier: md` and a valid uid (the file's own when it matches `UID_PATTERN`, else a fresh one — 0.x UUIDs are not valid uids); a saved theme (`data-theme`) or a non-default 0.x default theme becomes `theme`; `<title>` becomes `title` only when the text has no title of its own. | scenario |
 | U.3 | The text's own header always wins: keys it already has are never overwritten; a legacy `kind: meta` block typed into the source is converted to `kind: document` as FC-18 §5 says (the kit's `editHeader`), its lines kept. | scenario |
 | U.4 | The upgrade's file is the text's assembly (`upgrade(F).html === assemble(upgrade(F).text, o)`) and extracts back exactly; a format-1 file is re-assembled with its text and includes unchanged; upgrading twice changes nothing more. | scenario |
@@ -90,14 +90,14 @@ update, chrome), `spec/host-protocols.md`, the family plan `../docs/REBUILD.md`
 |---|---|---|
 | R.1 | An inline and a cdn file (the bundle from jsDelivr), opened over `file:` and over http, render every `md` corpus document in the page (`#orz-doc`) with the header's theme stylesheet, measure class and derived title, the file's includes (no fetch), and the orz runtime (QR codes ready, copy-as-Markdown copies Markdown); a light and a dark theme style the page differently; no page errors. | real |
 | R.2 | In the browser the file is the 1.0 shell: body = `#orz-src`, `#orz-view`, `#orz-chrome`, `#orz-engine`; the page's only stylesheets are `#orz-theme`, `#orz-katex`, `#orz-hljs`; the chrome (Edit, Theme, Measure, Save, Done, More) lives in the shadow root of `#orz-chrome` and puts no control in the light DOM. | real |
-| R.3 | Edit → type → Save on a `file:` page writes exactly Node `assemble(text)` of the editor's text through the picker — never the live DOM; the second save reuses the handle (no second picker); the written file reopens with the text; a save keeps the file's form (a cdn file stays cdn, `#orz-includes` kept, BOM and CR LF exact). | real |
+| R.3 | Edit → type → Save on a `file:` page writes exactly Node `assemble(text)` of the editor's text through the picker — never the live DOM; the second save reuses the handle (no second picker); the written file reopens with the text; a save keeps the file's form (a cdn file stays cdn, `#orz-includes` kept, BOM and CR LF exact); a served (http) page is never saved in place — Save returns `{ ok: false, via: 'served-notice' }`, the toast points to Download a copy, and nothing is written. | real |
 | R.4 | Theme and measure write the header: outside edit mode through the kit's `editHeader` on the current text (the document is unsaved, the page restyles, Cmd/Ctrl+Z undoes back to the exact saved text, clean), in edit mode as one undoable `setHeader` edit of the editor (the preview takes the new theme); the saved file is `assemble` of that text; leaving edit mode re-renders the read view from the current text. | real |
 | R.5 | New document and Save as new copy go through the picker every time and write valid files with the file's delivery: a new uid (`UID_PATTERN`, not the original's), lint clean, shell = VERSION, equal to Node `assemble` of their text, opening and rendering; the copy is the same text with only the uid changed; the opened file is untouched. | real |
 | R.6 | In a host frame (cross-origin, `orz-host-save@1`, `-ai@1`, `-include@1`): saves from the read view and from the editor go to the host with `source` = the exact text and `html` = Node `assemble(source)` with the file's includes; the dirty state is posted; the host's AI operations appear in the editor's toolbar and a reviewed proposal applies as one edit; the host's include resolution wins in the read view; no picker, no manifest request, no indicator. | real |
-| R.7 | Reader preferences (view mode, split ratio) are stored only under `orz-pref:<uid>:…`, never in the file (the saved file is `assemble(text)` and holds no preference), and come back when the file is reopened. | real |
+| R.7 | Reader preferences (view mode, split ratio) are stored only under `orz-pref:<uid>:…`, never in the file (the saved file is `assemble(text)` and holds no preference), and come back when the file is reopened; an editor mounted on the file gets the file's one store (`editorContext().preferences`). | real |
 | R.8 | The quiet update: with a newer release advertised (jsDelivr routed), a top-level `file:` page shows "Update available" next to the brand after one manifest request; Update now writes the new release's assembly of the exact text (its shell version, its bundle inline) into the opened file and reloads the page. | real |
 | R.9 | A top-level file with unsaved changes (typed in the editor, or a header setting outside it) asks before the page goes (`beforeunload`, the browser's own prompt; dismissing keeps the page and the text); a clean or saved file, a setting undone back to the saved text, and the quiet update's reload (after it wrote the current text) do not ask. | real |
-| R.10 | An editor mounted on the file through `OrzCarrier.mountEditor` without `hooks.save` is the document being edited: Cmd/Ctrl+S on the page saves that editor (a newer-format one writes nothing), never the page's other copy of the text; its unsaved changes ask before leaving; once destroyed, the page's shortcuts are its own again. | real |
+| R.10 | An editor mounted on the file through `OrzCarrier.mountEditor` without `hooks.save` is the document being edited: Cmd/Ctrl+S on the page or in it saves that editor (a newer-format one is read-only — it may take the focus, for selection and copy — and writes nothing), never the page's other copy of the text, which comes back when the editor is destroyed; its unsaved changes ask before leaving; once destroyed, the page's shortcuts are its own again. | real |
 
 ## P — the Node library (rebuild step 5)
 
@@ -122,7 +122,7 @@ update, chrome), `spec/host-protocols.md`, the family plan `../docs/REBUILD.md`
 
 | ID | Claim | Oracle |
 |---|---|---|
-| H.1 | orz-markdown's carrier conformance harness (`registerConformance`, no `allowSkips`) passes against the real carrier: all 45 checks of `CHECK_IDS` ran in real Chrome and passed, `C.update.from-previous` being not applicable (`firstRelease`: 1.0 is the first release of text format 1 and of `release.json`; 0.x files are upgraded, not updated — owner decision 1), and the final `[conformant]` test is green. The one local adaptation is marked `KIT GAP` in tests/conformance.test.ts (the shell head's own stylesheet URLs kept out of the harness's "bundle request" count; they stay offline). | conformance |
+| H.1 | orz-markdown's carrier conformance harness (`registerConformance`, no `allowSkips`) passes against the real carrier: all 45 checks of `CHECK_IDS` ran in real Chrome and passed, `C.update.from-previous` being not applicable (`firstRelease`: 1.0 is the first release of text format 1 and of `release.json`; 0.x files are upgraded, not updated — owner decision 1), and the final `[conformant]` test is green. No local adaptation: the harness gets the plain browser (orz-markdown 2.2.0 counts only bundle requests, H.7, so the shell head's own stylesheets need no workaround). | conformance |
 | H.2 | The harness target is the real carrier: `bundle`/`release` are the library's verified `dist/` engine (= the build = `browser/`), `assemble` is the Node library's, `create` is `newDocument`, `editor` is the opened file's own editor (`OrzCarrier.standalone.edit()`), `protocols` both, `next` this build with the patch number bumped (identical but for its version), `firstRelease: true`, no `previous`. | conformance |
 
 ## X — web apps (FD-06, REBUILD §3a "web apps first")
@@ -133,8 +133,15 @@ update, chrome), `spec/host-protocols.md`, the family plan `../docs/REBUILD.md`
 | X.2 | The ESM build (`examples/webapp/esm.html`) mounts the same editor with a save hook, sets no global, and its `assemble` writes the Node bytes. | real |
 | X.3 | `docs/embedding.md` tells an app author how to install and import (ESM and IIFE), every export, every hook, the CSP recipe and the version rule (the app pins the component; files carry their own shells). | conformance |
 
-## L — the lift seam (REBUILD §3a owner decision 2)
+## L — the carrier app (REBUILD §3a owner decision 2; orz-markdown 2.2.0 `carrier/app`)
 
 | ID | Claim | Oracle |
 |---|---|---|
-| L.1 | The standalone startup's kind-independent modules (`src/browser/standalone/`, `src/browser/ui/`, `src/browser/engine-source.ts`) import only orz-markdown's `carrier` entries and each other — nothing of the md carrier (`md/`, `carrier.ts`, the assembler, presentation, themes) — and name no md-specific class, key or file name; the md carrier reaches them only through `StandaloneKind`. | conformance |
+| L.1 | The standalone startup is the kit's `orz-markdown/carrier/app`, not a copy: the IIFE entry captures its own script (`captureEngineSource()`) and then calls `startCarrier(MD_KIND)`; `src/browser/standalone/`, `src/browser/ui/` and `src/browser/engine-source.ts` are gone; `MD_KIND` supplies the md side of `StandaloneKind` (assemble, newDocument, mountEditor, createReadView, settings, readDocument, extract, renderPreview); the md editor uses the kit's `attachSettings`, `followPresentation` and `renderMarkdownPreviewWithIncludes` (with an empty include record when the page has none — the one `KIT GAP` left, in `src/browser/md/render.ts`). | conformance |
+| L.2 | orz-markdown's `renderMarkdownPreviewWithIncludes` resolves the URL includes of a text that also has a file include when it is given no include record (fixed in the kit, `orz-markdown@14cc3bc`); the editor passes it directly as its renderer, with no local workaround. | scenario |
+
+## E — examples (rebuild step 7)
+
+| ID | Claim | Oracle |
+|---|---|---|
+| E.1 | The committed examples never go stale: every `examples/*.md` has its `examples/*.md.html`, which extracts to exactly that text, was made by this version, and equals a fresh `assemble` of it with its delivery and includes (one inline example, one cdn); the texts have a uid and no header lint errors. `npm run examples` regenerates them. | scenario |

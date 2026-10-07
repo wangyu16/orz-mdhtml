@@ -30,10 +30,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CHECK_IDS, registerConformance, type CarrierTarget } from 'orz-markdown/carrier/conformance';
 import { parseManifest } from 'orz-markdown/carrier/shell';
-import { PREVIEW_CDN } from 'orz-markdown/preview-frame';
 import { buildBrowser, BUNDLE_FILE } from '../build/bundle.js';
-import { assemble, engineFiles, newDocument, THEMES, VERSION } from '../src/lib.js';
-import { themeHref } from '../src/presentation.js';
+import { assemble, engineFiles, newDocument, VERSION } from '../src/lib.js';
 
 type Browser = import('playwright-core').Browser;
 
@@ -104,48 +102,6 @@ async function launch(): Promise<Browser | null> {
   }
 }
 
-/**
- * KIT GAP (orz-markdown 2.1.0 carrier/conformance; checks C.update.indicator,
- * C.update.other-format, C.update.prerelease): those checks count EVERY
- * external request other than the manifest as a "bundle request"
- * (`ctx.requests.filter((u) => !u.endsWith('/release.json'))`), while the spec
- * (spec/conformance.md §3: "a file that fetches anything else (fonts, preview
- * libraries) gets a network error, as offline"; §4: "no bundle request") and
- * the md shell (claims A.5, R.2: the head's `#orz-theme`, `#orz-katex`,
- * `#orz-hljs` stylesheets from their pinned CDN URLs) allow a file to load its
- * own stylesheets. The stub carrier loads none, so the gap never showed.
- *
- * Local workaround, as narrow as the gap: the exact stylesheet URLs the md
- * shell's head can name (every theme's `themeHref`, KaTeX's and highlight.js's
- * pinned CSS) are answered BEFORE the harness's route handler sees them —
- * with the same network error the harness gives them (offline), so nothing
- * the file sees changes; they are only kept out of the harness's request
- * list. Every other URL — the manifest, any bundle, forged targets — reaches
- * the harness unchanged. Remove when the kit counts only bundle URLs.
- */
-const SHELL_STYLESHEETS = new Set([...THEMES.map((t) => themeHref(t.id)), PREVIEW_CDN.katexCss, PREVIEW_CDN.hljsLightCss, PREVIEW_CDN.hljsDarkCss]);
-type Route = import('playwright-core').Route;
-type Context = import('playwright-core').BrowserContext;
-function withShellStylesheetsOffline(b: Browser): Browser {
-  const wrapContext = (ctx: Context): Context => new Proxy(ctx, {
-    get(t, prop) {
-      const v = Reflect.get(t, prop, t) as unknown;
-      if (prop === 'route') {
-        return (url: unknown, handler: (route: Route, req: unknown) => unknown, o?: unknown) =>
-          t.route(url as string, (route: Route, req: unknown) => (SHELL_STYLESHEETS.has(route.request().url()) ? route.abort('internetdisconnected') : handler(route, req)), o as never);
-      }
-      return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(t) : v;
-    },
-  });
-  return new Proxy(b, {
-    get(t, prop) {
-      const v = Reflect.get(t, prop, t) as unknown;
-      if (prop === 'newContext') return async (...a: Parameters<Browser['newContext']>) => wrapContext(await t.newContext(...a));
-      return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(t) : v;
-    },
-  });
-}
-
 const browser = await launch();
 const log: string[] = [];
 afterAll(async () => {
@@ -176,13 +132,6 @@ describe('the conformance target', () => {
     const text = await t.create();
     expect(await t.assemble(text)).toBe(assemble(text, { engineSource: own.iife }));
     expect(CHECK_IDS.length).toBe(45);
-    // the KIT GAP workaround exempts exactly the shell head's stylesheet URLs
-    for (const theme of THEMES) expect(assemble(`{{nyml\nkind: document\ntheme: ${theme.id}\n}}\n`, { delivery: 'cdn' })).toContain(themeHref(theme.id));
-    const head = [...assemble('# x\n', { delivery: 'cdn' }).matchAll(/<link [^>]*href="([^"]+)"/g)].map((m) => m[1]);
-    expect(head.length).toBe(3);
-    for (const u of head) expect(SHELL_STYLESHEETS.has(u), u).toBe(true);
-    for (const u of SHELL_STYLESHEETS) expect(u).toMatch(/^https:\/\/[^/]+\/.+\.css$/);
-    expect([...SHELL_STYLESHEETS].some((u) => u.includes('-browser@'))).toBe(false);
   });
 });
 
@@ -192,7 +141,8 @@ if (!browser) {
 } else {
   registerConformance({ describe, it, beforeAll, afterAll }, () => makeTarget(), {
     title: '[H.1] orz-mdhtml conformance (orz-markdown carrier harness, real Chrome)',
-    browser: withShellStylesheetsOffline(browser),
+    // two playwright-core type copies while orz-markdown is linked from a checkout; one object at run time
+    browser: browser as never,
     log: (line) => log.push(line),
   });
 }

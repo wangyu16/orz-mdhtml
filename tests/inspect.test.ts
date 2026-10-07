@@ -56,7 +56,7 @@ describe('inspect', () => {
       expect(r.legacy!.theme).toBe('light-neat-3');
       expect(r.advice[0]).toMatch(/legacy orz-mdhtml 0\.\d+\.\d+ file.*`orz-mdhtml upgrade <file>`/);
     }
-    const meta = inspect(read(LEGACY_FILES['examples/metadata.md.html']));
+    const meta = inspect(read(LEGACY_FILES['fixtures/metadata.md.html']));
     expect(meta.legacy).toMatchObject({ title: 'Portable Metadata Example', metaKeys: ['title', 'author', 'description', 'source', 'date', 'keywords', 'license'] });
     expect(meta.title).toBe('Portable Metadata Example');
   });
@@ -107,7 +107,7 @@ describe('inspect', () => {
   it('[I.5] the report is plain JSON and deterministic', () => {
     const inputs = [
       assemble(newDocument({ uid: UID }), { delivery: 'cdn' }),
-      read(LEGACY_FILES['examples/metadata.md.html']),
+      read(LEGACY_FILES['fixtures/metadata.md.html']),
       '{{nyml\nkind: document\nuid: bad\n}}\n',
       '<!doctype html><p>x',
       ...corpus('md').map((c) => c.text),

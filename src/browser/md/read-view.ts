@@ -2,78 +2,29 @@
  * KIND-SPECIFIC (md): the read view of an assembled `.md.html` — the
  * document rendered IN THE PAGE (owner decision 3, REBUILD §3a) into the
  * shell's `#orz-doc` article, styled by the header's theme and measure, and
- * enhanced like orz-markdown's preview frame: the orz browser runtime (QR
- * overlay, copy-as-Markdown, tabs) at once, and — only when the document
- * needs them — highlight.js, Mermaid, SMILES and Chart.js from their pinned
- * CDN URLs (`PREVIEW_CDN`), then `__orzEnhance()`.
- *
- * KIT GAP (reported): orz-markdown 2.1.0 ships the enhancement as markup for
- * an iframe (`getPreviewFrameAssets().bodyScripts()`), with no entry point
- * for a page that renders the document itself. This module runs the kit's
- * own inline scripts from that markup (the runtime, `__orzEnhance`, Mermaid's
- * setup) instead of copying them, and loads each library only when the
- * rendered document has something for it.
+ * enhanced by the kit's `enhanceDocument` (orz-markdown `preview-frame`):
+ * the orz browser runtime (QR overlay, copy-as-Markdown, tabs) and — only
+ * when the document needs them — highlight.js, Mermaid, SMILES and Chart.js
+ * from their pinned CDN URLs. The kit's app (`carrier/app`) drives it
+ * through `CarrierReadView` (spec/carrier-app.md §3.3).
  */
-import { getPreviewFrameAssets, PREVIEW_CDN } from 'orz-markdown/preview-frame';
 import { readDocument } from 'orz-markdown/carrier';
-import { articleClass, presentationOf, themeHref, type Presentation } from '../../presentation.js';
-import { renderMd, type MdRenderContext } from './render.js';
+import type { CarrierReadView, ReadViewContext } from 'orz-markdown/carrier/app';
+import { enhanceDocument, PREVIEW_CDN } from 'orz-markdown/preview-frame';
+import { articleClass, presentationOf, themeHref } from '../../presentation.js';
+import { renderMd } from './render.js';
 
-type Win = Window & { __orzEnhance?: () => void; __orzSmilesTheme?: string; mermaid?: unknown };
-
-/** The libraries the read view may load, each with the selector of the content that needs it. */
-const LIBS: ReadonlyArray<{ url: string; needs: string }> = [
-  { url: PREVIEW_CDN.hljsJs, needs: 'pre code' },
-  { url: PREVIEW_CDN.mermaidJs, needs: '.mermaid' },
-  { url: PREVIEW_CDN.smilesJs, needs: 'canvas[data-smiles]' },
-  { url: PREVIEW_CDN.chartJs, needs: 'canvas.orz-chart' },
-];
-
-interface KitScripts {
-  /** Inline scripts to run at once (the runtime, `__orzEnhance`). */
-  now: string[];
-  /** Inline scripts that set up a library, by the library's URL (Mermaid's `initialize`). */
-  after: Map<string, string[]>;
-}
-
-let kitScripts: KitScripts | null = null;
-
-/** The kit's inline enhancement scripts, read from its preview-frame markup (see the module comment). */
-function readKitScripts(doc: Document): KitScripts {
-  if (kitScripts) return kitScripts;
-  const parsed = new (doc.defaultView as Window & typeof globalThis).DOMParser().parseFromString(`<!doctype html><body>${getPreviewFrameAssets().bodyScripts()}`, 'text/html');
-  const now: string[] = [];
-  const after = new Map<string, string[]>();
-  for (const s of Array.from(parsed.querySelectorAll('script'))) {
-    if (s.src) continue;
-    const code = s.textContent ?? '';
-    // Mermaid's setup belongs after Mermaid; everything else (runtime, __orzEnhance) runs now.
-    if (/\bmermaid\./.test(code) && !/__orzEnhance\s*=/.test(code)) after.set(PREVIEW_CDN.mermaidJs, [...(after.get(PREVIEW_CDN.mermaidJs) ?? []), code]);
-    else now.push(code);
-  }
-  kitScripts = { now, after };
-  return kitScripts;
-}
-
-function runInline(doc: Document, code: string): void {
-  const s = doc.createElement('script');
-  s.textContent = code;
-  (doc.head ?? doc.documentElement).appendChild(s);
-}
-
-/** The read view of one page. */
-export interface ReadView {
-  /** Render `text` into the article (theme, measure, title follow its header). Resolves when the content is in the page. */
-  render(text: string, ctx?: MdRenderContext): Promise<void>;
-  /** Apply a text's presentation (theme stylesheets, measure, colour scheme) without re-rendering. */
-  present(text: string): Presentation;
-  /** The article element. */
+/** The md read view: the kit's `CarrierReadView` with the article it renders into. */
+export interface MdReadView extends CarrierReadView {
+  /** `#orz-view`, the view's root (hidden while editing). */
+  readonly element: HTMLElement;
+  /** `#orz-doc`, the article. */
   readonly article: HTMLElement;
+  render(text: string, ctx?: ReadViewContext): Promise<void>;
 }
 
 /** The read view of the shell's `#orz-view` / `#orz-doc` (created when the page lacks them). */
-export function createReadView(doc: Document): ReadView {
-  const win = doc.defaultView as Win;
+export function createReadView(doc: Document): MdReadView {
   let main = doc.getElementById('orz-view');
   if (!main) {
     main = doc.createElement('main');
@@ -87,8 +38,6 @@ export function createReadView(doc: Document): ReadView {
     article.id = 'orz-doc';
     main.append(article);
   }
-  const loading = new Map<string, Promise<void>>();
-  let started = false;
   let generation = 0;
 
   const link = (id: string): HTMLLinkElement => {
@@ -102,31 +51,7 @@ export function createReadView(doc: Document): ReadView {
     return l;
   };
 
-  const enhance = (): void => {
-    try { win.__orzEnhance?.(); } catch { /* a library's error stays its own */ }
-  };
-
-  const load = (url: string): Promise<void> => {
-    let p = loading.get(url);
-    if (!p) {
-      p = new Promise<void>((resolve) => {
-        const s = doc.createElement('script');
-        s.src = url;
-        s.async = true;
-        s.addEventListener('load', () => {
-          for (const code of readKitScripts(doc).after.get(url) ?? []) runInline(doc, code);
-          resolve();
-          enhance();
-        });
-        s.addEventListener('error', () => resolve()); // offline: the content shows unenhanced
-        doc.head.append(s);
-      });
-      loading.set(url, p);
-    }
-    return p;
-  };
-
-  const present = (text: string): Presentation => {
+  const present = (text: string): { scheme: 'light' | 'dark' } => {
     const p = presentationOf(text);
     const theme = link('orz-theme');
     const href = themeHref(p.theme.id);
@@ -139,16 +64,16 @@ export function createReadView(doc: Document): ReadView {
     main!.setAttribute('data-orz-theme', p.theme.id);
     const cls = articleClass(p.measure);
     if (article!.className !== cls) article!.className = cls;
-    win.__orzSmilesTheme = p.theme.scheme;
-    return p;
+    return { scheme: p.theme.scheme };
   };
 
   return {
+    element: main,
     article,
     present,
     async render(text, ctx = {}) {
       const mine = ++generation;
-      present(text);
+      const { scheme } = present(text);
       const html = await renderMd(text, ctx);
       if (mine !== generation) return; // a newer render won
       article!.innerHTML = html;
@@ -156,12 +81,8 @@ export function createReadView(doc: Document): ReadView {
         const title = readDocument(text, { kind: 'md' }).title;
         if (doc.title !== title) doc.title = title;
       } catch { /* the title stays */ }
-      if (!started) {
-        started = true;
-        for (const code of readKitScripts(doc).now) runInline(doc, code);
-      }
-      enhance();
-      for (const lib of LIBS) if (article!.querySelector(lib.needs)) void load(lib.url);
+      // the libraries load in the background: the content shows now (offline it stays as rendered)
+      void enhanceDocument(article!, { scheme }).catch(() => undefined);
     },
   };
 }

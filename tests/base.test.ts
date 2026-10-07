@@ -1,5 +1,5 @@
 /**
- * Rebuild step 1 — the base: orz-markdown ^2.1.0 without shims, one theme
+ * Rebuild step 1 — the base: orz-markdown ^2.2.0 without shims, one theme
  * list, the version constant (claims B.1–B.3).
  */
 import { describe, it, expect } from 'vitest';
@@ -11,8 +11,8 @@ const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: strin
 const sources = (dir: string): string[] => readdirSync(dir).filter((f) => /\.(ts|js|cjs|mjs)$/.test(f)).map((f) => `${dir}/${f}`);
 
 describe('base', () => {
-  it('[B.1] depends on orz-markdown ^2.1.0 with no shims, aliases or package.json walk', () => {
-    expect(pkg.dependencies['orz-markdown']).toBe('^2.1.0');
+  it('[B.1] depends on orz-markdown ^2.2.0 with no shims, aliases or package.json walk', () => {
+    expect(pkg.dependencies['orz-markdown']).toBe('^2.2.0');
     expect(existsSync('build/shims')).toBe(false);
     expect({ ...pkg.dependencies, ...pkg.devDependencies }).not.toHaveProperty('path-browserify');
     for (const file of [...sources('src'), ...sources('build')]) {
@@ -24,13 +24,14 @@ describe('base', () => {
     expect(readFileSync('build/bundle.ts', 'utf8')).toMatch(/from 'orz-markdown\/version'/);
   });
 
-  it('[B.2] one theme list, equal to the stylesheets orz-markdown ships', () => {
+  it('[B.2] one theme list — the kit\'s (orz-markdown/themes), equal to the stylesheets it ships', () => {
     const shipped = readdirSync('node_modules/orz-markdown/themes').filter((f) => f.endsWith('.css') && f !== 'common.css').map((f) => f.slice(0, -4)).sort();
     expect(THEMES.map((t) => t.id).sort()).toEqual(shipped);
     expect(new Set(THEMES.map((t) => t.id)).size).toBe(THEMES.length);
     expect(isThemeId(DEFAULT_THEME)).toBe(true);
-    // no second list anywhere in src/
-    for (const file of sources('src').filter((f) => f !== 'src/themes.ts')) {
+    // the kit's list, re-exported: no second list anywhere in src/
+    expect(readFileSync('src/themes.ts', 'utf8')).toMatch(/export \{ THEMES, DEFAULT_THEME, isThemeId, themeInfo \} from 'orz-markdown\/themes'/);
+    for (const file of sources('src')) {
       expect(readFileSync(file, 'utf8').match(/'dark-elegant-2'/g) ?? [], file).toEqual([]);
     }
   });

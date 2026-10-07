@@ -1,22 +1,28 @@
 {{nyml
-kind: meta
+kind: document
+carrier: md
+uid: doc-jwn73zjgtdzuug7s
 title: Portable Metadata Example
 author: Example Author
 description: A minimal mdhtml document with portable authorship and license metadata.
+date: 2026-07-11
+keywords: mdhtml, metadata, editable document
+source: https://markdown.orz.how/
 license: CC-BY-4.0
 license_name: Creative Commons Attribution 4.0
 license_url: https://creativecommons.org/licenses/by/4.0/
-source: https://markdown.orz.how/
-date: 2026-07-11
-keywords: mdhtml, metadata, editable document
 }}
 
 # Portable Metadata Example
 
-This source demonstrates the metadata block consumed by `orz-mdhtml` during
-generation. Inspect the resulting file's `<head>` and `#orz-meta` JSON island.
+The header above is the document's metadata (orz text format 1): title,
+author, description, date, keywords, source and licence. `orz-mdhtml
+assemble` writes it into the file's `<head>` and its `#orz-meta` JSON island,
+and every save in the browser writes it again from the text — so it survives
+edits, saves and updates.
 
 ::: info
-The generated `.md.html` remains one editable, portable file. Its normalized
-metadata survives browser saves and framework updates.
+This text was made from the 0.8 example with `orz-mdhtml upgrade`, which moved
+the file's `#orz-meta` record into the header. Its `.md.html` carries the
+engine inline (the default).
 :::

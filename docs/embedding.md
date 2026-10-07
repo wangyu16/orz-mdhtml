@@ -46,7 +46,7 @@ const editor = mountEditor(element, {
   mode: 'split',              // 'split' | 'editor' | 'preview' (else the reader's stored preference)
   chrome: 'full',             // 'full' (labels) | 'compact' (icons) | 'none' (your UI drives the API)
   readOnly: false,
-  nonce,                      // your CSP nonce (orz-mdhtml extension, see below)
+  nonce,                      // your CSP nonce (FC-19 §3, see below)
   hooks: { save, ai, fetchInclude, resolveAsset, uploadAsset, resolveLink, mintUid },
   // preferences: your PreferenceStore (default: localStorage, namespaced by the header uid)
 });
@@ -59,26 +59,43 @@ in a sandboxed `srcdoc` frame (`sandbox="allow-scripts"`, an opaque origin:
 document scripts cannot reach your page, storage or cookies).
 
 The toolbar has the view modes, the theme and measure pickers (they edit the
-header: `theme`, `measure`), AI operations when `hooks.ai` offers some, the
-save state and Save. Keyboard: Cmd/Ctrl+S saves, Cmd/Ctrl+\ cycles the modes,
+header: `theme`, `measure`), an **AI** menu when `hooks.ai` offers operations,
+the save state and Save. `chrome: 'compact'` shows the same tools as icons. Keyboard: Cmd/Ctrl+S saves, Cmd/Ctrl+\ cycles the modes,
 Esc leaves the text for the toolbar.
 
 ### The `Editor` (FC-19 §4)
 
 `getText()` · `setText(text, { resetHistory? })` · `setHeader(changes)` (one
 undoable edit, FC-18 §9 rules) · `undo()` / `redo()` · `isDirty()` /
-`markSaved()` · `save()` → `{ ok, via }`, never rejects · `setMode(m)` /
-`getMode()` · `focus()` · `on('change' | 'dirty' | 'selection' | 'save' |
-'error', fn)` → unsubscribe · `requestAi(op, { selection? })` ·
-`uploadAssets(files)` · `ensureUid()` · `setReadOnly(flag)` / `isReadOnly()` ·
-`destroy()`.
+`markSaved()` · `save()` → `{ ok, via, error? }` (`via`: `hook`, `host`,
+`file`, `download`), never rejects · `setMode(m)` / `getMode()` · `focus()` ·
+`on('change' | 'dirty' | 'selection' | 'save' | 'error', fn)` → unsubscribe ·
+`proposeAi(op, { selection? })` / `applyAi(proposal, { proposed? })` (the
+review flow, below) · `requestAi(op, { selection? })` (propose and apply at
+once) · `uploadAssets(files)` · `ensureUid()` · `setReadOnly(flag)` /
+`isReadOnly()` · `destroy()`.
+
+### AI with a review step
+
+The toolbar's AI menu never changes the document by itself. Choosing an
+operation calls `proposeAi`: your `hooks.ai.request` runs and the editor gets
+a **proposal** (`{ op, proposed, range, original, passage }`) without touching
+the text. A review panel shows it — editable — with Apply and Cancel; Apply
+calls `applyAi(proposal, { proposed })`, which writes it as **one undoable
+edit**, and refuses (`{ ok: false }`) if the text changed since the proposal
+was made. Your own UI can run the same flow:
+
+```ts
+const r = await editor.proposeAi('tighten', { selection: true });
+if (r.ok && await myConfirm(r.proposal.original, r.proposal.proposed)) editor.applyAi(r.proposal);
+```
 
 ## Hooks (FC-19 §3)
 
 | Hook | Called | Return |
 |---|---|---|
 | `save(text)` | on Save / Cmd+S / `editor.save()` | a promise; reject to report a failure (the editor stays dirty). **With `save`, you own persistence**: nothing is written to disk or downloaded |
-| `ai.operations`, `ai.request(op, { text, selection? })` | the AI menu (reviewed before it applies), `editor.requestAi` | `{ proposed }` — replaces the selection or the whole text as one undoable edit |
+| `ai.operations`, `ai.request(op, { text, selection? })` | the AI menu and `editor.proposeAi` (the proposal is reviewed before `applyAi` writes it), `editor.requestAi` | `{ proposed }` — the replacement of the selection (`selection: true` operations) or of the whole text |
 | `fetchInclude(url)` | the preview meets `{{md https://…}}` / `{{markdown …}}` / `{{md-include …}}` | the Markdown, or `null`. Your trust policy (allowlist) decides |
 | `resolveAsset(path)` | every relative `src` / `srcset` / `poster` in the preview | the URL to load (e.g. a signed URL of your storage) |
 | `uploadAsset(file)` | a file pasted or dropped into the editor, `editor.uploadAssets` | the relative path to insert (`![name](path)` for images) |
@@ -95,9 +112,11 @@ closes.)
 ## Content-Security-Policy (FC-19 §8.4)
 
 The preview frame is a `srcdoc` frame: it inherits your page's policy. With a
-nonce policy, pass the nonce as `nonce`: the component stamps it on
+nonce policy, pass the nonce as `nonce` (FC-19 §3): the component stamps it on
 CodeMirror's `<script>` and `<style>` and on every script and style of the
-preview frame. The example's policy:
+preview frame. Without it, a nonce or hash policy blocks the preview frame's
+inline scripts and the editor reports it (`error` event, source `render`).
+The example's policy:
 
 ```
 default-src 'none';

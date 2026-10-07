@@ -14,9 +14,12 @@
  *   AFTER the rewrite).
  *
  * One KaTeX: orz-markdown's CommonJS build requires `katex` and
- * `katex/contrib/mhchem`; both resolve to KaTeX's CommonJS build here, so
- * `\ce{…}` is registered on the KaTeX that renders (as orz-markdown's
- * conformance stub build does).
+ * `katex/contrib/mhchem`; both resolve to the CommonJS build of the KaTeX
+ * that orz-markdown itself resolves (found from orz-markdown's real
+ * directory, so a linked checkout and an installed package bundle the same
+ * way), so `\ce{…}` is registered on the KaTeX that renders (as
+ * orz-markdown's conformance stub build does). Every other dependency of
+ * orz-markdown resolves from its real path (esbuild follows symlinks).
  *
  * The same IIFE and `release.json` are also staged into `dist/` (the
  * `orz-mdhtml` package): the Node library's `assemble` inlines exactly that
@@ -29,7 +32,8 @@
  */
 import { build, type Plugin } from 'esbuild';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -45,10 +49,16 @@ export const scriptSafe = (code: string): string => code.replace(/<(\\*)(\/?scri
 
 export const sri = (bytes: string): string => `sha384-${createHash('sha384').update(bytes, 'utf8').digest('base64')}`;
 
+/** The `dist/` of the KaTeX orz-markdown resolves (from its real directory). */
+export function katexDist(): string {
+  const kit = realpathSync(join(ROOT, 'node_modules', 'orz-markdown'));
+  return join(dirname(createRequire(join(kit, 'package.json')).resolve('katex/package.json')), 'dist');
+}
+
 const oneKatex: Plugin = {
   name: 'one-katex',
   setup(b) {
-    const dir = join(ROOT, 'node_modules', 'katex', 'dist');
+    const dir = katexDist();
     b.onResolve({ filter: /^katex$/ }, () => ({ path: join(dir, 'katex.js') }));
     b.onResolve({ filter: /^katex\/contrib\/mhchem$/ }, () => ({ path: join(dir, 'contrib', 'mhchem.js') }));
   },

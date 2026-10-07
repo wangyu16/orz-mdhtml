@@ -1,146 +1,178 @@
 ---
 name: orz-mdhtml
-description: Create and use single-file, self-editing .md.html documents from Markdown (orz-mdhtml). Use when a user wants a shareable HTML file that reads like a webpage but can be edited and saved in the browser — e.g. teaching handouts, notes, or published articles.
+description: Create, edit, inspect and upgrade orz-mdhtml documents — a Markdown text twin (x.md, orz text format 1, with a {{nyml kind document}} header) and its single-file, self-editing x.md.html that reads like a themed web page and edits and saves itself in the browser. Use when a user wants a shareable HTML document they can edit without an app (handouts, notes, articles), when you meet a .md.html file and need its text, when a .md.html must be changed, checked or moved to a newer version, or when a web app should embed the editor. Edit the text, never the HTML; assemble with the orz-mdhtml CLI.
 ---
 
-# orz-mdhtml — single-file, self-editing `.md.html`
+# orz-mdhtml — Markdown that edits itself
 
-`orz-mdhtml` turns a Markdown file into **one `.md.html` file** that:
+A document has two forms:
 
-- reads like a normal themed webpage (rendered in an isolated `<iframe>`),
-- can be **edited in the browser** (CodeMirror source + live incremental preview),
-- lets readers **switch themes**, **export a local copy**, and
-  **copy rendered content as Markdown source**,
-- **saves itself**: in place on local files (Chromium File System Access API),
-  or as a download elsewhere.
+- the **text twin** `x.md` — the document itself: Markdown (orz-markdown
+  syntax) with a header block at the top;
+- the **self-editing file** `x.md.html` = `assemble(text)` — one HTML page
+  holding the exact text in a `#orz-src` island plus a regenerable shell (read
+  view, editor, saves, quiet update).
 
-The Markdown source is embedded in the file as the single source of truth
-(`<script type="text/markdown" id="orz-src">`). Saving re-serializes the whole
-document, so the file reproduces itself.
+**Rule: change the text, then assemble. Never edit, restructure or
+"fix" the HTML** — everything but the island is regenerated, and a save in the
+browser rewrites the whole file from the text.
 
-## When to use it
+The CLI is `orz-mdhtml` (Node ≥ 20.16; `npx orz-mdhtml …` needs no install).
+Use `--json` on any command for one machine-readable object on stdout. Exit
+codes: 0 done, 1 refused or failed, 2 usage error. Nothing that could hold
+other work is overwritten unless you pass `--force` — when a command refuses,
+read the error, do not reach for `--force` by reflex.
 
-- A user wants a **single shareable file** (email/USB/served page) that is both
-  readable and editable without any app.
-- **Teaching**: a teacher serves a handout as a web page; students download
-  their own copy to annotate.
-- Prefer plain `.md` when the target is a repo/pipeline; prefer orz-markdown's
-  standalone HTML when no editing is needed; use `.md.html` when in-browser
-  editing or reader annotation matters.
-
-## Generate a file
-
-Node 18+. The CLI is on npm — run it with `npx` (no install), or `npm i -g
-orz-mdhtml`, or `npm run gen --` in a clone:
+## Create a document
 
 ```bash
-npx orz-mdhtml <input.md> [options]
-  -o, --out <file>   output path (default: <input>.md.html)
-  --theme <name>     default theme id (default: light-neat-3)
-  --cdn              reference the renderer from jsDelivr (default; small files)
-  --inline           embed the renderer bundle (larger file, no renderer fetch)
-  --title <text>     document <title>
+npx orz-mdhtml new notes.md --title "Field notes" [--theme light-academic-1] [--measure wide] [--lang en]
+# edit notes.md (the body; header keys below)
+npx orz-mdhtml assemble notes.md          # → notes.md.html (inline engine, ~1 MB, works as a file)
+npx orz-mdhtml assemble notes.md --cdn    # → a small file that loads the engine from jsDelivr (for web pages)
 ```
 
-Default `--cdn` produces small files that fetch the renderer
-(`orz-mdhtml-browser`) from jsDelivr on first open (cached after). Use
-`--inline` only when you want the file to carry its own renderer (~750 KB);
-note even `--inline` still fetches themes and editor libraries from CDN.
+`new` mints the document's `uid`; keep it (it keys the reader's preferences
+and the save handle). `new --html` writes both files at once. `orz-mdhtml
+notes.md` is short for `assemble`. Theme ids: `orz-mdhtml themes`.
 
-Theme ids: `light-neat-1/2/3`, `light-academic-1/2`, `beige-decent-1/2`,
-`light-playful-1/2`, `dark-elegant-1/2/3`.
+## Edit an existing document
 
-### Portable metadata
+1. Have the text twin. If you only have `x.md.html`:
+   `npx orz-mdhtml extract x.md.html` → `x.md` (exact, byte for byte).
+2. Edit `x.md`. Document settings go in the header, not in the HTML and not
+   as CLI options (`assemble` refuses `--title`, `--theme`…).
+3. `npx orz-mdhtml assemble x.md` → `x.md.html`. If it refuses because
+   `x.md.html` changed after `x.md` (someone saved in the browser), extract
+   first and merge — the file holds newer work.
 
-To give a generated file machine-readable authorship, license, canonical source,
-date, description, or keywords, put a leading `{{nyml kind: meta}}` block in the
-Markdown. The builder consumes it and writes standard `<head>` tags plus an
-`#orz-meta` JSON island; those emitted records survive later browser saves and
-framework updates.
+Content syntax (math, `{{mermaid}}`, `{{smiles}}`, `{{chart}}`, `::: ` containers,
+`{{md path}}` includes, …) is orz-markdown's: read its skill,
+`node_modules/orz-markdown/orz-markdown-skills/SKILL.md` or
+`https://cdn.jsdelivr.net/npm/orz-markdown/orz-markdown-skills/SKILL.md`.
+A relative link to another text twin (`[next](week2.md)`) becomes a link to
+its `.md.html` in the file.
+
+## The document header (FC-18)
 
 ```markdown
 {{nyml
-kind: meta
-title: Field Notes
-author: Your Name
+kind: document
+carrier: md
+uid: doc-7kq2m9x4p1r8s3t5
+title: Cell Biology — Week 3
+author: Yu Wang
+lang: en
+theme: light-academic-1
+measure: wide
 license: CC-BY-4.0
-license_url: https://creativecommons.org/licenses/by/4.0/
-source: https://example.org/field-notes
-date: 2026-07-11
 }}
+
+# Cell Biology — Week 3
 ```
 
-Programmatic hosts may pass `metadata` to `buildMdHtml`; host values win field
-by field. Do not duplicate the metadata block after generation: the normalized
-`#orz-meta` island is the generated file's persistent metadata record.
+- `{{nyml` alone on the first line, `kind: document` on the next, `}}` alone
+  on the last. It renders nothing.
+- Keys (md): `carrier` (`md`), `uid` (`doc-` + 10–32 of `[0-9a-z]`; do not
+  invent or change one — `new` mints it), `title`, `author`, `description`,
+  `date`, `keywords` (comma-separated), `source`, `license` /
+  `license_name` / `license_url`, `lang` (BCP 47, default `en`), `theme` (an
+  id from `orz-mdhtml themes`, default `light-neat-3`), `measure` (`normal`,
+  `wide`, `full`; default `normal`), `format` (only `1`; omit it).
+- Your own tool's keys: prefix `x_<tool>_`. Unknown keys are kept.
+- One `key: value` per line; `key: |` then more-indented lines for a
+  multi-line value. A value must not contain `}}`. Edit the header in place —
+  change one line, never rewrite or reorder the block.
+- No `title`? The file's title is the first heading.
+- An old `{{nyml kind: meta}}` block is read as the header and becomes
+  `kind: document` on the first edit.
 
-## Authoring the Markdown
+## Inspect before you act
 
-The source is **orz-markdown** Markdown — standard Markdown plus KaTeX math,
-`{{name body}}` plugins (mermaid, smiles, chart, qrcode, youtube, toc, …),
-`::: name` containers, and `{{attrs[#id .class]}}`. For the full syntax, read the
-orz-markdown skill, shipped at:
-
+```bash
+npx orz-mdhtml inspect x.md.html --json    # also works on a text, a 0.x file, any HTML
 ```
-node_modules/orz-markdown/orz-markdown-skills/SKILL.md
+
+Read `input` (`text`, `assembled`, `legacy`, `html`), `kind`, `format`,
+`writable`, `shell.version` and `shell.relation` (`older` / `same` /
+`newer` than this tool), `uid`, `title`, `header.keys`, `includes`, `lint`,
+and **follow `advice`** — it names the command to run:
+
+- `legacy` (an orz-mdhtml 0.x file) → `upgrade`;
+- an older shell → `upgrade` re-assembles it (text unchanged);
+- a newer shell or a newer text `format` → use `npx orz-mdhtml@latest`; do not
+  re-assemble with an older tool;
+- lint errors → fix the header, then assemble;
+- another kind (`slides`, `paged`) → its own tool (`npx orz-slides`, …).
+
+## Upgrade old files
+
+```bash
+npx orz-mdhtml upgrade old.md.html            # in place, and writes old.md (its text twin)
+npx orz-mdhtml upgrade old.md.html -o new.md.html --text new.md
 ```
 
-You write only the `.md`; do not hand-write the `.md.html`. To change content,
-edit the `.md` and regenerate (or edit in the browser and Save).
+A 0.x file (orz-mdhtml ≤ 0.9.3) keeps its source exactly; its `#orz-meta`
+metadata, saved theme and `<title>` move into the header, and it gets a `uid`.
+The delivery (inline or cdn) is kept unless `--cdn` / `--inline`. A format-1
+file of an older shell is re-assembled with its text and includes unchanged.
+Upgrading twice changes nothing more.
 
-## What the generated file needs at view time
+## Recover the text from any version by hand
 
-"Self-contained" means *one file*, **not** *offline*. **Viewing requires
-internet**: the renderer (`orz-mdhtml-browser` from jsDelivr by default, or
-embedded with `--inline`), theme CSS (jsDelivr `orz-markdown/themes/...`), KaTeX
-CSS, highlight.js, Mermaid, SmilesDrawer, Chart.js, and — only on first edit —
-CodeMirror and morphdom. All are CDN-cached after first load.
+When the CLI is not available, read the `<script type="text/markdown"
+id="orz-src">` element's raw content (`textContent`, or the bytes between the
+tags) and undo its escaping:
 
-## Deploying / sharing
+- **Format 1** (`<script id="orz-shell">` exists, `data-orz-format="1"` on the
+  island): remove **one** backslash after each `<` that is followed by
+  backslashes and then `script` or `/script` (any case); turn the line breaks
+  into the style named by `data-orz-eol` (`lf`, `crlf`, `cr`); prefix U+FEFF
+  when `data-orz-bom` is present. That is the exact text, header included.
+  In code: `extract(html).text` from `orz-markdown/carrier` (or
+  `orz-mdhtml`'s `extract`). `#orz-includes` (JSON) holds includes resolved
+  at assembly; `#orz-meta` and `<head>` are derived from the header.
+- **0.x** (no `#orz-shell`; `<meta name="generator" content="orz-mdhtml">`):
+  replace each `<\/script` (any case) with `</script`; remove the one line
+  break the writer added at the start and the one at the end (the island is
+  `"\n" + source + "\n"`). Metadata is **not** in the island: it is the JSON
+  of `<script id="orz-meta">` (title, author, license, …); the reader's saved
+  theme is `data-theme` on `<html>`. Prefer `orz-mdhtml upgrade`, which does
+  all of this and writes a header.
 
-- **Distribute the file**: send/host the `.md.html`; readers open it in a browser.
-- **Serve it**: any static host works. When served over http(s), readers can't
-  save back to the server — the file detects this and tells them to **Download a
-  local copy** to edit and save. In-place Save only applies to `file://` copies
-  they own.
-- **Editing/Save** needs a Chromium browser (Chrome/Edge); reading, themes,
-  export, and copy-as-markdown work in all modern browsers.
+## In a web app
 
-## Host integration (save + AI)
+The same editor is a component: `npm install orz-mdhtml-browser`, then
+`mountEditor(element, { text, hooks: { save, ai, fetchInclude, … }, nonce })`
+(ES module, or `globalThis.OrzCarrier` from the IIFE). Store the text; call
+`assemble(text)` only when a file is needed. Hooks, the AI review flow and the
+CSP recipe: `docs/embedding.md` in the orz-mdhtml repository
+(`https://github.com/wangyu16/orz-mdhtml/blob/main/docs/embedding.md`).
+Platforms that show assembled files in an iframe use the host protocols
+(orz-markdown `spec/host-protocols.md`).
 
-When a platform embeds the file in an iframe, two independent `postMessage`
-protocols activate after a handshake (nothing changes standalone):
+## What the file does for its reader
 
-- **`orz-host-save@1`** — the file's Save posts to the host instead of the file
-  system.
-- **`orz-host-ai@1`** — if the host advertises AI operations, selecting text
-  shows an *"Improve selection"* assistant; the file sends the passage to the
-  host and applies the returned suggestion. The file owns the UI; the host owns
-  the model.
+Read view with the header's theme; **Edit** (Cmd/Ctrl+E): editor + live
+preview, theme and measure pickers that write the header; **Save**
+(Cmd/Ctrl+S) writes `assemble(text)` back in place in Chromium (File System
+Access) and downloads elsewhere; a served (http) page offers *Download a
+copy*; *New document* and *Save as new copy* (new `uid`) under More; a quiet,
+once-a-day update offer on local files. Reading and editing work in every
+modern browser; themes, math styles, diagram libraries and the editor load
+from CDNs.
 
-Both are specified in [PROTOCOL.md](../PROTOCOL.md). As a file author you don't
-write any of this — it's built into the runtime; just know the file *can* be
-edited with host-provided save + AI.
+## Gotchas
 
-## Gotchas for agents
-
-- Edit the `.md` and regenerate; never restructure the generated HTML by hand —
-  the in-file runtime expects specific element ids (`#orz-src`, `#orz-frame`,
-  `#orz-doc`, etc.).
-- If you post-process the rendered HTML, **preserve `data-md` and
-  `data-src-line` attributes** — they power copy-as-markdown and scroll-sync.
-- The embedded source guards `</script>` as `<\/script>`; read it back via the
-  `#orz-src` element's `textContent` and reverse that escape.
-- Depends on `orz-markdown` (`^1.4.1`); copy-as-markdown needs ≥ 1.2.0, the
-  whole-table/blockquote copy fix landed in ≥ 1.2.1, and explicit image-size
-  rendering is fixed in ≥ 1.3.2. Portable document metadata requires ≥ 1.4.0.
-
-## Security
-
-`.md.html` files are **single-file executable HTML** — opening one runs its
-embedded JavaScript. Treat them like programs: only open or edit files from a
-trusted source, and advise users the same. The one-click framework update is
-opt-in (edit view only, explicit confirm) and always fetches from the hardcoded
-canonical jsDelivr packages — a tampered file can't redirect it. A file's
-integrity can't be verified from inside it; for authenticity, verify out-of-band.
-See the README "Security" section.
+- Do not edit `x.md.html` by hand, and never serialize a live page: the text
+  is the document.
+- The CLI does not resolve `{{md path}}` / URL includes into the file; a file
+  shows only includes stored in its `#orz-includes` (library callers pass
+  `assemble(text, { includes })`; `upgrade` keeps a file's own).
+- Keep the `uid` across revisions of a document. A different document needs
+  its own: start it with `new` (or the file's *Save as new copy*), never by
+  copying another text's header with its `uid`.
+- Package: `orz-mdhtml` depends on `orz-markdown ^2.2.0` (the carrier kit);
+  files record the shell version that wrote them.
+- Security: a `.md.html` runs the code inside it — treat files like programs
+  and open only trusted ones.

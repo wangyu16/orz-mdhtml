@@ -71,13 +71,26 @@ export interface EditorOptions {
   chrome?: 'full' | 'compact' | 'none';
   hooks?: EditorHooks;
   preferences?: PreferenceStore;
-  /** orz-mdhtml extension: CSP nonce for the preview frame and CodeMirror (FC-19 §8.4). */
+  /** FC-19 §3 `nonce`: your CSP nonce, stamped on the preview frame's and CodeMirror's scripts and styles (FC-19 §8.4). */
   nonce?: string;
 }
 
 export type SaveVia = 'hook' | 'host' | 'file' | 'download';
 export type SaveOutcome = { ok: true; via: SaveVia } | { ok: false; via?: SaveVia | 'served-notice'; error: string; cancelled?: boolean };
 export type AiOutcome = { ok: true; op: string } | { ok: false; error: string };
+/** An AI proposal awaiting the reader's review (`proposeAi`); only the editor that made it can apply it (`applyAi`). */
+export interface AiProposal {
+  readonly op: string;
+  /** The replacement the hook proposed. */
+  readonly proposed: string;
+  /** What it replaces: offsets in the text at the time of the request (the selection, or the whole text). */
+  readonly range: Readonly<TextRange>;
+  /** The exact text in `range` when the request was made. */
+  readonly original: string;
+  /** A passage (selection) operation; else the proposal replaces the whole document. */
+  readonly passage: boolean;
+}
+export type AiProposalOutcome = { ok: true; op: string; proposal: AiProposal } | { ok: false; error: string };
 export type UploadOutcome = { ok: true; inserted: string[] } | { ok: false; inserted: string[]; error: string };
 
 export interface EditorEvents {
@@ -102,7 +115,12 @@ export interface Editor {
   focus(): void;
   on<E extends keyof EditorEvents>(event: E, fn: (e: EditorEvents[E]) => void): () => void;
   destroy(): void;
+  /** Run an AI operation and apply its proposal at once (one undoable edit). */
   requestAi(op: string, options?: { selection?: boolean }): Promise<AiOutcome>;
+  /** Run an AI operation and return its proposal without touching the text (the review flow). */
+  proposeAi(op: string, options?: { selection?: boolean }): Promise<AiProposalOutcome>;
+  /** Apply a reviewed proposal (optionally edited: `proposed`) as one undoable edit; refused if the text changed meanwhile. */
+  applyAi(proposal: AiProposal, options?: { proposed?: string }): AiOutcome;
   uploadAssets(files: ArrayLike<File>): Promise<UploadOutcome>;
   ensureUid(): Promise<string>;
   setReadOnly(readOnly: boolean): void;

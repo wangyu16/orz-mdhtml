@@ -78,15 +78,11 @@ export function readViewMarkup(p: Presentation): string {
 }
 
 /**
- * The editor preview frame's extra `<head>` (FC-19 §8.4 `preview.head`): the
- * theme stylesheet and, for a non-normal measure, the theme token that sets the
- * article's measure (the frame's article class is fixed when the frame is
- * built, so the measure travels in the head, which `preview.setOptions` can
- * rebuild — a kit gap, reported with rebuild step 3).
+ * The editor preview frame's presentation (FC-19 §8.4 `preview.head`,
+ * `scheme`, `articleClass`; the kit's `followPresentation` rebuilds the frame
+ * when it changes): the theme stylesheet in the head, the theme's colour
+ * scheme, and the measure's article class.
  */
-export function previewHead(p: Presentation): string {
-  const link = `<link rel="stylesheet" href="${attr(themeHref(p.theme.id))}">`;
-  if (p.measure === 'normal') return link;
-  const width = p.measure === 'full' ? 'none' : 'var(--orz-measure-wide, min(100%, 64rem))';
-  return `${link}<style>html:root{--markdown-body-max-width:${width}}</style>`;
+export function previewPresentation(p: Presentation): { head: string; scheme: 'light' | 'dark'; articleClass: string } {
+  return { head: `<link rel="stylesheet" href="${attr(themeHref(p.theme.id))}">`, scheme: p.theme.scheme, articleClass: articleClass(p.measure) };
 }

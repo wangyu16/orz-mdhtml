@@ -1,7 +1,7 @@
 /**
  * upgrade: legacy 0.x files to text format 1 (claims U.1–U.5), on the real
- * legacy files (examples/, tests/fixtures/legacy/ — copies of the local out/
- * files) and on synthetic ones made from them by replacing the island or the
+ * legacy files (tests/fixtures/legacy/ — the 0.8 example and copies of the
+ * local out/ files) and on synthetic ones made from them by replacing the island or the
  * markers the 0.x way (no dependency on the old src/template.ts).
  */
 import { describe, it, expect } from 'vitest';
@@ -13,7 +13,7 @@ import { assemble, extract, readDocument, newDocument } from '../src/assemble.js
 import { ENGINE, LEGACY_FILES, HAZARDS, read, legacySourceOf, withLegacySource } from './helpers.js';
 
 const UID = 'doc-upgraded0000001';
-const META_HTML = read(LEGACY_FILES['examples/metadata.md.html']);
+const META_HTML = read(LEGACY_FILES['fixtures/metadata.md.html']);
 const SAMPLE_HTML = read(LEGACY_FILES['fixtures/sample.md.html']);
 
 /** The upgraded text is a header, then (after only whitespace) exactly the legacy source's body. */
@@ -40,7 +40,7 @@ describe('upgrade on the real legacy files', () => {
       expectSourceKept(u.text, source);
     }
     // where the original text is at hand, it is that text's body byte for byte
-    const metaMd = read('examples/metadata.md');
+    const metaMd = read('tests/fixtures/legacy/metadata.md');
     expect(legacySourceOf(META_HTML)).toBe(extractDocMeta(metaMd).body);
     expect(withoutHeader(upgrade(META_HTML, { delivery: 'cdn', uid: UID }).text).body).toBe(withoutHeader(metaMd).body);
     const sampleMd = read('tests/fixtures/legacy/sample.md');
@@ -51,8 +51,8 @@ describe('upgrade on the real legacy files', () => {
     const u = upgrade(META_HTML, { delivery: 'cdn', uid: UID });
     const h = readHeader(u.text)!;
     expect(h.keys).toEqual(['carrier', 'uid', 'title', 'author', 'description', 'date', 'keywords', 'source', 'license', 'license_name', 'license_url']);
-    // the same values as the original kind: meta block of examples/metadata.md
-    const original = readHeader(read('examples/metadata.md'))!;
+    // the same values as the original kind: meta block of tests/fixtures/legacy/metadata.md
+    const original = readHeader(read('tests/fixtures/legacy/metadata.md'))!;
     for (const k of original.keys) expect(h.fields[k], k).toBe(original.fields[k]);
     expect(h.fields['carrier']).toBe('md');
     expect(h.fields['uid']).toBe(UID);

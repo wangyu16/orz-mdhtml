@@ -5,29 +5,41 @@
  * `renderPreview`.
  *
  * KIND-SPECIFIC (md): `mountEditor` wraps the kit's `createEditorShell`
- * (orz-markdown `carrier/editor`, FC-19 §8) with the md renderer, the md
- * theme and measure in the preview head, and the md settings (theme, measure)
- * in the toolbar slot; `assemble` is the isomorphic assembler of
+ * (orz-markdown `carrier/editor`, FC-19 §8) with the md renderer, the
+ * header's theme and measure in the preview (`followPresentation`), and the
+ * md settings (theme, measure) in the toolbar (`attachSettings`, orz-markdown
+ * `carrier/app`); `assemble` is the isomorphic assembler of
  * src/assemble.ts — the same function the Node library runs, so Node and the
  * browser write the same bytes (FC-18 law 2).
  */
 import { extract as kitExtract, readDocument as kitReadDocument, type DocumentInfo, type Extracted, type HeaderChange } from 'orz-markdown/carrier';
-import { codemirror6Adapter, createEditorShell, type EditorHooks, type EditorShell } from 'orz-markdown/carrier/editor';
+import { attachAiMenu, attachSettings, captureEngineSource, followPresentation, type EngineSource, type StandaloneContext } from 'orz-markdown/carrier/app';
+import { createEditorShell, renderMarkdownPreviewWithIncludes, type EditorHooks, type EditorShell } from 'orz-markdown/carrier/editor';
 import type { PreferenceStore } from 'orz-markdown/carrier/shell';
-import type { StandaloneContext } from './standalone/types.js';
 import { assemble as assembleSync, cdnBundleUrl, FORMATS, type AssembleOptions } from '../assemble.js';
-import { presentationOf, previewHead, articleClass, shellHead, type Presentation } from '../presentation.js';
+import { presentationOf, previewPresentation, articleClass, shellHead } from '../presentation.js';
 import { VERSION } from '../version.js';
-import { engineSource, inlineEngineSource } from './engine-source.js';
 import { renderMd } from './md/render.js';
 import { MD_SETTINGS } from './md/settings.js';
-import { installCss, menuButton, reviewProposal, settingPicker, WIDGET_CSS, type AiOp, type MenuButton, type SettingControl } from './ui/widgets.js';
 
 export const kind = 'md' as const;
 export const version: string = VERSION;
 export const formats: number[] = [...FORMATS];
 
 export type { DocumentInfo, Extracted, HeaderChange, EditorHooks, PreferenceStore };
+
+/**
+ * The engine an inline assembly writes when no `engineSource` is given. The
+ * IIFE entry sets the bundle's own captured script (`captureEngineSource()`,
+ * synchronously at its start); the ESM build captures nothing (an app's own
+ * script is not the engine), so it fetches this release's IIFE from jsDelivr.
+ */
+let engine: Pick<EngineSource, 'inline' | 'get'> = captureEngineSource({ currentScript: null });
+
+/** Use a captured engine source (the IIFE entry). */
+export function useEngineSource(e: Pick<EngineSource, 'inline' | 'get'>): void {
+  engine = e;
+}
 
 /**
  * Assemble the `.md.html` file of a text (FC-19 §2, FC-18 §8): the same bytes
@@ -40,8 +52,8 @@ export type { DocumentInfo, Extracted, HeaderChange, EditorHooks, PreferenceStor
 export function assemble(text: string, options: AssembleOptions = {}): Promise<string> {
   try {
     if ((options.delivery ?? 'inline') === 'inline' && options.engineSource === undefined) {
-      const own = inlineEngineSource();
-      if (own === null) return engineSource(cdnBundleUrl()).then((src) => assembleSync(text, { ...options, engineSource: src }));
+      const own = engine.inline;
+      if (own === null) return engine.get(cdnBundleUrl()).then((src) => assembleSync(text, { ...options, engineSource: src }));
       return Promise.resolve(assembleSync(text, { ...options, engineSource: own }));
     }
     return Promise.resolve(assembleSync(text, options));
@@ -97,7 +109,7 @@ export async function renderPreview(text: string, options: RenderPreviewOptions 
 
 // ── mountEditor ─────────────────────────────────────────────────────────────
 
-/** FC-19 §3 `EditorOptions`, plus orz-mdhtml's additive `nonce`. */
+/** FC-19 §3 `EditorOptions` (the kit's `KindEditorOptions`, kind `md`). */
 export interface EditorOptions {
   /** The document (FC-18), exact. */
   text: string;
@@ -111,9 +123,9 @@ export interface EditorOptions {
   /** Reader preferences (FC-18 §6); default: localStorage, namespaced by the header uid. */
   preferences?: PreferenceStore;
   /**
-   * orz-mdhtml extension (additive; FC-19 §8.4 CSP recipe): a CSP nonce
-   * stamped on the preview frame's scripts and styles and on CodeMirror's
-   * `<script>` / `<style>`. Needed under a nonce-based `script-src`.
+   * FC-19 §3 `nonce` (FC-19 §8.4 CSP recipe): a CSP nonce stamped on the
+   * preview frame's scripts and styles and on CodeMirror's script and
+   * style elements. Needed under a nonce-based `script-src`.
    */
   nonce?: string;
 }
@@ -121,78 +133,43 @@ export interface EditorOptions {
 /** The Editor of FC-19 §4 (the kit's editor shell, which implements it). */
 export type Editor = EditorShell;
 
-/** Internal handles of a mounted md editor (the standalone startup uses them). */
-export interface MdEditorInternals {
-  /** Re-read the AI operations (a host's AI hello arrived after mount). */
-  refreshTools(): void;
-}
-
-const internals = new WeakMap<object, MdEditorInternals>();
-
-/** The internals of an editor this module mounted. */
-export function editorInternals(editor: object): MdEditorInternals | undefined {
-  return internals.get(editor);
-}
-
-const debounce = (win: Window, fn: () => void, ms: number): { run(): void; cancel(): void } => {
-  let t: number | null = null;
-  return {
-    run() { if (t !== null) win.clearTimeout(t); t = win.setTimeout(() => { t = null; fn(); }, ms); },
-    cancel() { if (t !== null) win.clearTimeout(t); t = null; },
-  };
-};
-
 /**
  * Mount the md editor (FC-19 §3–4) in `element`: the kit's editor shell with
- * the md preview renderer, the header's theme and measure in the preview (they
- * follow header edits), and the md settings and AI operations in its toolbar.
+ * the md preview renderer (`renderMarkdownPreviewWithIncludes`), the header's
+ * theme and measure in the preview (they follow header edits), and the md
+ * settings in its toolbar (spec/carrier-app.md §3.2).
  *
  * With `hooks.save` the app owns persistence (FC-19 §8.5 app host). Without it
- * the standalone save runs: in an assembled file through the file's own saver,
- * host connection, delivery and includes; elsewhere an inline assembly through
- * the File System Access picker or a download.
+ * the standalone save runs: on an assembled file (`ctx`, given by the kit's
+ * app) through the file's own saver, host connection, delivery and includes;
+ * elsewhere an inline assembly through the File System Access picker or a
+ * download.
  */
 export function mountEditor(element: HTMLElement, options: EditorOptions, standalone?: StandaloneContext): Editor {
   if (!element || typeof element !== 'object') throw new TypeError('orz-mdhtml: mountEditor needs an element');
   if (!options || typeof options.text !== 'string') throw new TypeError('orz-mdhtml: options.text must be a string');
-  const doc = element.ownerDocument;
-  const win = doc.defaultView!;
   const appHooks: EditorHooks = options.hooks ?? {};
   const isApp = typeof appHooks.save === 'function';
   const ctx = isApp ? undefined : standalone;
 
-  // the AI hook: the app's, or the file's host; requests started from the toolbar menu are reviewed before they apply
-  const innerAi = appHooks.ai ?? ctx?.ai;
-  let reviewing: { root: ShadowRoot; title: string } | null = null;
-  const ai: EditorHooks['ai'] | undefined = innerAi && {
-    get operations() { return innerAi.operations; },
-    async request(op, c) {
-      const review = reviewing;
-      reviewing = null;
-      const r = await innerAi.request(op, c);
-      if (!review) return r;
-      const applied = await reviewProposal(review.root, r.proposed, { passage: !!c.selection, title: review.title });
-      if (applied === null) throw new Error('cancelled');
-      return { proposed: applied };
-    },
-  };
+  // the AI hook: the app's, or the file's host (the kit's app then adds the AI menu itself)
+  const ai = appHooks.ai ?? ctx?.ai;
   const fetchInclude = appHooks.fetchInclude ?? ctx?.fetchInclude;
   const hooks: EditorHooks = { ...appHooks, ...(ai ? { ai } : {}), ...(fetchInclude ? { fetchInclude } : {}) };
-
-  let presented: Presentation = presentationOf(options.text);
-  const includes = ctx?.includes;
-  const adapter = ctx?.adapter ?? (options.nonce ? codemirror6Adapter({ nonce: options.nonce }) : undefined);
+  const preferences = options.preferences ?? ctx?.preferences;
+  const present = (text: string) => previewPresentation(presentationOf(text));
 
   const shell = createEditorShell(element as never, {
     text: options.text,
-    render: (t, rctx) => renderMd(t, { ...rctx, ...(includes ? { includes } : {}) }),
+    render: renderMarkdownPreviewWithIncludes,
     kind: 'md',
     formats: [...FORMATS],
     ...(options.mode ? { mode: options.mode } : {}),
     ...(options.readOnly ? { readOnly: true } : {}),
     ...(options.chrome ? { chrome: options.chrome } : {}),
-    ...(options.preferences ? { preferences: options.preferences } : {}),
-    ...(adapter ? { adapter } : {}),
+    ...(preferences ? { preferences } : {}),
+    ...(options.nonce ? { nonce: options.nonce } : {}),
+    ...(ctx?.adapter ? { adapter: ctx.adapter } : {}),
     hooks,
     ...(isApp ? {} : ctx ? {
       assemble: ctx.assemble,
@@ -206,69 +183,24 @@ export function mountEditor(element: HTMLElement, options: EditorOptions, standa
       // no hooks.save and no file: an inline file of the text, through the picker or a download
       assemble: (t: string, o?: { includes?: Record<string, string> }) => assemble(t, { ...(o?.includes ? { includes: o.includes } : {}) }),
     }),
-    preview: {
-      head: previewHead(presented),
-      scheme: presented.theme.scheme,
-      ...(options.nonce ? { nonce: options.nonce } : {}),
-    },
+    preview: present(options.text),
   });
 
-  // ── the carrier's tools in the toolbar slot (FC-19 §1: the same tools for every host) ──
-  const pickers: MenuButton[] = [];
-  let aiButton: MenuButton | null = null;
-  const toolbar = shell.toolbar as unknown as HTMLElement | null;
-  const root = shell.root as unknown as ShadowRoot;
-  if (toolbar) {
-    installCss(root, WIDGET_CSS);
-    const compact = options.chrome === 'compact';
-    for (const control of MD_SETTINGS as SettingControl[]) {
-      const p = settingPicker(doc, control, () => shell.getText(), (key, value) => {
-        try { shell.setHeader({ [key]: value }); } catch { /* the header refuses: nothing changed */ }
-      }, { iconOnly: compact });
-      pickers.push(p);
-      toolbar.append(p.element);
-    }
-  }
-  const aiOps = (): AiOp[] => (ai ? (Array.isArray(ai.operations) ? ai.operations : []) : []);
-  const refreshTools = (): void => {
-    if (!toolbar) return;
-    const ops = aiOps();
-    if (ops.length === 0) { aiButton?.destroy(); aiButton = null; return; }
-    if (aiButton) return;
-    aiButton = menuButton(doc, {
-      label: 'AI',
-      icon: 'info',
-      heading: 'AI',
-      items: () => aiOps().map((op) => ({
-        label: op.title,
-        run: () => {
-          reviewing = { root, title: op.title };
-          void shell.requestAi(op.id, op.selection ? { selection: true } : {}).finally(() => { reviewing = null; });
-        },
-      })),
-    });
-    toolbar.append(aiButton.element);
-  };
-  refreshTools();
-
-  // ── the preview follows the header's theme and measure ──
-  const follow = debounce(win, () => {
-    const p = presentationOf(shell.getText());
-    if (p.theme.id === presented.theme.id && p.measure === presented.measure) return;
-    presented = p;
-    shell.preview.setOptions({ head: previewHead(p), scheme: p.theme.scheme });
-  }, 200);
-  const offChange = shell.on('change', () => follow.run());
+  // the carrier's tools in the toolbar (FC-19 §1: the same tools for every host)
+  const iconOnly = options.chrome === 'compact';
+  const settings = attachSettings(shell, MD_SETTINGS, { iconOnly });
+  const appAi = appHooks.ai;
+  const aiMenu = !ctx && appAi ? attachAiMenu(shell, { operations: () => (Array.isArray(appAi.operations) ? appAi.operations : []), iconOnly }) : null;
+  // the preview follows the header's theme and measure
+  const unfollow = followPresentation(shell, present);
 
   const destroy = shell.destroy.bind(shell);
   shell.destroy = () => {
-    follow.cancel();
-    offChange();
-    for (const p of pickers) p.destroy();
-    aiButton?.destroy();
+    unfollow();
+    settings.destroy();
+    aiMenu?.destroy();
     destroy();
   };
-  internals.set(shell, { refreshTools });
   return shell;
 }
 

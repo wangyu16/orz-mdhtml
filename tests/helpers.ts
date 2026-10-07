@@ -49,9 +49,9 @@ export const HAZARDS: Readonly<Record<string, string>> = {
 /** A script-safe engine stand-in for inline assembly (the real bundle comes in rebuild step 3). */
 export const ENGINE = 'window.__orzEngineStandIn=(window.__orzEngineStandIn||0)+1;';
 
-/** Legacy 0.x files: the tracked example and the fixtures copied from the local out/ folder. */
+/** Legacy 0.x files: the 0.8 example (metadata.md and its file) and the fixtures copied from the local out/ folder. */
 export const LEGACY_FILES: Readonly<Record<string, string>> = {
-  'examples/metadata.md.html': 'examples/metadata.md.html',
+  'fixtures/metadata.md.html': 'tests/fixtures/legacy/metadata.md.html',
   'fixtures/sample.md.html': 'tests/fixtures/legacy/sample.md.html',
   'fixtures/example.md.html': 'tests/fixtures/legacy/example.md.html',
 };

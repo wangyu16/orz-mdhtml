@@ -6,8 +6,9 @@
  */
 import { describe, it, expect, afterAll } from 'vitest';
 import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { escapeScriptText } from 'orz-markdown/carrier/read';
+import { renderMarkdownPreviewWithIncludes } from 'orz-markdown/carrier/editor';
 import { isScriptSafe, parseManifest, sandboxDocument } from 'orz-markdown/carrier/shell';
 import { assemble, extract, readDocument, type AssembleOptions } from '../src/assemble.js';
 import { VERSION } from '../src/version.js';
@@ -44,6 +45,27 @@ describe('the bundle and its package (Node)', () => {
     const src = readFileSync('build/bundle.ts', 'utf8');
     expect(src.indexOf('checkBundleRule(iife')).toBeGreaterThan(src.indexOf('scriptSafe(iifeOut'));
     expect(src.indexOf('sri(iife)')).toBeGreaterThan(src.indexOf('checkBundleRule(iife'));
+  });
+
+  it('[L.1] the standalone startup is the kit\'s carrier/app: the entry captures its engine source, then startCarrier(MD_KIND); no copy of the app here; MD_KIND is the md side of the seam', () => {
+    for (const gone of ['src/browser/standalone', 'src/browser/ui', 'src/browser/engine-source.ts', 'tests/seam.test.ts']) expect(existsSync(gone), gone).toBe(false);
+    const entry = readFileSync('src/browser/index.ts', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(entry).toMatch(/from 'orz-markdown\/carrier\/app'/);
+    expect(entry.indexOf('captureEngineSource()')).toBeGreaterThan(0);
+    expect(entry.indexOf('startCarrier(MD_KIND)')).toBeGreaterThan(entry.indexOf('captureEngineSource()'));
+    const kind = readFileSync('src/browser/md/kind.ts', 'utf8');
+    for (const member of ['readDocument', 'renderPreview', 'extract', 'createReadView', 'settings: MD_SETTINGS']) expect(kind, member).toContain(member);
+    expect(kind).not.toMatch(/refreshEditorTools|editorInternals/);
+    // the md editor uses the kit's widgets and renderer, no local copies
+    const carrier = readFileSync('src/browser/carrier.ts', 'utf8');
+    for (const k of ['attachSettings(shell, MD_SETTINGS', 'followPresentation(shell', 'render: renderMarkdownPreviewWithIncludes,']) expect(carrier, k).toContain(k);
+    expect(carrier).not.toMatch(/reviewProposal|menuButton|<style>/);
+  });
+
+  it('[L.2] the kit resolves the URL includes of a text with a file include when no include record is given (orz-markdown 14cc3bc; the local workaround is gone)', async () => {
+    const text = '# H\n\n{{md parts/a.md}}\n\n{{md https://example.test/b.md}}\n';
+    const fetchInclude = async (u: string): Promise<string | null> => (u === 'https://example.test/b.md' ? 'APP-INCLUDED\n' : null);
+    expect(await renderMarkdownPreviewWithIncludes(text, { fetchInclude })).toContain('APP-INCLUDED');
   });
 
   it('[W.2] one KaTeX in the bundle (katex and katex/contrib/mhchem resolve to one build)', () => {
@@ -186,9 +208,9 @@ chrome('real Chrome (playwright-core, channel chrome)', () => {
     const inline = assemble(text.text, { engineSource: b.iife, includes: text.includes });
     expect(out[0].html === inline).toBe(true);
     expect(out[2].html === assemble(text.text, { delivery: 'cdn' })).toBe(true);
-    // without engineSource the bundle inlines its own script text (the sandbox writes it with a final line break)
+    // without engineSource the bundle inlines its own script text: the sandbox holds exactly the verified bytes, so the file is the Node one
     expect(extract(out[1].html!)).toMatchObject({ text: text.text, shell: VERSION, delivery: 'inline', includes: text.includes });
-    expect(out[1].html!).toContain(b.iife);
+    expect(out[1].html === inline).toBe(true);
     expect(out.every((r) => r.version === VERSION)).toBe(true);
     await ctx.close();
   });

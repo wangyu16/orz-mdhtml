@@ -1,11 +1,12 @@
 /**
- * KIND-SPECIFIC (md): the header settings the chrome offers — `theme` (the
- * 12 orz-markdown themes) and `measure` (normal / wide / full), FC-18 §5.1.
- * Document data (owner decision 4): choosing writes the header.
+ * KIND-SPECIFIC (md): the header settings the chrome and the editor's toolbar
+ * offer — `theme` (the kit's bundled themes) and `measure` (normal / wide /
+ * full), FC-18 §5.1. Document data (owner decision 4): choosing writes the
+ * header.
  */
+import type { SettingControl } from 'orz-markdown/carrier/app';
 import { THEMES } from '../../themes.js';
 import { MEASURES, MEASURE_LABELS, presentationOf } from '../../presentation.js';
-import type { SettingControl } from '../ui/widgets.js';
 
 /** A swatch colour per scheme (the chrome cannot read a theme's colours without loading it). */
 const SWATCH = { light: 'oklch(97% 0.01 100)', dark: 'oklch(28% 0.02 260)' } as const;
@@ -21,7 +22,7 @@ export const MD_SETTINGS: readonly SettingControl[] = Object.freeze([
   {
     key: 'measure',
     label: 'Measure',
-    icon: 'split',
+    icon: 'measure',
     choices: MEASURES.map((m) => ({ value: m, label: MEASURE_LABELS[m] })),
     current: (text: string) => presentationOf(text).measure,
   },
