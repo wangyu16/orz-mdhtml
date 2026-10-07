@@ -9,59 +9,37 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
 import { randomUUID } from 'node:crypto';
 import { getBrowserRuntimeScript } from 'orz-markdown/runtime';
 import { PREVIEW_CDN } from 'orz-markdown/preview-frame';
+import { VERSION as ORZ_MARKDOWN_VERSION } from 'orz-markdown/version';
 import { buildHtml, type ThemeEntry } from './template.js';
 import { extractDocMeta, mergeDocMeta, renderDocMetaHead, renderDocMetaIsland, type DocMeta } from 'orz-markdown/doc-meta';
+import { THEMES, DEFAULT_THEME } from './themes.js';
+import { VERSION } from './version.js';
 
-/** orz-markdown's bundled themes (CDN-loaded), with light/dark scheme. */
-// Same set, names, and order as the orz-markdown PWA editor's theme menu.
-const THEME_DEFS: Array<Omit<ThemeEntry, 'href'>> = [
-  { id: 'light-neat-3', name: 'Orchard', scheme: 'light' },
-  { id: 'light-neat-1', name: 'Neat', scheme: 'light' },
-  { id: 'light-neat-2', name: 'Neat 2', scheme: 'light' },
-  { id: 'light-academic-1', name: 'Academic', scheme: 'light' },
-  { id: 'light-academic-2', name: 'Academic 2', scheme: 'light' },
-  { id: 'beige-decent-1', name: 'Beige', scheme: 'light' },
-  { id: 'beige-decent-2', name: 'Beige 2', scheme: 'light' },
-  { id: 'light-playful-1', name: 'Playful', scheme: 'light' },
-  { id: 'light-playful-2', name: 'Playful 2', scheme: 'light' },
-  { id: 'dark-elegant-1', name: 'Dark Elegant', scheme: 'dark' },
-  { id: 'dark-elegant-2', name: 'Dark Elegant 2', scheme: 'dark' },
-  { id: 'dark-elegant-3', name: 'Nocturne', scheme: 'dark' },
-];
+// The 1.0 format-1 API (isomorphic; FC-18). The 0.9 composition below is the
+// old runtime path, replaced in rebuild steps 3–5.
+export { assemble, extract, readDocument, newDocument, cdnBundleUrl, BUNDLE_FILE, type AssembleOptions, type NewDocumentOptions } from './assemble.js';
+export { inspect, type InspectReport } from './inspect.js';
+export { upgrade, readLegacy, type LegacyFile, type UpgradeResult } from './legacy.js';
+export { THEMES, DEFAULT_THEME, isThemeId, type ThemeInfo } from './themes.js';
+export { VERSION } from './version.js';
 
 const CDN = {
   cm: 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16',
 };
 
-/** The default theme when none is specified or an unknown one is requested. */
-export const DEFAULT_THEME = 'light-neat-3';
-
-const require = createRequire(import.meta.url);
-
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-/** orz-markdown's `exports` hides ./package.json, so find it by walking up. */
+/** The orz-markdown version (for theme CDN URLs). */
 export function orzVersionOf(): string {
-  let dir = dirname(require.resolve('orz-markdown'));
-  while (!existsSync(join(dir, 'package.json'))) dir = dirname(dir);
-  return (JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { version: string }).version;
+  return ORZ_MARKDOWN_VERSION;
 }
 
 /** orz-mdhtml's own version — pins the renderer bundle + version check. */
 export function selfVersionOf(): string {
-  for (const p of [join(HERE, '..', 'package.json'), join(HERE, '..', '..', 'package.json')]) {
-    try {
-      const j = JSON.parse(readFileSync(p, 'utf8')) as { name?: string; version?: string };
-      if (j.name === 'orz-mdhtml' && j.version) return j.version;
-    } catch {
-      /* keep looking */
-    }
-  }
-  return '0.0.0';
+  return VERSION;
 }
 
 // assets/ sits next to dist/ when published, and next to src/ in dev.
@@ -124,7 +102,7 @@ export function composeInlineMdHtml(opts: ComposeOptions): string {
   const appJs = readFileSync(findAsset('app.js'), 'utf8');
 
   const themeBase = `https://cdn.jsdelivr.net/npm/orz-markdown@${orzVersion}/themes`;
-  const themes: ThemeEntry[] = THEME_DEFS.map((t) => ({ ...t, href: `${themeBase}/${t.id}.css` }));
+  const themes: ThemeEntry[] = THEMES.map((t) => ({ ...t, href: `${themeBase}/${t.id}.css` }));
   const defaultTheme = themes.some((t) => t.id === opts.theme) ? opts.theme : themes[0].id;
 
   const renderer: Parameters<typeof buildHtml>[0]['renderer'] =

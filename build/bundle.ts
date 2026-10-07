@@ -5,38 +5,19 @@
  * This artifact is what makes client-side re-rendering (edit mode) possible.
  * It is either inlined into each .md.html (`--inline`) or published to npm as
  * `orz-mdhtml-browser` and served from jsDelivr (`--cdn`, Delivery C).
+ *
+ * orz-markdown ≥ 2 is browser-clean (no `fs`, `path` or `process` at import),
+ * so no shims or aliases are needed (rebuild step 1; D-40, D-44, D-45).
  */
 import { build } from 'esbuild';
-import { createRequire } from 'node:module';
-import { mkdirSync, existsSync, readFileSync, copyFileSync } from 'node:fs';
+import { mkdirSync, copyFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { VERSION as ORZ_MARKDOWN_VERSION } from 'orz-markdown/version';
 
-const require = createRequire(import.meta.url);
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-/** orz-markdown's `exports` hides ./package.json, so find it by walking up. */
-function orzPackageJson(): { version: string } {
-  let dir = dirname(require.resolve('orz-markdown'));
-  while (!existsSync(join(dir, 'package.json'))) dir = dirname(dir);
-  return JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));
-}
-const orzPkg = orzPackageJson();
-
 mkdirSync('dist', { recursive: true });
-
-/** Redirect markdown-it-imsize's fs/dynamic-require image reader to a stub. */
-const stubImsizeFsReader = {
-  name: 'stub-imsize-fs-reader',
-  setup(b: import('esbuild').PluginBuild) {
-    b.onResolve({ filter: /(^|[\\/])imsize$/ }, (args) => {
-      if (args.importer.includes('markdown-it-imsize')) {
-        return { path: join(HERE, 'shims', 'imsize.cjs') };
-      }
-      return undefined;
-    });
-  },
-};
 
 await build({
   entryPoints: ['src/browser-entry.ts'],
@@ -47,19 +28,8 @@ await build({
   outfile: 'dist/orzmd.browser.js',
   minify: true,
   sourcemap: false,
-  plugins: [stubImsizeFsReader],
-  // Filesystem-only features (includes, disk image sizing) don't apply in the
-  // browser: give `path` a real browser impl and `fs` a graceful stub.
-  alias: {
-    fs: join(HERE, 'shims', 'fs.cjs'),
-    path: 'path-browserify',
-  },
-  // Provide a harmless `process` global (markdown-include's cwd fallback, etc.).
-  inject: [join(HERE, 'shims', 'process.js')],
   define: {
-    __ORZMD_VERSION__: JSON.stringify(orzPkg.version),
-    // node-emoji / some deps occasionally branch on process.env.
-    'process.env.NODE_ENV': '"production"',
+    __ORZMD_VERSION__: JSON.stringify(ORZ_MARKDOWN_VERSION),
   },
   logLevel: 'info',
 });
@@ -69,4 +39,4 @@ const browserPkgDir = join(HERE, '..', 'browser');
 mkdirSync(browserPkgDir, { recursive: true });
 copyFileSync(join('dist', 'orzmd.browser.js'), join(browserPkgDir, 'orzmd.browser.js'));
 
-console.log(`Bundled orz-markdown@${orzPkg.version} → dist/orzmd.browser.js (+ browser/)`);
+console.log(`Bundled orz-markdown@${ORZ_MARKDOWN_VERSION} → dist/orzmd.browser.js (+ browser/)`);

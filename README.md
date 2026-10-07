@@ -160,9 +160,8 @@ morphdom; editor↔preview scroll-sync maps CodeMirror lines to `data-src-line`
 anchors (toggleable). Save is *self-reproducing*: it serializes the outer
 document with the latest embedded source.
 
-Depends on `orz-markdown` (`^1.4.1`); copy-as-markdown needs ≥ 1.2.0, the
-whole-table/blockquote copy fix landed in ≥ 1.2.1, and explicit image-size
-rendering is fixed in ≥ 1.3.2. Portable document metadata requires ≥ 1.4.0.
+Depends on `orz-markdown` (`^2.1.0`, which includes the carrier kit the 1.0
+rebuild is built on).
 
 ## Roadmap
 

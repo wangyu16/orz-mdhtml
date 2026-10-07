@@ -25,7 +25,7 @@ document's runtime, running in an iframe).
 | Type | Direction | Payload |
 |---|---|---|
 | `orz-host-hello` | host → file | `{ type, protocol: "orz-host-save", version: 1 }` |
-| `orz-host-ready` | file → host | `{ type, protocol: "orz-host-save", version: 1, kind: "md" \| "slides" \| "paged" }` |
+| `orz-host-ready` | file → host | `{ type, protocol: "orz-host-save", version: 1, kind: "md" \| "slides" \| "paged" \| "poster" }` |
 | `orz-host-save` | file → host | `{ type, protocol: "orz-host-save", version: 1, source, html, theme? }` |
 | `orz-host-saved` | host → file | `{ type, ok: true }` or `{ type, ok: false, error: string }` |
 | `orz-host-dirty` | file → host | `{ type, protocol: "orz-host-save", version: 1, dirty: boolean }` |

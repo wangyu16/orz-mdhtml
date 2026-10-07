@@ -15,25 +15,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename, extname, dirname, resolve, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import {
-  DEFAULT_THEME,
-  composeInlineMdHtml,
-} from './lib.js';
+import { composeInlineMdHtml } from './lib.js';
+import { DEFAULT_THEME, isThemeId } from './themes.js';
 
-const THEME_IDS = new Set([
-  'light-neat-3',
-  'light-neat-1',
-  'light-neat-2',
-  'light-academic-1',
-  'light-academic-2',
-  'beige-decent-1',
-  'beige-decent-2',
-  'light-playful-1',
-  'light-playful-2',
-  'dark-elegant-1',
-  'dark-elegant-2',
-  'dark-elegant-3',
-]);
 
 interface Args {
   input?: string;
@@ -87,7 +71,7 @@ function main(): void {
   }
 
   // Report the theme that was actually applied (unknown → default fallback).
-  defaultTheme = THEME_IDS.has(args.theme) ? args.theme : DEFAULT_THEME;
+  defaultTheme = isThemeId(args.theme) ? args.theme : DEFAULT_THEME;
 
   writeFileSync(outPath, html, 'utf8');
   console.log(`Wrote ${outPath} (${args.delivery}, theme: ${defaultTheme})`);

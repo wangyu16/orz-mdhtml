@@ -8,7 +8,11 @@
  * truth, embedded in a <script type="text/markdown">; Save re-serializes the
  * outer document. Editor libraries are lazy-loaded on first edit so reading
  * stays lightweight.
+ *
+ * The 0.9 runtime path: replaced by the format-1 shell in rebuild steps 3–4
+ * (nothing new may depend on it).
  */
+import { escapeHtml } from 'orz-markdown/carrier/read';
 
 export interface ThemeEntry {
   id: string;
@@ -66,14 +70,16 @@ export interface TemplateOptions {
   };
 }
 
-/** Guard inline <script> content against premature `</script>` termination. */
+/**
+ * Guard inline <script> content against premature `</script>` termination —
+ * the 0.9 runtime's own convention (assets/app.js reverses exactly this for
+ * `#orz-src`), so it stays with this old path until rebuild step 4 removes it.
+ * New code uses orz-markdown's `escapeScriptText` through the kit envelope.
+ */
 function escapeForScript(s: string): string {
   return s.replace(/<\/(script)/gi, '<\\/$1');
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 /** The orz mark — the "orz" wordmark knocked out of a weathered green seal
  *  (rough-edged, stone-textured). From wangyu16/logoes-and-icons (orz.svg);
