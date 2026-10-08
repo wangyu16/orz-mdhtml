@@ -24,6 +24,13 @@ other work is overwritten unless you pass `--force` — when a command refuses,
 read the error (with `--json`: `reason` and `next`, below), do not reach for
 `--force` by reflex.
 
+**The one robust idiom:** pass the `sha256` the last command printed as
+`--replaces`. `assemble`, `extract`, `upgrade` and `inspect` print the
+SHA-256 of the text they wrote or read (`--json`: `sha256`; `inspect`:
+`twin.sha256` for the sibling); `assemble x.md --replaces <that sha256>`
+replaces the file only while it still holds that text. It works with no
+cache, no git, in a shallow clone, in a fresh sandbox.
+
 ## Create a document
 
 ```bash
@@ -62,25 +69,41 @@ text twin lacks — even when `x.md` is the newer file. Always compare first.
 3. `npx orz-mdhtml assemble x.md` → `x.md.html`. No `--force` is needed
    when `x.md.html` holds an earlier state of `x.md` the CLI can prove: what
    `orz-mdhtml` itself last wrote into it or read out of it (after `extract`,
-   `new --html` or a previous `assemble`), or a committed version of `x.md`
-   in git (HEAD, staged, or one of its 20 most recent commits — so a fresh
-   clone works). **In a fresh sandbox with no cache and no history, use the
-   token:** `npx orz-mdhtml assemble x.md --replaces <twin.sha256>` replaces
-   the file only while it still holds the text you saw (a compare-and-swap);
+   `new --html` or a previous `assemble`, for the same pair — with `-o` too:
+   `assemble x.md -o public/x.md.html --cdn` again and again needs nothing),
+   or (for `x.md.html` itself) a committed version of `x.md` in git (HEAD,
+   staged, or one of its 20 most recent commits — a full clone works; a
+   shallow checkout, CI's default `--depth 1`, knows only the last commit:
+   use `--replaces <sha256>` there). A text equal to one of the twin's last
+   20 commits counts as a known earlier state, so a deliberate revert of
+   the other file to such a text is replaced — commit the revert first.
+   **In a fresh sandbox with no cache and no history, use the token:**
+   `npx orz-mdhtml assemble x.md --replaces <twin.sha256>` replaces the file
+   only while it still holds the text you saw (a compare-and-swap);
    a browser save made since is refused (`replaces-mismatch`). If assemble
    refuses (`twin-differs`), someone saved in the browser: do step 1 (extract
-   to `x.browser.md`, merge), then assemble again with `--replaces` and the
-   hash the refusal names. Only when `x.md` has everything,
+   to `x.browser.md`, merge), then run the assemble command the refusal
+   names (your own arguments plus `--replaces` and the hash). If only the
+   file changed (`x.md` is exactly what the CLI last synced), `next` is a
+   plain `extract x.md.html`: run it. A warning "pair not recorded (cache
+   not writable)" means the next assemble needs `--replaces` with the hash
+   just printed. Only when `x.md` has everything,
    `npx orz-mdhtml assemble x.md --force` (the replaced file is kept as
-   `x.md.html~`). `--json` reports `replaced: "cache" | "git-head" |
-   "git-index" | "git-log" | "token" | null` and the `sha256` of the text
-   the file now holds.
+   `x.md.html~`, or `x.md.html~1`, `~2`… — a backup is never overwritten).
+   `--json` reports `replaced: "cache" | "git-head" | "git-index" |
+   "git-log" | "token" | null` and the `sha256` of the text the file now
+   holds.
+
+Delivery: `assemble` keeps the existing file's delivery (cdn stays cdn)
+unless you pass `--cdn` or `--inline`; a new file is inline.
 
 Includes: `assemble` keeps the includes the old file recorded;
 `assemble --resolve-includes` reads `{{md part.md}}` files from the text's
 folder (never outside it). Each include left unresolved is reported once as
-a warning and in `--json` `unresolved: [{ target, kind, reason }]` — the
-file shows an "Included file not available" note there.
+a warning, with why, and in `--json` `unresolved: [{ target, kind, reason }]`
+— the file shows an "Included file not available" note there. A recorded
+include whose file has changed since is a `stale-record` warning (`--json`
+`stale`): run `assemble --resolve-includes` to record the current text.
 
 Content syntax (math, `{{mermaid}}`, `{{smiles}}`, `{{chart}}`, `::: ` containers,
 `{{md path}}` includes, …) is orz-markdown's: read its skill,
@@ -175,12 +198,18 @@ A failure is `{ "ok": false, "error", "reason", "next"?, "exitCode" }`.
 - `replaces-mismatch` — the file no longer holds the text whose hash you
   passed (a save happened since) → extract again and merge;
 - `legacy-file` — a 0.x file → `upgrade` (next to a text: `--text
-  x.browser.md`);
+  x.browser.md`), merge, then `assemble x.md --replaces` with the `sha256`
+  upgrade printed (not `--force`);
 - `newer-shell` / `newer-format` → `npx orz-mdhtml@latest`;
 - `unclosed-island` — upgrade of a cut-off file → recover with
   `extract -o x.recovered.md`;
-- `not-orz`, `output-differs`, `exists` — an output you did not expect to
-  replace → choose another `-o` path;
+- `output-differs` — the `-o` output holds **another text** than the one
+  this pair last had there (saved in the browser, or written from another
+  text) → follow `next` (`extract <out> -o x.browser.md`), merge, then the
+  assemble command the message names (with `--replaces`); or it holds
+  **another document** (another uid; no `next`) → choose another `-o` path;
+- `not-orz`, `exists` — an output you did not expect to replace (an empty
+  file is reported as empty: damaged) → choose another path;
 - `assembled-input`, `other-kind`, `invalid-text`, `no-such-file`,
   `unreadable`, `not-utf8`, `write-failed`, `engine-unavailable`,
   `bad-usage` (exit 2), `failed`.
@@ -246,9 +275,10 @@ Read view with the header's theme; **Edit** (Cmd/Ctrl+E): editor + live
 preview, theme and measure pickers that write the header; **Save**
 (Cmd/Ctrl+S) writes `assemble(text)` back in place in Chromium (File System
 Access) and downloads elsewhere; a served (http) page offers *Download a
-copy*; if the file changed on disk since the page opened it (you ran
-`assemble --force` while it was open), the save asks the reader — *Replace
-it* or *Download a copy instead* — instead of overwriting your work; *New document* and *Save as new copy* (new `uid`) under More; a quiet,
+copy*; whenever the file changed on disk since the page opened it (any
+`assemble` you ran while it was open, not only `--force`), the save asks
+the reader — *Replace it* or *Download a copy instead* — instead of
+overwriting your work; *New document* and *Save as new copy* (new `uid`) under More; a quiet,
 once-a-day update offer on local files. Reading and editing work in every
 modern browser; themes, math styles, diagram libraries and the editor load
 from CDNs.
@@ -262,8 +292,8 @@ from CDNs.
   `assemble --resolve-includes` (from the text's folder only); it never
   fetches URL includes (library callers pass `assemble(text, { includes })`;
   `upgrade` keeps a file's own). Unresolved includes are warnings.
-- `--force` keeps what it replaces as `<file>~` (also `new --force`, for
-  both files); still, compare before you force (see "Edit an existing
+- `--force` keeps what it replaces as `<file>~` (or `<file>~1`, `~2`…;
+  also `new --force`, for both files); still, compare before you force (see "Edit an existing
   document"). The pair records live in `$XDG_CACHE_HOME/orz-mdhtml/` (else
   `~/.cache/orz-mdhtml/`); deleting them only makes `assemble` and `extract`
   stricter — `--replaces <sha256>` works without them.

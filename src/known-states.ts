@@ -14,13 +14,17 @@
  *   staged version (`git show :<twin>`), or one of its recent commits
  *   (`git log -n 20 -- <twin>`, then `git show <sha>:<twin>`; bounded to 20
  *   commits and a few seconds in all), when the twin is tracked in a git
- *   repository — so a fresh clone or a CI checkout knows the states its
- *   history holds. `git` runs only if it is installed; any failure (no git,
+ *   repository — so a full clone knows the states its history holds (a
+ *   shallow checkout, CI's default `--depth 1`, knows only its last commit:
+ *   use `--replaces` there). A text equal to one of these counts as known, so
+ *   a deliberate revert of the other file to such a text is replaced —
+ *   commit the revert first. `git` runs only if it is installed; any failure (no git,
  *   not a repository, not tracked, a timeout) means "unknown".
  * - **the CLI's own record**: a small cache under the user's cache folder
  *   (`$XDG_CACHE_HOME/orz-mdhtml/`, else `~/.cache/orz-mdhtml/`) holding,
- *   per pair (the twin's absolute path + the file's absolute path), the
- *   SHA-256 of the text the CLI last wrote into the file or read out of it —
+ *   per pair (the twin's absolute path + the file's absolute path, symbolic
+ *   links resolved), the SHA-256 of the text the CLI last wrote into the
+ *   file or read out of it and of the twin's exact text at that moment —
  *   written by `assemble`, `extract`, `new --html` and `upgrade` when they
  *   write a pair. The record only ever relaxes a refusal when the text hashes
  *   to exactly that value; a browser save (or an edit of the twin) changes
@@ -73,33 +77,54 @@ function recordPath(twin: string, file: string): string | null {
 }
 
 /**
- * Record that `file` holds `text` (the text the CLI just wrote into it or
- * read out of it) for the pair `twin` ↔ `file`. Call after both are written.
- * Never throws.
+ * Whether the pair was recorded: `recorded`, `no-cache` (no cache folder:
+ * no `$XDG_CACHE_HOME`, no home), or `failed` (the cache is not writable).
  */
-export function rememberPair(twin: string, file: string, text: string): void {
+export type Remembered = 'recorded' | 'no-cache' | 'failed';
+
+/**
+ * Record that `file` holds `held` (the text the CLI just wrote into it or
+ * read out of it) and that the twin holds exactly `twinText` (its raw text,
+ * line endings as written) for the pair `twin` ↔ `file`. Call after both are
+ * written. Never throws: says whether the record was written.
+ */
+export function rememberPair(twin: string, file: string, held: string, twinText: string): Remembered {
   const path = recordPath(twin, file);
-  if (!path) return;
+  if (!path) return 'no-cache';
   const tmp = `${path}.${process.pid}.tmp`;
   try {
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(tmp, `${JSON.stringify({ twin: canonical(twin), file: canonical(file), text: sha256(text) })}\n`, 'utf8');
+    writeFileSync(tmp, `${JSON.stringify({ twin: canonical(twin), file: canonical(file), text: sha256(held), twinText: sha256(twinText) })}\n`, 'utf8');
     renameSync(tmp, path);
+    return 'recorded';
   } catch {
     try { unlinkSync(tmp); } catch { /* not created */ }
+    return 'failed';
+  }
+}
+
+interface PairRecord { twin?: unknown; file?: unknown; text?: unknown; twinText?: unknown }
+
+/** The record of the pair, or null (none, unreadable, or another pair's). */
+function recordOf(twin: string, file: string): PairRecord | null {
+  const path = recordPath(twin, file);
+  if (!path) return null;
+  try {
+    const r = JSON.parse(readFileSync(path, 'utf8')) as PairRecord;
+    return r.twin === canonical(twin) && r.file === canonical(file) ? r : null;
+  } catch {
+    return null;
   }
 }
 
 /** True when the record says the CLI itself last wrote (or read) exactly `held` for this pair. */
 function rememberedHolds(twin: string, file: string, held: string): boolean {
-  const path = recordPath(twin, file);
-  if (!path) return false;
-  try {
-    const r = JSON.parse(readFileSync(path, 'utf8')) as { twin?: unknown; file?: unknown; text?: unknown };
-    return r.twin === canonical(twin) && r.file === canonical(file) && r.text === sha256(held);
-  } catch {
-    return false;
-  }
+  return recordOf(twin, file)?.text === sha256(held);
+}
+
+/** True when the record says the twin held exactly `current` (raw, line endings as written) when the CLI last synced the pair. */
+function rememberedTwin(twin: string, file: string, current: string): boolean {
+  return recordOf(twin, file)?.twinText === sha256(current);
 }
 
 /** Run git in the twin's folder; null on any failure or when the deadline has passed. */
@@ -152,10 +177,13 @@ function* gitStates(twin: string, deadline: number): Generator<[EarlierState, st
  * Whether `held` — the text an existing file holds — is a known earlier state
  * of the twin `twin` (see the module comment), and which. `stored` maps a
  * twin text to the text a file assembled from it holds (mixed line endings
- * become one style), so a committed text compares like a file's.
+ * become one style), so a committed text compares like a file's. With
+ * `git: false` only the pair's record counts (an `-o` output that is not the
+ * twin's own file: the twin's history says nothing about it).
  */
-export function earlierStateOf(twin: string, file: string, held: string, stored: (text: string) => string): EarlierState | null {
+export function earlierStateOf(twin: string, file: string, held: string, stored: (text: string) => string, options: { git?: boolean } = {}): EarlierState | null {
   if (rememberedHolds(twin, file, held)) return 'cache';
+  if (options.git === false) return null;
   for (const [state, text] of gitStates(twin, Date.now() + GIT_BUDGET_MS)) if (stored(text) === held) return state;
   return null;
 }
@@ -163,12 +191,26 @@ export function earlierStateOf(twin: string, file: string, held: string, stored:
 /**
  * Whether the text twin's current text `current` is a known state, so
  * `extract` may replace it with the file's text without losing an edit: the
- * text the CLI last wrote or read for the pair (the twin unchanged since), or
- * a committed or staged version of it in git (its content is in the
- * history). Null: unknown — it may hold edits made since.
+ * exact text (raw: a line-ending change is a change) the CLI last wrote or
+ * read for the pair (the twin unchanged since), or a committed or staged
+ * version of it in git (its content is in the history), compared exactly.
+ * Null: unknown — it may hold edits made since.
  */
-export function twinStateOf(twin: string, file: string, current: string, stored: (text: string) => string): EarlierState | null {
-  if (rememberedHolds(twin, file, stored(current))) return 'cache';
+export function twinStateOf(twin: string, file: string, current: string): EarlierState | null {
+  if (rememberedTwin(twin, file, current)) return 'cache';
   for (const [state, text] of gitStates(twin, Date.now() + GIT_BUDGET_MS)) if (text === current) return state;
   return null;
+}
+
+/**
+ * True when `path` is tracked in git and unmodified (`git status` clean):
+ * its modification time is then a checkout's, not an edit's. False on any
+ * failure (no git, not a repository, not tracked, a timeout).
+ */
+export function cleanInGit(path: string): boolean {
+  const deadline = Date.now() + 3000;
+  const name = `./${basename(canonical(path))}`;
+  if (git(path, ['ls-files', '--error-unmatch', '--', name], deadline) === null) return false;
+  const status = git(path, ['status', '--porcelain', '--', name], deadline);
+  return status !== null && status.toString('utf8').trim() === '';
 }

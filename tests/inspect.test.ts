@@ -142,9 +142,14 @@ describe('inspect', () => {
     expect(fromText.twin!.holds).toBe('different');
     expect(fromText.advice.join('\n')).toMatch(/sample\.md\.html is a legacy orz-mdhtml 0\.x file.*orz-mdhtml upgrade sample\.md\.html --text sample\.browser\.md.*merge.*Not `extract`/);
     expect(fromText.advice.join('\n')).not.toMatch(/orz-mdhtml extract/);
+    // and ends with assemble --replaces (the sha256 upgrade printed), never --force (round 3, L3)
+    expect(fromText.advice.join('\n')).toMatch(/then `orz-mdhtml assemble sample\.md --replaces` followed by the sha256 upgrade printed/);
+    expect(fromText.advice.join('\n')).not.toMatch(/--force/);
     const fromLegacy = inspect(legacy, { filename: 'sample.md.html', twin: { name: 'sample.md', content: oldText } });
     expect(fromLegacy.twin!.holds).toBe('different');
     expect(fromLegacy.advice.join('\n')).toMatch(/next to the text sample\.md: run `orz-mdhtml upgrade sample\.md\.html --text sample\.browser\.md`.*merge/);
+    expect(fromLegacy.advice.join('\n')).toMatch(/`orz-mdhtml assemble sample\.md --replaces` followed by the sha256 upgrade printed/);
+    expect(fromLegacy.advice.join('\n')).not.toMatch(/--force/);
     expect(inspect(legacy, { filename: 'sample.md.html' }).advice.join('\n')).toMatch(/run `orz-mdhtml upgrade sample\.md\.html` for its format-1 text twin/);
     // the same text (mixed line endings stored in one style count as the same)
     const mixed = 'a\r\nb\nc\n';
@@ -153,6 +158,16 @@ describe('inspect', () => {
     // a sibling that is not an orz file, and no sibling given
     expect(inspect(text, { twin: { name: 'doc.md.html', content: '<!doctype html><p>x' } }).twin!.holds).toBe('none');
     expect(inspect(text).twin).toBeNull();
+  });
+
+  it('[I.9] an empty or blank .md.html is an empty, damaged file — not an empty text', () => {
+    for (const content of ['', '  \n']) {
+      const r = inspect(content, { filename: 'gone.md.html' });
+      expect(r.input).toBe('html');
+      expect(r.kind).toBeNull();
+      expect(r.advice.join('\n')).toMatch(/the file is empty .*damaged or unfinished.*gone\.md\.html~/);
+    }
+    expect(inspect('', { filename: 'empty.md' }).input).toBe('text'); // an empty text twin is a text
   });
 
   it('[I.7] an assembled file\'s structure: a cut island (text may be incomplete), a missing </html>, an altered or cut inline engine (checked against this release\'s bundle; advice: upgrade), a cdn engine URL', () => {

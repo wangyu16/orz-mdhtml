@@ -84,7 +84,7 @@ orz-mdhtml themes
 | Command | What it does |
 |---|---|
 | `new` | writes a new text twin: a header with `carrier: md`, a fresh `uid` and the given keys, then a starter body. `--html` also assembles it; without a file name the text goes to stdout. |
-| `assemble` | writes `x.md.html` from `x.md` (exact text in, the same bytes every time). Keeps the includes the existing file holds; `--resolve-includes` reads file includes from the text's folder. An include left unresolved shows an "Included file not available" note in the file and is reported once (a warning, and `unresolved` in `--json`). |
+| `assemble` | writes `x.md.html` (or the `-o` path; missing folders are created) from `x.md` (exact text in, the same bytes every time). Keeps the delivery and the includes the existing file holds (`--cdn` / `--inline` choose the delivery); `--resolve-includes` reads file includes from the text's folder. An include left unresolved shows an "Included file not available" note in the file and is reported once with why (a warning, and `unresolved` in `--json`); a recorded include whose file has changed since is a warning too (`stale` in `--json`). |
 | `extract` | writes the exact text twin of an assembled file (`x.md.html` → `x.md`) and reports its includes. Replaces an existing, different `x.md` only when it is a known state (below). A 0.x file is refused with the advice to run `upgrade`; a cut-off file gives a warning. |
 | `upgrade` | turns a 0.x file (or a file of an older 1.x shell) into a file of this version, in place by default, and writes its text twin (`x.md`) unless `--no-text`. Keeps the file's delivery unless `--cdn` / `--inline`. Repairs a damaged engine; refuses (unless `--force`) to downgrade a newer shell or to upgrade a file cut off inside its text. |
 | `inspect` | diagnoses a text or a file of any version: kind, text format, shell version and how it compares to this tool, delivery, uid, header keys, lint, the file's structure (cut off? engine intact?), the SHA-256 of the text it holds, whether the sibling twin (`x.md` ↔ `x.md.html`) holds the same text (and that text's SHA-256) and which is newer, and advice in plain sentences naming the files. |
@@ -111,24 +111,35 @@ hold work saved in the browser — whichever file is newer), an `x.md` that
 differs from the text being extracted (it may hold edits — whichever file is
 newer), unless what is replaced is a known state (below); a file made by a
 newer orz-mdhtml; another document (`upgrade -o`); or (for `new`) any
-existing file. With `--force` the replaced file is kept as `<file>~`. Files
-are replaced through a temporary file and a rename, keeping their mode; a
-symbolic link stays a link.
+existing file. With `--force` the replaced file is kept as `<file>~` — or,
+when that name is taken by something else, `<file>~1`, `<file>~2`, … (a
+backup is never overwritten, and a symbolic link at a backup name is never
+followed). Files are replaced through a temporary file and a rename, keeping
+their mode; a symbolic link stays a link. Every command prints the `sha256`
+of the text it wrote or read (`--json`: `sha256`).
 
-**Known states.** `orz-mdhtml assemble x.md` replaces `x.md.html` without
-`--force` when the file holds the same text, or **an earlier state of
-`x.md`** the CLI can prove; `orz-mdhtml extract x.md.html` replaces `x.md`
-when `x.md` itself is a known state:
+**Known states.** `orz-mdhtml assemble x.md` replaces `x.md.html` (or the
+`-o` output) without `--force` when the file holds the same text, or **an
+earlier state of `x.md`** the CLI can prove; `orz-mdhtml extract x.md.html`
+replaces `x.md` when `x.md` itself is a known state:
 
-- a committed version of `x.md` — its last commit (`git show HEAD:x.md`), its
-  staged version, or one of its 20 most recent commits (`git log -n 20 --
-  x.md`) — when `x.md` is tracked in git (git is used only if installed,
-  for a few seconds at most; any failure counts as unknown). A fresh clone or
-  a CI checkout knows what its history holds;
-- the text `orz-mdhtml` itself last wrote into `x.md.html` or read out of it
-  (`new --html`, `assemble`, `extract`, `upgrade` record a SHA-256 per pair in
-  `$XDG_CACHE_HOME/orz-mdhtml/`, else `~/.cache/orz-mdhtml/`; the record only
-  lifts a refusal when the text hashes to exactly that value);
+- (for `x.md.html` and `x.md`, not another `-o` path) a committed version of
+  `x.md` — its last commit (`git show HEAD:x.md`), its staged version, or one
+  of its 20 most recent commits (`git log -n 20 -- x.md`) — when `x.md` is
+  tracked in git (git is used only if installed, for a few seconds at most;
+  any failure counts as unknown). A full clone knows what its history holds;
+  a shallow checkout (CI's default `--depth 1`) knows only its last commit —
+  use `--replaces <sha256>` there. A text equal to one of the twin's last 20
+  commits counts as a known earlier state, so a deliberate revert of the
+  other file to such a text is replaced — commit the revert first;
+- the text `orz-mdhtml` itself last wrote into the output or read out of it,
+  for that pair (`new --html`, `assemble`, `extract`, `upgrade` record a
+  SHA-256 of the file's text and of the twin's exact text per pair — `x.md`
+  and the output path, `-o` included — in `$XDG_CACHE_HOME/orz-mdhtml/`,
+  else `~/.cache/orz-mdhtml/`; the record only lifts a refusal when the text
+  hashes to exactly that value; a line-ending change is a change). When the
+  record cannot be written (a read-only cache), the command warns: the next
+  assemble needs `--replaces` with the hash it printed;
 - **`--replaces <sha256>`** — a portable compare-and-swap for agents in a
   fresh sandbox (no cache, no history): `inspect --json` prints `sha256` (the
   text the inspected file holds; for `x.md`, the SHA-256 of its bytes, as
@@ -139,7 +150,9 @@ when `x.md` itself is a known state:
   is refused (`replaces-mismatch`).
 
 So the normal loop — edit `x.md`, assemble, edit, assemble — needs no
-`--force`. Anything else is refused: notably a save in the browser made in
+`--force`, with or without `-o` (`assemble w.md -o public/w.md.html --cdn`
+again and again). The one robust idiom, with no cache, no git, in a shallow
+clone: pass the `sha256` the last command printed as `--replaces`. Anything else is refused: notably a save in the browser made in
 between (the file then holds work `x.md` lacks), or an `x.md` edited since
 the CLI last synced the pair. `--json` says which rule applied (`replaced`:
 `git-head`, `git-index`, `git-log`, `cache`, `token`, or `null`).
@@ -147,7 +160,10 @@ the CLI last synced the pair. `--json` says which rule applied (`replaced`:
 **Refusals, for machines.** A `--json` failure is
 `{ "ok": false, "command", "error", "reason", "next"?, "exitCode" }`. `reason`
 is a stable code; `next` (when one command resolves it) is
-`{ "command", "args" }` — run `orz-mdhtml <command> <args…>`:
+`{ "command", "args" }` — run `orz-mdhtml <command> <args…>`. Every command
+a refusal suggests (in `next` and in the message) is built from your own
+arguments (`-o`, `--cdn`, `--resolve-includes`, `--text`…) and names a copy
+(`x.browser.md`, `x.browser-2.md`, …) that does not exist yet:
 
 | `reason` | Meaning | `next` |
 |---|---|---|
@@ -155,8 +171,8 @@ is a stable code; `next` (when one command resolves it) is
 | `no-such-file`, `unreadable`, `not-utf8` | the input cannot be read as UTF-8 text | — |
 | `exists` | `new`: the file exists | — |
 | `not-orz` | the output exists and is not an orz file; or the input holds no orz document | `inspect <file>` |
-| `twin-differs` | the twin holds a different text that is not a known state (`assemble`: `x.md.html`; `extract`, `upgrade`: `x.md`) | `extract x.md.html -o x.browser.md` (a 0.x file: `upgrade x.md.html --text x.browser.md`) |
-| `output-differs` | an `-o` output holds another document | `extract … -o x.browser.md` |
+| `twin-differs` | the twin holds a different text that is not a known state (`assemble`: `x.md.html`; `extract`, `upgrade`: `x.md`) | `extract x.md.html -o x.browser.md` (when only `x.md.html` changed: `extract x.md.html`; a 0.x file: `upgrade x.md.html --text x.browser.md`) |
+| `output-differs` | an `-o` output holds another text than the one this pair last had there (saved in the browser, or written from another text), or another document (another uid: choose another `-o` path) | `extract <out> -o x.browser.md` (another text; when only the output changed: `extract <out> -o x.md`); none for another document |
 | `replaces-mismatch` | `--replaces`: the file no longer holds the text with that hash | `extract x.md.html -o x.browser.md` |
 | `legacy-file` | a 0.x file: `extract` cannot read it; `assemble` will not replace it | `upgrade x.md.html` (next to a text: `--text x.browser.md`) |
 | `newer-shell` | the file was made by a newer orz-mdhtml (use `npx orz-mdhtml@latest`) | — |
@@ -171,7 +187,10 @@ is a stable code; `next` (when one command resolves it) is
 `assemble --json` lists the includes left unresolved as `unresolved: [{
 target, kind: "file" | "url", reason }]` (`not-recorded` — pass
 `--resolve-includes`; `url` — the CLI fetches no URLs; `no-such-file`,
-`outside-folder`, `unreadable`, `not-utf8`, `folder-unreadable`).
+`outside-folder` — never read, with or without the flag; `unreadable`,
+`not-utf8`, `folder-unreadable`), and the recorded file includes whose file
+has changed since as `stale: [{ target, kind: "file", reason:
+"stale-record" }]` (`--resolve-includes` records the current text).
 `inspect --json`'s `twin` is `{ name, holds: "same" | "different" | "none",
 newer: "input" | "twin" | "same-time" | "unknown", sha256, earlier? }` —
 `newer` says which file was modified last: `input` the inspected one, `twin`
@@ -260,7 +279,7 @@ Only writing to a file on disk needs Chromium's File System Access API;
 everything else works in every modern browser. A page served over http(s) is
 never saved in place: Save says to use *Download a copy*. A save never
 silently overwrites a file that changed on disk since the page opened it
-(another program, an agent, `orz-mdhtml assemble --force`): it asks —
+(another program, an agent, any `orz-mdhtml assemble` or `extract`'s twin, not only `--force`): it asks —
 *Replace it* or *Download a copy instead*.
 
 ## Migrating from 0.x

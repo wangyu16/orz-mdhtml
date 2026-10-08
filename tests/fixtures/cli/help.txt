@@ -26,9 +26,10 @@ Options:
   --cdn             load the engine from jsDelivr (small files, for the web); default: inline
   --inline          the default delivery: the engine inside the file (no engine download)
   --force           overwrite even when that could lose work (see below); the replaced
-                    file is kept as <file>~
+                    file is kept as <file>~ (or <file>~1, ~2, ... — a backup is never replaced)
   --replaces <sha>  (assemble, extract) replace an existing, different output only if its
-                    text has this SHA-256 (the "sha256" inspect, extract and assemble print)
+                    text has this SHA-256 (the "sha256" inspect, extract, assemble and
+                    upgrade print) — works with no cache, no git, in a shallow clone
   --json            print one JSON object (the result, or {"ok": false, "error", "reason",
                     "next"}) for agents
   -h, --help        help (also: orz-mdhtml <command> --help)
@@ -36,11 +37,13 @@ Options:
 
 Content (title, theme, measure, lang, metadata) comes only from the text's {{nyml}} header;
 assemble has no content options. Without --force nothing is overwritten that could hold
-other work: an output that is not an orz file, a .md.html that holds a different text
-than the one assembled, an x.md that differs from the text extracted (unless the text
-replaced is a known state: what orz-mdhtml itself last wrote or read for the pair, a
-committed or staged version in git, or the text whose SHA-256 --replaces gives), a file
-made by a newer orz-mdhtml, another document (upgrade -o), or (new) any existing file.
+other work: an output that is not an orz file, a .md.html (or -o output) that holds a
+different text than the one assembled, an x.md that differs from the text extracted
+(unless the text replaced is a known state: what orz-mdhtml itself last wrote or read for
+the pair, a committed, staged or recent version of the twin in git, or the text whose
+SHA-256 --replaces gives), a file made by a newer orz-mdhtml, another document (upgrade
+-o), or (new) any existing file. The robust way: pass the sha256 the last command printed
+as --replaces.
 Before editing x.md, `orz-mdhtml inspect x.md` says whether x.md.html holds other work
 (saved in the browser); `orz-mdhtml extract x.md.html -o x.browser.md` brings it out
 for a merge.

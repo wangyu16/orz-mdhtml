@@ -156,5 +156,12 @@ describe('the app author\'s guide', () => {
       expect(doc, term).toContain(term);
     }
     expect(readFileSync('examples/webapp/index.html', 'utf8')).toMatch(/http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-/);
+    // the hook table matches the types (browser/index.d.ts): mintUid returns a promise, resolveAsset a string at once (round 3, L8)
+    const types = readFileSync('browser/index.d.ts', 'utf8');
+    expect(types).toMatch(/mintUid\?\(\): Promise<string>/);
+    expect(types).toMatch(/resolveAsset\?\(path: string\): string;/);
+    expect(doc).toMatch(/\| `mintUid\(\)` \|[^\n]*\*\*promise\*\* of a `doc-/);
+    expect(doc).toMatch(/\| `resolveAsset\(path\)` \|[^\n]*\*\*synchronously\*\*[^\n]*not a promise/);
+    expect(doc).not.toMatch(/e\.g\. a signed URL of your storage/);
   });
 });

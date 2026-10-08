@@ -8,6 +8,7 @@
  */
 import { describe, it, expect, afterAll } from 'vitest';
 import { editHeader, extract, lintHeader, readDocument, UID_PATTERN } from 'orz-markdown/carrier';
+import { SAVE_CONFLICT_LABELS, SAVE_CONFLICT_MESSAGE } from 'orz-markdown/carrier/shell';
 import { execFileSync } from 'node:child_process';
 import { readFileSync as readFile, writeFileSync as writeFile } from 'node:fs';
 import { join } from 'node:path';
@@ -703,10 +704,10 @@ chrome('round 1 of the carrier-app loop: conflicts, app editors, unresolved incl
     const two = await page.evaluate(`${APP}.editor().getText()`) as string;
     await page.getByRole('button', { name: 'Done', exact: true }).focus();
     await page.keyboard.press(`${MOD}+s`);
-    await page.getByText('This file changed on disk since you opened it').waitFor();
+    await page.getByText(SAVE_CONFLICT_MESSAGE.slice(0, 40)).waitFor(); // the kit's wording (orz-markdown 2.2.0 round 3)
     expect(extract((await readOpfs(page, 'doc.md.html'))!)!.text).toBe(cliText);
     expect(await page.evaluate(`${APP}.isDirty()`)).toBe(true);
-    await page.getByRole('button', { name: 'Replace it', exact: true }).click();
+    await page.getByRole('button', { name: SAVE_CONFLICT_LABELS.replace, exact: true }).click();
     await page.waitForFunction(`!${APP}.isDirty()`);
     expect(await readOpfs(page, 'doc.md.html') === libAssemble(two)).toBe(true);
     expect((await picks(page)).length).toBe(2); // the changed file dropped the session's handle: picked again
@@ -723,7 +724,7 @@ chrome('round 1 of the carrier-app loop: conflicts, app editors, unresolved incl
     const r = await page.evaluate(`${APP}.editor().save()`);
     expect(r).toMatchObject({ ok: false, via: 'file', error: 'conflict', conflict: true });
     const download = page.waitForEvent('download');
-    await page.getByRole('button', { name: 'Download a copy instead', exact: true }).click();
+    await page.getByRole('button', { name: SAVE_CONFLICT_LABELS.download, exact: true }).click();
     const d = await download;
     expect(readFile((await d.path())!, 'utf8') === libAssemble(three)).toBe(true);
     expect(extract((await readOpfs(page, 'doc.md.html'))!)!.text).toBe(cliText2);
@@ -768,11 +769,12 @@ chrome('round 1 of the carrier-app loop: conflicts, app editors, unresolved incl
       if (!refreshed) await page.waitForTimeout(200);
     }
     expect(refreshed).toBe(true);
-    // Save: the picker (an app's page is not a served file), the includes go into the file
+    // Save: the picker (an app's page is not a served file), the latest refreshed includes go into the file (orz-markdown 2.2.0 round 3)
     const r1 = await page.evaluate(`window.__ed.save()`);
     expect(r1).toMatchObject({ ok: true, via: 'file' });
     const saved = (await readOpfs(page, 'app-notes.md.html'))!; // the fileName option names the save
-    expect(saved === assemble(text, { engineSource: b.iife, includes })).toBe(true);
+    expect(extract(saved)!.includes).toEqual({ ...includes, 'parts/c.md': 'NOW-C from the new record\n' });
+    expect(saved === assemble(text, { engineSource: b.iife, includes: { ...includes, 'parts/c.md': 'NOW-C from the new record\n' } })).toBe(true);
     // no picker: a download, never the served notice
     await page.evaluate(() => { delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker; });
     await page.evaluate(`window.__ed.setText(${JSON.stringify(`${text}more\n`)})`);
@@ -780,7 +782,7 @@ chrome('round 1 of the carrier-app loop: conflicts, app editors, unresolved incl
     const r2 = await page.evaluate(`window.__ed.save()`);
     expect(r2).toMatchObject({ ok: true, via: 'download' });
     expect((await download).suggestedFilename()).toBe('app-notes.md.html');
-    expect(readFile((await (await download).path())!, 'utf8') === assemble(`${text}more\n`, { engineSource: b.iife, includes })).toBe(true);
+    expect(readFile((await (await download).path())!, 'utf8') === assemble(`${text}more\n`, { engineSource: b.iife, includes: { ...includes, 'parts/c.md': 'NOW-C from the new record\n' } })).toBe(true);
     const toasts = await page.evaluate(() => Array.from(document.querySelectorAll('*')).flatMap((h) => (h.shadowRoot ? Array.from(h.shadowRoot.querySelectorAll('.orz-toast, #orz-served-note')).map((t) => t.textContent ?? '') : [])).join(' | '));
     expect(toasts).not.toMatch(/web address/);
     expect(errors).toEqual([]);

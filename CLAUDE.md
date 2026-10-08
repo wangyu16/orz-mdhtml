@@ -49,15 +49,17 @@ Every command takes `--json` (one object on stdout), `--help`, `--force`;
 exit 0 done / 1 refused or failed / 2 usage. Content (title, theme, measure,
 lang, metadata) comes only from the text's header — `assemble` has no content
 options. Files that could hold other work are not overwritten without
-`--force`, which keeps the replaced file as `<file>~` (see `src/cli.ts`
-guards, claims T.7–T.13): notably `assemble` refuses when the existing
-`.md.html` holds a different text, and `extract` when `x.md` differs,
+`--force`, which keeps the replaced file as `<file>~` (or `<file>~1`, `~2`…:
+a backup is never overwritten; see `src/cli.ts` guards, claims T.7–T.20):
+notably `assemble` refuses when the existing `.md.html` holds a different text, and `extract` when `x.md` differs,
 whichever file is newer (browser saves, agent edits) — unless what is
 replaced is a known state (git HEAD/staged/one of the 20 most recent
 commits of the twin, or what the CLI itself last wrote or read for the pair,
-recorded by hash in `$XDG_CACHE_HOME/orz-mdhtml/`; `src/known-states.ts`,
-T.11) or the caller's `--replaces <sha256>` token (T.12; `src/sha256.ts`,
-isomorphic). Every `--json` failure carries a stable `reason` code and,
+recorded by hash in `$XDG_CACHE_HOME/orz-mdhtml/` per pair — `-o` outputs
+included, git only for the twin; `src/known-states.ts`, T.11, T.14) or the
+caller's `--replaces <sha256>` token (T.12; `src/sha256.ts`, isomorphic).
+Suggested commands (`next`, messages) are built from the caller's own
+arguments. Every `--json` failure carries a stable `reason` code and,
 where useful, `next` (T.13; the codes are listed in `src/cli.ts` `Reason`
 and the README). Tests point `XDG_CACHE_HOME` at a temporary folder.
 `inspect` reports the sibling twin and a file's structure (I.6, I.7);

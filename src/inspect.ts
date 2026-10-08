@@ -145,6 +145,12 @@ export function inspect(input: string, options: InspectOptions = {}): InspectRep
   const html = looksHtml(input);
   /** This input's name in advice (as the caller named it). */
   const self = sh(options.filename ?? (html ? 'file.md.html' : 'file.md'));
+  if (!html && input.trim() === '' && options.filename !== undefined && /\.html?$/i.test(options.filename)) {
+    // an empty (or blank) .md.html: not an empty text — a damaged or unfinished file
+    report.input = 'html';
+    report.advice.push(`the file is empty (${input.length === 0 ? 'no bytes' : 'only white space'}): a damaged or unfinished file, it holds no text — recover the text from its text twin or a backup (${options.filename}~), then assemble again`);
+    return report;
+  }
   if (html) {
     const legacy = readLegacy(input);
     if (legacy) {
@@ -164,7 +170,7 @@ export function inspect(input: string, options: InspectOptions = {}): InspectRep
         // a 0.x file next to a text twin (often a 0.x text): upgrade must not replace it — its text goes to another name
         const other = sh(browserName(twinText.name));
         report.advice.push(
-          `legacy orz-mdhtml ${legacy.version ?? '0.x'} file (experimental, before text format 1; no compatibility shim) next to the text ${twinText.name}: run \`orz-mdhtml upgrade ${self} --text ${other}\` — it writes this file's format-1 text (the source exactly, its metadata, title and theme moved into a header) to ${browserName(twinText.name)} and re-assembles this file from it; then compare ${browserName(twinText.name)} with ${twinText.name}, merge what you keep into ${twinText.name} (keep the new header), and \`orz-mdhtml assemble ${sh(twinText.name)} --force\`. The file's own "Framework 1.0.0 available" banner cannot update it (it ends with "check your connection")`,
+          `legacy orz-mdhtml ${legacy.version ?? '0.x'} file (experimental, before text format 1; no compatibility shim) next to the text ${twinText.name}: run \`orz-mdhtml upgrade ${self} --text ${other}\` — it writes this file's format-1 text (the source exactly, its metadata, title and theme moved into a header) to ${browserName(twinText.name)} and re-assembles this file from it; then compare ${browserName(twinText.name)} with ${twinText.name}, merge what you keep into ${twinText.name} (keep the new header), and \`orz-mdhtml assemble ${sh(twinText.name)} --replaces\` followed by the sha256 upgrade printed (it replaces this file only while it holds that text). The file's own "Framework 1.0.0 available" banner cannot update it (it ends with "check your connection")`,
         );
       } else {
         report.advice.push(
@@ -237,7 +243,7 @@ export function inspect(input: string, options: InspectOptions = {}): InspectRep
     if (report.input === 'legacy') {
       // the advice above already names upgrade --text
     } else if (t.holds === 'different' && twinLegacy) {
-      report.advice.push(`${t.name} is a legacy orz-mdhtml 0.x file holding a different text than this text twin: \`orz-mdhtml upgrade ${tn} --text ${sh(browserName(options.filename ?? 'file.md'))}\` gives its format-1 text (and makes it a file of this version); compare and merge that into ${options.filename ?? 'this text'}, then \`orz-mdhtml assemble ${self} --force\` (the old file is kept as ${t.name}~). Not \`extract\`: it does not read 0.x files`);
+      report.advice.push(`${t.name} is a legacy orz-mdhtml 0.x file holding a different text than this text twin: \`orz-mdhtml upgrade ${tn} --text ${sh(browserName(options.filename ?? 'file.md'))}\` gives its format-1 text (and makes it a file of this version); compare and merge that into ${options.filename ?? 'this text'}, then \`orz-mdhtml assemble ${self} --replaces\` followed by the sha256 upgrade printed (it replaces ${t.name} only while it holds that text). Not \`extract\`: it does not read 0.x files`);
     } else if (t.holds === 'different' && options.twin.earlier) {
       const source = { 'git-head': 'its last commit', 'git-index': 'its staged version', 'git-log': 'one of its recent commits', cache: 'what orz-mdhtml last wrote there' }[options.twin.earlier];
       t.earlier = options.twin.earlier;

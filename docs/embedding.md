@@ -106,10 +106,10 @@ if (r.ok && await myConfirm(r.proposal.original, r.proposal.proposed)) editor.ap
 | `save(text)` | on Save / Cmd+S / `editor.save()` | a promise; reject to report a failure (the editor stays dirty). **With `save`, you own persistence**: nothing is written to disk or downloaded |
 | `ai.operations`, `ai.request(op, { text, selection? })` | the AI menu and `editor.proposeAi` (the proposal is reviewed before `applyAi` writes it), `editor.requestAi` | `{ proposed }` — the replacement of the selection (`selection: true` operations) or of the whole text |
 | `fetchInclude(target)` | the preview meets an include `includes` lacks: a URL (`{{md https://…}}` / `{{markdown …}}` / `{{md-include …}}`), or a file include's path as written (`{{md parts/a.md}}` → `'parts/a.md'`; you read your own files) | the Markdown, or `null`. Your trust policy (allowlist) decides |
-| `resolveAsset(path)` | every relative `src` / `srcset` / `poster` in the preview | the URL to load (e.g. a signed URL of your storage) |
+| `resolveAsset(path)` | every relative `src` / `srcset` / `poster` in the preview, **synchronously** (the preview does not wait) | the URL to load, as a string — not a promise: a URL your app already knows (a `blob:` URL of a stored asset, a public URL, a URL signed beforehand) |
 | `uploadAsset(file)` | a file pasted or dropped into the editor, `editor.uploadAssets` | the relative path to insert (`![name](path)` for images) |
 | `resolveLink(href)` | a link clicked in the preview (as written, e.g. `week2.md`) | the URL to open |
-| `mintUid()` | `editor.ensureUid()` when the header has no `uid` | a `doc-[0-9a-z]{10,32}` id from your registry (FC-18 §10) |
+| `mintUid()` | `editor.ensureUid()` when the header has no `uid` | a **promise** of a `doc-[0-9a-z]{10,32}` id from your registry (FC-18 §10) |
 
 **Includes.** The preview reads an include from the `includes` option first
 (target as written → text, like an assembled file's `#orz-includes`), then

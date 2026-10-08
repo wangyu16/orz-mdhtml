@@ -43,6 +43,14 @@ Requires `orz-markdown ^2.2.0`.
 - New commands: `new`, `assemble` (also `orz-mdhtml x.md`), `extract`,
   `upgrade`, `inspect`, `themes`; `--json` on every command, exit codes 0/1/2,
   no overwriting of work without `--force`.
+- Known states instead of `--force`: an output holding the text the CLI last
+  wrote or read for the pair (`x.md` and `x.md.html` or any `-o` path), a
+  committed version of the twin in git, or the caller's `--replaces <sha256>`
+  (the `sha256` every command prints) is replaced without `--force`; refusals
+  carry a stable `reason` and a `next` command built from the caller's own
+  arguments. `assemble` keeps an existing file's delivery and includes (stale
+  includes are reported). `--force` keeps `<file>~`, never overwriting an
+  earlier backup (`<file>~1`, `~2`, …).
 - Removed: `--theme` and `--title` on generation (content comes only from the
   header), and `--cdn` as the default.
 
