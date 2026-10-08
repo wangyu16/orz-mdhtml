@@ -57,24 +57,42 @@ const attr = (s: string): string => s.replace(/&/g, '&amp;').replace(/"/g, '&quo
  * stylesheet of the theme's scheme (`#orz-hljs`) — the pinned URLs of
  * orz-markdown's preview frame. The page's engine swaps `#orz-theme` and
  * `#orz-hljs` when the reader picks another theme.
+ *
+ * `deferred` (the assembled file): the three stylesheets are written with
+ * `media="not all"` — fetched, but blocking neither the first paint nor the
+ * inline engine (a slow or unreachable CDN would otherwise hold the whole page
+ * blank) — and the read view switches them on (`enableStylesheets`) when it
+ * presents the document. No inline handler (`onload`) is needed.
  */
-export function shellHead(p: Presentation): string {
+export function shellHead(p: Presentation, o: { deferred?: boolean } = {}): string {
   const hljs = p.theme.scheme === 'dark' ? PREVIEW_CDN.hljsDarkCss : PREVIEW_CDN.hljsLightCss;
+  const media = o.deferred ? ' media="not all"' : '';
   return [
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     `<meta name="color-scheme" content="${p.theme.scheme}">`,
-    `<link rel="stylesheet" id="orz-theme" href="${attr(themeHref(p.theme.id))}">`,
-    `<link rel="stylesheet" id="orz-katex" href="${attr(PREVIEW_CDN.katexCss)}">`,
-    `<link rel="stylesheet" id="orz-hljs" href="${attr(hljs)}">`,
+    `<link rel="stylesheet" id="orz-theme" href="${attr(themeHref(p.theme.id))}"${media}>`,
+    `<link rel="stylesheet" id="orz-katex" href="${attr(PREVIEW_CDN.katexCss)}"${media}>`,
+    `<link rel="stylesheet" id="orz-hljs" href="${attr(hljs)}"${media}>`,
   ].join('\n');
 }
 
+/** The ids of the shell's stylesheets (`shellHead`), in order. */
+export const SHELL_STYLESHEETS = Object.freeze(['orz-theme', 'orz-katex', 'orz-hljs'] as const);
+
+/**
+ * What `#orz-doc` holds until the engine renders the document: one constant,
+ * quiet line for a reader whose browser cannot run the engine (the read view
+ * replaces it). The same for every document (A.4).
+ */
+export const FALLBACK_LINE = 'If this page stays blank, open it in a recent browser; the document\'s text is inside this file \u2014 see the comment at the top.';
+
 /**
  * The read view's markup: the page renders the document into `#orz-doc`
- * (in the page, not an iframe — owner decision 3) with the measure's class.
+ * (in the page, not an iframe — owner decision 3) with the measure's class;
+ * until then the article holds {@link FALLBACK_LINE}.
  */
 export function readViewMarkup(p: Presentation): string {
-  return `<main id="orz-view" class="orz-view" data-orz-theme="${attr(p.theme.id)}"><article id="orz-doc" class="${articleClass(p.measure)}"></article></main>`;
+  return `<main id="orz-view" class="orz-view" data-orz-theme="${attr(p.theme.id)}"><article id="orz-doc" class="${articleClass(p.measure)}"><p class="orz-fallback" style="opacity:.6;font:14px/1.5 system-ui,sans-serif">${FALLBACK_LINE.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p></article></main>`;
 }
 
 /**

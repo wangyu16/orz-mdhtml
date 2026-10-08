@@ -168,4 +168,26 @@ describe('upgrade on synthetic legacy files', () => {
     const html = withLegacySource(META_HTML, 'a <\\/script> b\n');
     expect(readLegacy(html)!.text).toBe('a </script> b\n');
   });
+
+  it('[U.6] the 0.x wrapper: "\\r\\n…\\r\\n" (a file whose line breaks were converted) is removed like "\\n…\\n"; an island with only a leading line break keeps its content exactly', () => {
+    const source = '# CR LF source\r\n\r\ntext\r\n';
+    const lf = withLegacySource(META_HTML, source);
+    const open = '<script type="text/markdown" id="orz-src">';
+    const start = lf.indexOf(open) + open.length;
+    const end = lf.indexOf('</script>', start);
+    const converted = `${lf.slice(0, start)}\r\n${source}\r\n${lf.slice(end)}`;
+    const r = readLegacy(converted)!;
+    expect(r.wrapped).toBe(true);
+    expect(r.text).toBe(source);
+    expect(r.notes.join('\n')).not.toMatch(/wrapper/);
+    expectSourceKept(upgrade(converted, { delivery: 'cdn', uid: UID }).text, source);
+    // the plain LF wrapper still reads the same
+    expect(readLegacy(lf)!.text).toBe(source);
+    // a leading line break but no trailing one: not the writer's wrapper — the content is kept exactly, noted
+    const noTrail = `${lf.slice(0, start)}\n# no trailing newline${lf.slice(end)}`;
+    const n = readLegacy(noTrail)!;
+    expect(n.wrapped).toBe(false);
+    expect(n.text).toBe('\n# no trailing newline');
+    expect(n.notes.join('\n')).toMatch(/wrapper/);
+  });
 });

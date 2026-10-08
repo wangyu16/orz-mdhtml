@@ -10,4 +10,4 @@ writable  no
 lint      clean
 
 advice:
-  - legacy orz-mdhtml 0.7.1 file (experimental, before text format 1; no compatibility shim): run `orz-mdhtml upgrade <file>` for its format-1 text twin and a new file; the source is kept exactly and its metadata, title and theme move into the header
+  - legacy orz-mdhtml 0.7.1 file (experimental, before text format 1; no compatibility shim): run `orz-mdhtml upgrade <file>` for its format-1 text twin and a new file; the source is kept exactly and its metadata, title and theme move into the header. The file's own "Framework 1.0.0 available" banner cannot update it (it ends with "check your connection"); `orz-mdhtml upgrade` is the way

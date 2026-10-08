@@ -9,6 +9,7 @@
     ".": {
       "types": "./index.d.ts",
       "import": "./esm/orz-mdhtml.browser.mjs",
+      "require": "./require.cjs",
       "default": "./orz-mdhtml.browser.js"
     },
     "./orz-mdhtml.browser.js": "./orz-mdhtml.browser.js",
@@ -17,15 +18,21 @@
       "default": "./esm/orz-mdhtml.browser.mjs"
     },
     "./release.json": "./release.json",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./docs/embedding.md": "./docs/embedding.md"
   },
   "files": [
     "orz-mdhtml.browser.js",
     "esm/orz-mdhtml.browser.mjs",
     "index.d.ts",
     "release.json",
+    "require.cjs",
+    "docs/embedding.md",
     "README.md"
   ],
+  "scripts": {
+    "prepublishOnly": "node scripts/check-release.mjs"
+  },
   "keywords": [
     "orz-markdown",
     "orz-mdhtml",

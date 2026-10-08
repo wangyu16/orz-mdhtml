@@ -8,15 +8,17 @@
  */
 import { describe, it, expect, afterAll } from 'vitest';
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { lintHeader, readHeader, UID_PATTERN } from 'orz-markdown/carrier';
-import { assemble, extract, inspect, readDocument, upgrade, ORZ_MARKDOWN_VERSION, THEMES, VERSION } from '../src/lib.js';
+import { assemble, extract, inspect, readDocument, upgrade, DEFAULT_THEME, ORZ_MARKDOWN_VERSION, THEMES, VERSION } from '../src/lib.js';
 import { corpus, HAZARDS, LEGACY_FILES, read } from './helpers.js';
 
 const CLI = join(process.cwd(), 'dist', 'cli.js');
 const tmp = realpathSync(mkdtempSync(join(tmpdir(), 'orz-mdhtml-cli-')));
+/** The CLI's cache (the pair records of T.11) lives here, never in the user's ~/.cache. */
+const CACHE = join(tmp, '.cache');
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
 let n = 0;
 /** A fresh folder for one scenario. */
@@ -24,9 +26,9 @@ const folder = (): string => { const d = join(tmp, `t${++n}`); mkdirSync(d); ret
 
 interface Run { code: number; stdout: string; stderr: string }
 /** Spawn the CLI (cwd = the given folder, so relative names are relative to it). */
-function cli(args: string[], cwd: string = tmp): Promise<Run> {
+function cli(args: string[], cwd: string = tmp, env: NodeJS.ProcessEnv = {}): Promise<Run> {
   return new Promise((resolve, reject) => {
-    execFile(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, XDG_CACHE_HOME: CACHE, ...env } }, (error, stdout, stderr) => {
       const code = error ? (typeof error.code === 'number' ? error.code : -1) : 0;
       if (error && typeof error.code !== 'number') reject(error); else resolve({ code, stdout, stderr });
     });
@@ -35,7 +37,7 @@ function cli(args: string[], cwd: string = tmp): Promise<Run> {
 /** The CLI's raw stdout bytes. */
 function cliBytes(args: string[], cwd: string): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    execFile(process.execPath, [CLI, ...args], { cwd, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 }, (error, stdout) => (error ? reject(error) : resolve(stdout)));
+    execFile(process.execPath, [CLI, ...args], { cwd, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, XDG_CACHE_HOME: CACHE } }, (error, stdout) => (error ? reject(error) : resolve(stdout)));
   });
 }
 const json = (r: Run): Record<string, unknown> => JSON.parse(r.stdout) as Record<string, unknown>;
@@ -75,7 +77,7 @@ describe.concurrent('the CLI', () => {
       expect(bytes(out).equals(Buffer.from(assemble(t), 'utf8')), name).toBe(true);
       expect(extract(text(out))!.text === t, name).toBe(true);
       const info = readDocument(t);
-      expect(json(r)).toEqual({ ok: true, command: 'assemble', input: join(d, `${name}.md`), output: out, kind: 'md', format: 1, shell: VERSION, delivery: 'inline', uid: info.meta.uid ?? null, title: info.title, theme: info.theme ?? null, bytes: Buffer.byteLength(assemble(t), 'utf8'), warnings: json(r).warnings });
+      expect(json(r)).toEqual({ ok: true, command: 'assemble', input: join(d, `${name}.md`), output: out, kind: 'md', format: 1, shell: VERSION, delivery: 'inline', uid: info.meta.uid ?? null, title: info.title, theme: info.theme ?? null, includes: 0, resolved: 0, backup: null, replaced: null, bytes: Buffer.byteLength(assemble(t), 'utf8'), warnings: json(r).warnings });
       // the shorthand is the same command
       rmSync(out);
       expect((await cli([`${name}.md`], d)).code).toBe(0);
@@ -172,6 +174,20 @@ describe.concurrent('the CLI', () => {
       expect(r.stderr).toMatch(/before text format 1.*orz-mdhtml upgrade/);
       expect(existsSync(file.replace(/\.html$/, ''))).toBe(false);
     }
+    // an island without #orz-shell (an unknown writer): extracted with a warning
+    write(join(d, 'foreign.md.html'), '<!doctype html><html><body><script type="text/markdown" id="orz-src"># foreign\n</script></body></html>');
+    const foreign = await cli(['extract', 'foreign.md.html', '--json'], d);
+    expect(foreign.code).toBe(0);
+    expect((json(foreign).warnings as string[]).join('\n')).toMatch(/no #orz-shell: an unknown writer/);
+    expect(text(join(d, 'foreign.md'))).toBe('# foreign\n');
+    // a file cut off inside its island: extracted (exit 0) with a warning that the text may be incomplete
+    const whole = assemble('# Cut\n\nfirst part\n\nsecond part\n', { delivery: 'cdn' });
+    write(join(d, 'cut.md.html'), whole.slice(0, whole.indexOf('second part') + 6));
+    const cut = await cli(['extract', 'cut.md.html', '--json'], d);
+    expect(cut.code).toBe(0);
+    expect((json(cut).warnings as string[]).join('\n')).toMatch(/cut off.*may be incomplete/);
+    const cutHuman = await cli(['extract', 'cut.md.html', '-o', 'cut2.md'], d);
+    expect(cutHuman.stderr).toMatch(/warning: .*cut off/);
     // not an orz file
     write(join(d, 'plain.md.html'), '<!doctype html><title>x</title><p>hello</p>');
     const plain = await cli(['extract', 'plain.md.html', '--json'], d);
@@ -271,7 +287,10 @@ describe.concurrent('the CLI', () => {
     expect(none.stderr).toContain('Usage:');
     expect((await cli(['--version'], d)).stdout).toBe(`orz-mdhtml ${VERSION} (orz-markdown ${ORZ_MARKDOWN_VERSION}, text format 1)\n`);
     expect(json(await cli(['--version', '--json'], d))).toEqual({ name: 'orz-mdhtml', version: VERSION, orzMarkdown: ORZ_MARKDOWN_VERSION, formats: [1] });
-    expect(json(await cli(['themes', '--json'], d)).themes).toEqual(THEMES.map((t, i) => ({ ...t, default: i === 0 })));
+    const themes = json(await cli(['themes', '--json'], d)).themes as Array<{ id: string; default: boolean }>;
+    expect(themes).toEqual(THEMES.map((t) => ({ ...t, default: t.id === DEFAULT_THEME })));
+    expect(themes.filter((t) => t.default).map((t) => t.id)).toEqual([DEFAULT_THEME]);
+    expect((await cli(['themes'], d)).stdout).toMatch(new RegExp(`^${DEFAULT_THEME} .*\\[default\\]$`, 'm'));
     // failures: 1 (missing file, refused), 2 (usage); --json gives {ok: false} on stdout
     const missing = await cli(['assemble', 'nope.md', '--json'], d);
     expect(missing.code).toBe(1);
@@ -318,7 +337,7 @@ describe.concurrent('the CLI', () => {
     expect((json(lint).warnings as string[]).length).toBeGreaterThan(0);
   }, 120_000);
 
-  it('[T.7] nothing is overwritten that could lose work: a non-orz output, a .md.html changed after its text, a text twin changed after its file — unless --force; writes leave no temporary file', async () => {
+  it('[T.7] nothing is overwritten that could lose work unless --force (which keeps <file>~): assemble keeps a non-orz output and a .md.html holding a different text — however the times compare; extract keeps a newer, different twin; the output never replaces the input', async () => {
     const d = folder();
     write(join(d, 'a.md'), '# A\n');
     // a non-orz output
@@ -327,24 +346,59 @@ describe.concurrent('the CLI', () => {
     expect(r1.code).toBe(1);
     expect(r1.stderr).toMatch(/not an orz file/);
     expect(text(join(d, 'a.md.html'))).toMatch(/someone else/);
-    expect((await cli(['assemble', 'a.md', '--force'], d)).code).toBe(0);
+    const f1 = await cli(['assemble', 'a.md', '--force', '--json'], d);
+    expect(f1.code).toBe(0);
     expect(text(join(d, 'a.md.html'))).toBe(assemble('# A\n'));
-    // the .md.html was saved in the browser after the text was written: refused
-    write(join(d, 'a.md.html'), assemble('# A, edited in the browser\n'));
-    touch(join(d, 'a.md'), 1_700_000_000);
-    touch(join(d, 'a.md.html'), 1_700_000_100);
-    const r2 = await cli(['assemble', 'a.md', '--json'], d);
+    expect(text(join(d, 'a.md.html~'))).toMatch(/someone else/); // the replaced file is kept
+    expect(json(f1)).toMatchObject({ backup: join(d, 'a.md.html~') });
+    expect((json(f1).warnings as string[]).join('\n')).toMatch(/kept as .*a\.md\.html~/);
+
+    // the agent workflow (round 1, HIGH): new --html; a browser save adds text to the file; the agent edits the
+    // text twin afterwards (so the twin is the NEWER file); assemble must not throw the browser's work away
+    const w = folder();
+    expect((await cli(['new', 'doc.md', '--html'], w)).code).toBe(0);
+    const made = text(join(w, 'doc.md'));
+    write(join(w, 'doc.md.html'), assemble(`${made}\nBROWSER WORK\n`));
+    touch(join(w, 'doc.md.html'), 1_700_000_100);
+    write(join(w, 'doc.md'), `${made}\nagent line\n`);
+    touch(join(w, 'doc.md'), 1_700_000_200);
+    const insp = json(await cli(['inspect', 'doc.md', '--json'], w));
+    expect(insp.twin).toEqual({ name: 'doc.md.html', holds: 'different', newer: 'input' });
+    expect((insp.advice as string[]).join('\n')).toMatch(/doc\.md\.html holds a different text.*orz-mdhtml extract doc\.md\.html/);
+    const refused = await cli(['assemble', 'doc.md', '--json'], w);
+    expect(refused.code).toBe(1);
+    expect(String(json(refused).error)).toMatch(/doc\.md\.html holds a different text than doc\.md — not its last commit, nor the text orz-mdhtml last wrote there; not replaced.*orz-mdhtml extract doc\.md\.html -o doc\.browser\.md.*--force.*doc\.md\.html~/);
+    expect(extract(text(join(w, 'doc.md.html')))!.text).toContain('BROWSER WORK');
+    // the way out the message names: extract, merge, assemble --force (the old file kept)
+    expect((await cli(['extract', 'doc.md.html', '-o', 'doc.browser.md'], w)).code).toBe(0);
+    expect(text(join(w, 'doc.browser.md'))).toContain('BROWSER WORK');
+    const merged = `${made}\nBROWSER WORK\n\nagent line\n`;
+    write(join(w, 'doc.md'), merged);
+    expect((await cli(['assemble', 'doc.md', '--force'], w)).code).toBe(0);
+    expect(extract(text(join(w, 'doc.md.html')))!.text).toBe(merged);
+    expect(extract(text(join(w, 'doc.md.html~')))!.text).toContain('BROWSER WORK');
+    // in step again: assembling the same text needs nothing (whatever the times)
+    touch(join(w, 'doc.md.html'), 1_700_000_900);
+    expect((await cli(['assemble', 'doc.md'], w)).code).toBe(0);
+    // the browser-newer case is refused as before
+    write(join(w, 'doc.md.html'), assemble('# edited in the browser\n'));
+    touch(join(w, 'doc.md'), 1_700_001_000);
+    touch(join(w, 'doc.md.html'), 1_700_001_100);
+    const r2 = await cli(['assemble', 'doc.md', '--json'], w);
     expect(r2.code).toBe(1);
-    expect(String(json(r2).error)).toMatch(/changed after .*orz-mdhtml extract/);
-    expect(extract(text(join(d, 'a.md.html')))!.text).toBe('# A, edited in the browser\n');
-    // the text is newer than the file: assembling is the normal workflow
-    touch(join(d, 'a.md'), 1_700_000_200);
-    expect((await cli(['assemble', 'a.md'], d)).code).toBe(0);
-    expect(extract(text(join(d, 'a.md.html')))!.text).toBe('# A\n');
-    // same text: always fine
-    touch(join(d, 'a.md.html'), 1_700_000_300);
-    expect((await cli(['assemble', 'a.md'], d)).code).toBe(0);
-    // extract: the twin was edited after the file was saved: refused; older twin: replaced
+    expect(String(json(r2).error)).toMatch(/holds a different text than doc\.md and was changed after it.*orz-mdhtml extract/);
+    noTemp(w);
+
+    // mixed line endings are stored in one style: assembling twice is not a "different text" (round 1, A#4)
+    const e = folder();
+    writeFileSync(join(e, 'm.md'), 'a\r\nb\nc\n');
+    expect((await cli(['assemble', 'm.md'], e)).code).toBe(0);
+    const again = await cli(['assemble', 'm.md', '--json'], e);
+    expect(again.code, again.stdout).toBe(0);
+    expect(json(again).backup).toBeNull();
+    expect(extract(text(join(e, 'm.md.html')))!.text).toBe('a\r\nb\r\nc\r\n');
+
+    // extract: the twin was edited after the file was saved: refused; older twin: replaced; --force keeps a copy
     write(join(d, 'a.md.html'), assemble('# A from the browser\n'));
     write(join(d, 'a.md'), '# A edited as text\n');
     touch(join(d, 'a.md.html'), 1_700_000_400);
@@ -359,9 +413,197 @@ describe.concurrent('the CLI', () => {
     write(join(d, 'a.md'), '# again newer\n');
     expect((await cli(['extract', 'a.md.html', '--force'], d)).code).toBe(0);
     expect(text(join(d, 'a.md'))).toBe('# A from the browser\n');
+    expect(text(join(d, 'a.md~'))).toBe('# again newer\n');
     // the output never replaces the input
     expect((await cli(['assemble', 'a.md', '-o', 'a.md'], d)).code).toBe(2);
     expect((await cli(['extract', 'a.md.html', '-o', 'a.md.html'], d)).code).toBe(2);
+    noTemp(d);
+  }, 120_000);
+
+  it('[T.11] the smoother assemble rule: a .md.html holding an earlier state of its twin — the text the CLI last wrote or read for the pair (new --html, assemble, extract), or the twin\'s last commit or staged version in git — is replaced without --force; a browser save in between is still refused; the cache lives under $XDG_CACHE_HOME', async () => {
+    // after new --html: edit the twin, assemble — no --force, no backup
+    const d = folder();
+    expect((await cli(['new', 'doc.md', '--html'], d)).code).toBe(0);
+    const made = text(join(d, 'doc.md'));
+    write(join(d, 'doc.md'), `${made}\nfirst edit\n`);
+    const r1 = await cli(['assemble', 'doc.md', '--json'], d);
+    expect(r1.code, r1.stdout).toBe(0);
+    expect(json(r1)).toMatchObject({ backup: null, replaced: 'cache' });
+    expect(extract(text(join(d, 'doc.md.html')))!.text).toBe(`${made}\nfirst edit\n`);
+    expect(existsSync(join(d, 'doc.md.html~'))).toBe(false);
+    // after a previous assemble: again (the human output says why)
+    write(join(d, 'doc.md'), `${made}\nsecond edit\n`);
+    const r2 = await cli(['assemble', 'doc.md'], d);
+    expect(r2.code, r2.stderr).toBe(0);
+    expect(r2.stdout).toMatch(/it held an earlier text of doc\.md: the text orz-mdhtml last wrote or read for this pair/);
+    // inspect says so too
+    write(join(d, 'doc.md'), `${made}\nthird edit\n`);
+    const insp = json(await cli(['inspect', 'doc.md', '--json'], d));
+    expect(insp.twin).toMatchObject({ name: 'doc.md.html', holds: 'different', earlier: 'cache' });
+    expect((insp.advice as string[]).join('\n')).toMatch(/doc\.md\.html holds an earlier text of this text twin.*orz-mdhtml assemble <file>.*no --force needed/);
+    expect((await cli(['assemble', 'doc.md'], d)).code).toBe(0);
+    // after extract (the CLI read the file): edit the twin, assemble
+    write(join(d, 'doc.md.html'), assemble(`${made}\nsaved in the browser\n`));
+    touch(join(d, 'doc.md'), 1_700_000_000);
+    expect((await cli(['extract', 'doc.md.html'], d)).code).toBe(0);
+    write(join(d, 'doc.md'), `${made}\nsaved in the browser\nthen edited as text\n`);
+    expect((await cli(['assemble', 'doc.md'], d)).code).toBe(0);
+    expect(extract(text(join(d, 'doc.md.html')))!.text).toBe(`${made}\nsaved in the browser\nthen edited as text\n`);
+    // the cache is a record per pair under $XDG_CACHE_HOME/orz-mdhtml (here the test's own), never the user's
+    expect(readdirSync(join(CACHE, 'orz-mdhtml', 'pairs')).length).toBeGreaterThan(0);
+
+    // the HIGH repro: new --html, a browser save adds work to the file, the agent edits the twin → still refused
+    const h = folder();
+    expect((await cli(['new', 'doc.md', '--html'], h)).code).toBe(0);
+    const base = text(join(h, 'doc.md'));
+    write(join(h, 'doc.md.html'), assemble(`${base}\nBROWSER WORK\n`));
+    write(join(h, 'doc.md'), `${base}\nagent line\n`);
+    const refused = await cli(['assemble', 'doc.md', '--json'], h);
+    expect(refused.code).toBe(1);
+    expect(String(json(refused).error)).toMatch(/holds a different text than doc\.md.*not replaced/);
+    expect(extract(text(join(h, 'doc.md.html')))!.text).toContain('BROWSER WORK');
+    // a browser save that happens after an assemble: refused too (the record holds the CLI's text, not the browser's)
+    write(join(h, 'doc.md'), `${base}\nBROWSER WORK\n\nagent line\n`);
+    expect((await cli(['assemble', 'doc.md', '--force'], h)).code).toBe(0);
+    write(join(h, 'doc.md.html'), assemble(`${base}\nBROWSER WORK\n\nagent line\nmore browser work\n`));
+    write(join(h, 'doc.md'), `${base}\nBROWSER WORK\n\nagent line\nanother agent line\n`);
+    expect((await cli(['assemble', 'doc.md'], h)).code).toBe(1);
+    // another cache (another user, a cleared cache): nothing is known, refused
+    const fresh = folder();
+    write(join(fresh, 'doc.md'), '# A\n');
+    expect((await cli(['assemble', 'doc.md'], fresh)).code).toBe(0);
+    write(join(fresh, 'doc.md'), '# A\n\nedited\n');
+    expect((await cli(['assemble', 'doc.md'], fresh, { XDG_CACHE_HOME: join(fresh, 'other-cache') })).code).toBe(1);
+
+    // git: a file holding the twin's last commit (or its staged version) is replaced without --force — with no cache at all
+    const g = folder();
+    const git = (...args: string[]): Promise<Run> => new Promise((res) => execFile('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.test', '-c', 'commit.gpgsign=false', ...args], { cwd: g }, (e, stdout, stderr) => res({ code: e ? 1 : 0, stdout, stderr })));
+    if ((await git('init', '-q')).code !== 0) return; // no git on this machine: nothing more to show
+    let caches = 0;
+    const noCache = (): NodeJS.ProcessEnv => ({ XDG_CACHE_HOME: join(tmp, `.empty-cache-${++caches}`) }); // a fresh, empty cache each run: only git can know
+    write(join(g, 'doc.md'), '# Committed\r\n\nline\n'); // mixed line endings: compared as a file stores them
+    expect((await git('add', 'doc.md')).code).toBe(0);
+    expect((await git('commit', '-q', '-m', 'doc')).code).toBe(0);
+    write(join(g, 'doc.md.html'), assemble('# Committed\r\n\nline\n')); // assembled by anyone (no record)
+    write(join(g, 'doc.md'), '# Committed\r\n\nline\nedited after the commit\n');
+    const c1 = await cli(['assemble', 'doc.md', '--json'], g, noCache());
+    expect(c1.code, c1.stdout).toBe(0);
+    expect(json(c1)).toMatchObject({ backup: null, replaced: 'git-head' });
+    // the staged version counts too
+    expect((await git('add', 'doc.md')).code).toBe(0);
+    write(join(g, 'doc.md'), '# Committed\r\n\nline\nedited after the commit\nand after staging\n');
+    const c2 = await cli(['assemble', 'doc.md', '--json'], g, noCache());
+    expect(c2.code, c2.stdout).toBe(0);
+    expect(json(c2)).toMatchObject({ replaced: 'git-index' });
+    // a browser save on top of the committed state: neither commit, index nor record → refused
+    write(join(g, 'doc.md.html'), assemble('# Committed\r\n\nline\nBROWSER WORK\n'));
+    write(join(g, 'doc.md'), '# Committed\r\n\nline\nagent work\n');
+    expect((await cli(['assemble', 'doc.md'], g, noCache())).code).toBe(1);
+    expect(extract(text(join(g, 'doc.md.html')))!.text).toContain('BROWSER WORK');
+    noTemp(g);
+  }, 120_000);
+
+  it('[T.8] assemble keeps the includes the existing file holds (unless --no-includes), --resolve-includes reads file includes from the text\'s folder only, and unresolved directives are warned about', async () => {
+    const d = folder();
+    mkdirSync(join(d, 'parts'));
+    write(join(d, 'parts', 'a.md'), 'PART A\r\n');
+    write(join(d, 'outside.md'), 'OUTSIDE\n');
+    const doc = '# Doc\n\n{{md parts/a.md}}\n\n{{md https://example.test/b.md}}\n';
+    write(join(d, 'doc.md'), doc);
+    // the existing file's record (a host or the library resolved them): kept by a plain assemble
+    write(join(d, 'doc.md.html'), assemble(doc, { includes: { 'parts/a.md': 'OLD A\n', 'https://example.test/b.md': 'URL B\n', './gone.md': 'no longer included\n' } }));
+    const kept = await cli(['assemble', 'doc.md', '--json'], d);
+    expect(kept.code, kept.stdout).toBe(0);
+    expect(extract(text(join(d, 'doc.md.html')))!.includes).toEqual({ 'parts/a.md': 'OLD A\n', 'https://example.test/b.md': 'URL B\n' }); // a removed directive's entry goes
+    expect(json(kept)).toMatchObject({ includes: 2, resolved: 0, warnings: [] });
+    // --resolve-includes: the file include is read afresh from the folder (exact text), the URL entry kept
+    const res = await cli(['assemble', 'doc.md', '--resolve-includes', '--json'], d);
+    expect(res.code, res.stdout).toBe(0);
+    expect(extract(text(join(d, 'doc.md.html')))!.includes).toEqual({ 'parts/a.md': 'PART A\r\n', 'https://example.test/b.md': 'URL B\n' });
+    expect(json(res)).toMatchObject({ includes: 2, resolved: 1 });
+    expect(text(join(d, 'doc.md.html'))).toBe(assemble(doc, { includes: { 'https://example.test/b.md': 'URL B\n', 'parts/a.md': 'PART A\r\n' } }));
+    // --no-includes drops the record: both directives are reported unresolved
+    const none = await cli(['assemble', 'doc.md', '--no-includes', '--json'], d);
+    expect(none.code).toBe(0);
+    expect(extract(text(join(d, 'doc.md.html')))!.includes).toBeUndefined();
+    const warned = (json(none).warnings as string[]).join('\n');
+    expect(warned).toMatch(/\{\{md parts\/a\.md\}\} is not resolved.*--resolve-includes/);
+    expect(warned).toMatch(/\{\{md https:\/\/example\.test\/b\.md\}\} is not resolved.*URL include/);
+    expect((await cli(['assemble', 'doc.md', '--no-includes', '--resolve-includes'], d)).code).toBe(2);
+    // never outside the text's folder: ../, an absolute path, a symlink that leaves it
+    const sub = join(d, 'sub');
+    mkdirSync(sub);
+    symlinkSync(join(d, 'outside.md'), join(sub, 'link.md'));
+    write(join(sub, 'esc.md'), `# Esc\n\n{{md ../outside.md}}\n\n{{md ${join(d, 'outside.md')}}}\n\n{{md link.md}}\n\n{{md missing.md}}\n\n\`\`\`\n{{md ../outside.md}}\n\`\`\`\n`);
+    const esc = await cli(['assemble', 'esc.md', '--resolve-includes', '--json'], sub);
+    expect(esc.code, esc.stdout).toBe(0);
+    expect(extract(text(join(sub, 'esc.md.html')))!.includes).toBeUndefined();
+    const escWarn = (json(esc).warnings as string[]).join('\n');
+    expect(escWarn.match(/outside the text's folder/g)).toHaveLength(3);
+    expect(escWarn).toMatch(/missing\.md\}\}: no such file/);
+    expect(json(esc)).toMatchObject({ includes: 0, resolved: 0 });
+    expect(text(join(sub, 'esc.md.html'))).not.toContain('OUTSIDE');
+    noTemp(d);
+  }, 120_000);
+
+  it('[T.9] writes go through a temporary file and a rename (none left), keep the replaced file\'s mode, and replace a symbolic link\'s target, not the link', async () => {
+    const d = folder();
+    write(join(d, 'w.md'), '# W\n');
+    expect((await cli(['assemble', 'w.md'], d)).code).toBe(0);
+    // a hard link to the old file keeps the old bytes: the new file is a new inode (rename), not a rewrite in place
+    linkSync(join(d, 'w.md.html'), join(d, 'old-link.html'));
+    const before = statSync(join(d, 'w.md.html')).ino;
+    write(join(d, 'w.md'), '# W\n'); // same text: no refusal
+    chmodSync(join(d, 'w.md.html'), 0o640);
+    expect((await cli(['assemble', 'w.md', '--cdn'], d)).code).toBe(0);
+    expect(statSync(join(d, 'w.md.html')).ino).not.toBe(before);
+    expect(text(join(d, 'old-link.html'))).toBe(assemble('# W\n'));
+    expect(text(join(d, 'w.md.html'))).toBe(assemble('# W\n', { delivery: 'cdn' }));
+    expect(statSync(join(d, 'w.md.html')).mode & 0o777).toBe(0o640);
+    // a symbolic link stays a link; the file it points to gets the new bytes, with its mode
+    mkdirSync(join(d, 'real'));
+    write(join(d, 'real', 'target.md.html'), assemble('# W\n'));
+    chmodSync(join(d, 'real', 'target.md.html'), 0o600);
+    symlinkSync(join(d, 'real', 'target.md.html'), join(d, 'linked.md.html'));
+    write(join(d, 'linked.md'), '# W\n');
+    expect((await cli(['assemble', 'linked.md', '--cdn'], d)).code).toBe(0);
+    expect(lstatSync(join(d, 'linked.md.html')).isSymbolicLink()).toBe(true);
+    expect(text(join(d, 'real', 'target.md.html'))).toBe(assemble('# W\n', { delivery: 'cdn' }));
+    expect(statSync(join(d, 'real', 'target.md.html')).mode & 0o777).toBe(0o600);
+    noTemp(d);
+    noTemp(join(d, 'real'));
+  }, 120_000);
+
+  it('[T.10] upgrade never downgrades (a newer shell is refused unless --force), keeps another document at -o, and never writes the text twin onto a file', async () => {
+    const d = folder();
+    const t = '# Up\n';
+    const newer = assemble(t, { delivery: 'cdn' }).split(`"shell":"${VERSION}"`).join('"shell":"99.0.0"');
+    write(join(d, 'newer.md.html'), newer);
+    const r = await cli(['upgrade', 'newer.md.html', '--json'], d);
+    expect(r.code).toBe(1);
+    expect(String(json(r).error)).toMatch(/newer than this tool.*downgrade.*orz-mdhtml@latest.*--force/);
+    expect(text(join(d, 'newer.md.html'))).toBe(newer);
+    expect(existsSync(join(d, 'newer.md'))).toBe(false);
+    expect(() => upgrade(newer)).toThrow(/downgrade/);
+    expect(upgrade(newer, { delivery: 'cdn', downgrade: true }).html).toBe(assemble(t, { delivery: 'cdn' }));
+    const forced = await cli(['upgrade', 'newer.md.html', '--force', '--json'], d);
+    expect(forced.code, forced.stdout).toBe(0);
+    expect(text(join(d, 'newer.md.html'))).toBe(assemble(t, { delivery: 'cdn' }));
+    expect((json(forced).warnings as string[]).join('\n')).toMatch(/newer shell .*99\.0\.0/);
+    // -o onto another document: refused; --force keeps it as <file>~
+    write(join(d, 'src.md.html'), assemble('# Source\n', { delivery: 'cdn' }));
+    write(join(d, 'other.md.html'), assemble('# Another document\n', { delivery: 'cdn' }));
+    const o = await cli(['upgrade', 'src.md.html', '-o', 'other.md.html', '--no-text'], d);
+    expect(o.code).toBe(1);
+    expect(o.stderr).toMatch(/other\.md\.html exists and holds another text/);
+    expect(extract(text(join(d, 'other.md.html')))!.text).toBe('# Another document\n');
+    expect((await cli(['upgrade', 'src.md.html', '-o', 'other.md.html', '--no-text', '--force'], d)).code).toBe(0);
+    expect(extract(text(join(d, 'other.md.html')))!.text).toBe('# Source\n');
+    expect(extract(text(join(d, 'other.md.html~')))!.text).toBe('# Another document\n');
+    // the text twin may not land on the file (in place or -o)
+    expect((await cli(['upgrade', 'src.md.html', '--text', 'src.md.html'], d)).code).toBe(2);
+    expect((await cli(['upgrade', 'src.md.html', '-o', 'x.md.html', '--text', 'x.md.html'], d)).code).toBe(2);
+    expect(existsSync(join(d, 'x.md.html'))).toBe(false);
     noTemp(d);
   }, 120_000);
 });

@@ -15,7 +15,7 @@
  * `mintUid`, a creation tool, FC-18 §10), no environment reads. The shell
  * version is the generated constant in ./version.ts.
  */
-import { assembleEnvelope, editHeader, lintHeader, mintUid, UID_PATTERN, type HeaderChange, type ShellParts } from 'orz-markdown/carrier';
+import { assembleEnvelope, editHeader, extract, lintHeader, mintUid, UID_PATTERN, type HeaderChange, type ShellParts } from 'orz-markdown/carrier';
 import { bundleUrl, isScriptSafe } from 'orz-markdown/carrier/shell';
 import { isThemeId } from './themes.js';
 import { isMeasure, presentationOf, readViewMarkup, shellHead, type Measure, type Presentation } from './presentation.js';
@@ -99,10 +99,24 @@ export function shellParts(options: AssembleOptions = {}, presentation: Presenta
     kind: 'md',
     shellVersion: VERSION,
     delivery,
-    headHtml: shellHead(presentation),
+    headHtml: shellHead(presentation, { deferred: true }),
     bodyHtml: `${readViewMarkup(presentation)}\n<div id="${CHROME_MOUNT_ID}"></div>\n${engine}`,
     ...(includes ? { includes } : {}),
   };
+}
+
+/**
+ * The text a file assembled from `text` holds: `extract(assemble(text)).text`
+ * — `text` itself, except that mixed line endings are stored as one style
+ * (FC-18 §8.2, the first line break's). Compare a file's text with this, not
+ * with the raw input. A text the envelope refuses is returned as it is.
+ */
+export function storedText(text: string): string {
+  try {
+    return extract(assembleEnvelope(text, shellParts({ delivery: 'cdn' }, presentationOf(''))))?.text ?? text;
+  } catch {
+    return text;
+  }
 }
 
 /** Options of {@link newDocument}: header values of the new text (FC-18 §5.1). */

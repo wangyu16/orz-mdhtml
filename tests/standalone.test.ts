@@ -8,7 +8,11 @@
  */
 import { describe, it, expect, afterAll } from 'vitest';
 import { editHeader, extract, lintHeader, readDocument, UID_PATTERN } from 'orz-markdown/carrier';
+import { execFileSync } from 'node:child_process';
+import { readFileSync as readFile, writeFileSync as writeFile } from 'node:fs';
+import { join } from 'node:path';
 import { assemble } from '../src/assemble.js';
+import { assemble as libAssemble } from '../src/lib.js';
 import { articleClass, presentationOf, themeHref } from '../src/presentation.js';
 import { THEMES } from '../src/themes.js';
 import { VERSION } from '../src/version.js';
@@ -136,7 +140,10 @@ chrome('the read view (real Chrome)', () => {
       shadow: !!document.getElementById('orz-chrome')!.shadowRoot,
       buttons: Array.from(document.getElementById('orz-chrome')!.shadowRoot!.querySelectorAll('button')).map((x) => x.getAttribute('aria-label')),
     }));
-    expect(r.body.slice(0, 4)).toEqual(['script#orz-src', 'main#orz-view', 'div#orz-chrome', 'script#orz-engine']);
+    // the kit's app puts the chrome first in the page order after the island (orz-markdown A.18), then the read view; the engine last
+    expect(r.body[0]).toBe('script#orz-src');
+    expect(r.body.slice(1, 3)).toEqual(['div#orz-chrome', 'main#orz-view']);
+    expect(r.body[3]).toBe('script#orz-engine');
     expect(r.sheets).toEqual(['orz-theme', 'orz-katex', 'orz-hljs']);
     expect(r.lightButtons).toBe(0);
     expect(r.shadow).toBe(true);
@@ -194,7 +201,7 @@ chrome('edit, settings and saves (real Chrome)', () => {
     expect(await picks(page)).toHaveLength(0);
     expect(await page.evaluate(`${APP}.isDirty()`)).toBe(true);
     const toast = await page.evaluate(`Array.from(${APP}.root.querySelectorAll('.orz-toast')).map((t) => t.textContent).join(' | ')`) as string;
-    expect(toast).toMatch(/served from the web.*Download a copy/);
+    expect(toast).toContain('This file was opened from a web address, so it cannot be saved over. Use “Download a copy” (⋯) to keep your changes.');
     await ctx.close();
   });
 
@@ -236,7 +243,8 @@ chrome('edit, settings and saves (real Chrome)', () => {
     let t = await page.evaluate(`${APP}.getText()`) as string;
     expect(t).toBe(editHeader(text, { theme: 'dark-elegant-3' }));
     expect(await page.evaluate(`${APP}.isDirty()`)).toBe(true);
-    expect(await page.locator('#orz-theme').getAttribute('href')).toBe(themeHref('dark-elegant-3'));
+    // the kit's swapStylesheet moves the id to the new sheet once it has loaded (no unstyled moment)
+    await expect.poll(() => page.locator('#orz-theme').getAttribute('href')).toBe(themeHref('dark-elegant-3'));
     await page.getByRole('button', { name: 'Measure', exact: true }).click();
     await page.getByRole('menuitemradio', { name: 'Full width', exact: true }).click();
     t = await page.evaluate(`${APP}.getText()`) as string;
@@ -267,7 +275,7 @@ chrome('edit, settings and saves (real Chrome)', () => {
     expect(saved).toContain(themeHref('light-academic-1'));
     // leaving edit mode re-renders the read view from the current text
     await page.getByRole('button', { name: 'Done', exact: true }).click();
-    expect(await page.locator('#orz-theme').getAttribute('href')).toBe(themeHref('light-academic-1'));
+    await expect.poll(() => page.locator('#orz-theme').getAttribute('href')).toBe(themeHref('light-academic-1'));
     await ctx.close();
   });
 
@@ -536,4 +544,250 @@ chrome('leaving with unsaved changes, editors mounted on the file (real Chrome)'
     expect(await page.evaluate(`!!${APP}.editor()`)).toBe(true);
     await ctx.close();
   }, 120_000);
+});
+
+chrome('first content, read-view details and editors on a file (real Chrome)', () => {
+  it('[R.11] with a CDN that never answers, the document shows at once (the stylesheets do not block the engine); without the engine the article holds one quiet line; the read view switches the stylesheets on', async () => {
+    const text = CORPUS.find((c) => c.path === 'md/every-construct.md')!.text;
+    const path = files.write('hanging.md.html', await assembleReal(text));
+    // every external request hangs (no answer, no error)
+    const ctx = await browser!.newContext();
+    await ctx.route(/^https?:/, () => { /* never answered */ });
+    await ctx.addInitScript(() => {
+      const w = window as unknown as { __first?: number };
+      new MutationObserver(() => { if (w.__first === undefined && document.querySelector('#orz-doc h1')) w.__first = performance.now(); }).observe(document, { subtree: true, childList: true });
+    });
+    const page = await ctx.newPage();
+    await page.goto(`file://${path}`, { waitUntil: 'commit' });
+    await page.waitForFunction(() => (window as unknown as { __first?: number }).__first !== undefined, null, { timeout: 8000 });
+    const first = await page.evaluate(() => (window as unknown as { __first: number }).__first);
+    expect(first).toBeLessThan(3000); // 1.0 before this fix: 10.7 s behind three hanging stylesheets
+    expect(await page.evaluate(() => ['orz-theme', 'orz-katex', 'orz-hljs'].map((id) => document.getElementById(id)?.getAttribute('media') ?? null))).toEqual([null, null, null]);
+    expect(await page.locator('#orz-doc .orz-fallback').count()).toBe(0); // the read view replaced the line
+    await ctx.close();
+    // no engine (scripts off): the one constant line, pointing at the text inside the file
+    const off = await browser!.newContext({ javaScriptEnabled: false });
+    await off.route(/^https?:/, (r) => r.abort());
+    const p2 = await off.newPage();
+    await p2.goto(`file://${path}`);
+    expect((await p2.locator('#orz-doc').innerText()).trim()).toBe("If this page stays blank, open it in a recent browser; the document's text is inside this file — see the comment at the top.");
+    expect(await p2.evaluate(() => document.getElementById('orz-theme')!.getAttribute('media'))).toBe('not all');
+    await off.close();
+  }, 60_000);
+
+  it('[R.12] the read view: a newer render wins over a slower older one; the page title, the highlight.js stylesheet and the measure picker follow the header; New document mints a new uid every time', async () => {
+    const ctx = await context();
+    const text = '{{nyml\nkind: document\ncarrier: md\nuid: doc-readview0000001\ntitle: First title\nmeasure: wide\n}}\n\n# Body\n\n```js\nlet x = 1;\n```\n';
+    const page = await openFile(ctx, 'details.md.html', await assembleReal(text));
+    expect(await page.title()).toBe('First title');
+    // an older render that resolves later does not overwrite a newer one
+    const shown = await page.evaluate(async () => {
+      const v = (globalThis as unknown as { OrzCarrier: { standalone: { view: { render(t: string, c?: unknown): Promise<void> } } } }).OrzCarrier.standalone.view;
+      const slow = v.render('# OLD render\n\n{{md https://example.test/slow.md}}\n', { fetchInclude: () => new Promise((r) => setTimeout(() => r('slow include'), 600)) });
+      const fast = v.render('# NEW render\n');
+      await Promise.all([slow, fast]);
+      return document.getElementById('orz-doc')!.textContent;
+    });
+    expect(shown).toContain('NEW render');
+    expect(shown).not.toContain('OLD render');
+    await page.evaluate(`${APP}.view.render(${JSON.stringify(text)})`);
+    // the measure picker shows the header's measure as the current choice
+    await page.getByRole('button', { name: 'Measure', exact: true }).click();
+    expect(await page.getByRole('menuitemradio', { name: 'Wide', exact: true }).getAttribute('aria-checked')).toBe('true');
+    expect(await page.getByRole('menuitemradio', { name: 'Normal', exact: true }).getAttribute('aria-checked')).toBe('false');
+    await page.keyboard.press('Escape');
+    // a header title edit retitles the page; a dark theme swaps highlight.js to its dark stylesheet (and back)
+    await page.evaluate(`${APP}.setSetting({ title: 'Second title' })`);
+    await page.waitForFunction(() => document.title === 'Second title');
+    const hljs = (): Promise<string | null> => page.evaluate(() => document.getElementById('orz-hljs')!.getAttribute('href'));
+    expect(await hljs()).toMatch(/github\.min\.css$/);
+    await page.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
+    await page.waitForFunction(() => /atom-one-dark/.test(document.getElementById('orz-hljs')!.getAttribute('href') ?? ''));
+    expect(await page.evaluate(() => document.querySelector('meta[name="color-scheme"]')!.getAttribute('content'))).toBe('dark');
+    await page.evaluate(`${APP}.setSetting({ theme: 'light-academic-1' })`);
+    await page.waitForFunction(() => /github\.min\.css$/.test(document.getElementById('orz-hljs')!.getAttribute('href') ?? ''));
+    expect(await page.evaluate(() => document.querySelectorAll('link[rel="stylesheet"][id="orz-hljs"]').length)).toBe(1);
+    // New document, twice: each a fresh uid
+    const uids: string[] = [];
+    for (const name of ['new-one.md.html', 'new-two.md.html']) {
+      await page.evaluate((n) => { (window as unknown as { __orzPickIn: unknown }).__orzPickIn = { name: n }; }, name);
+      expect(await page.evaluate(`${APP}.newDocument()`)).toMatchObject({ ok: true, via: 'file' });
+      uids.push(readDocument(extract((await readOpfs(page, name))!)!.text, { kind: 'md' }).meta.uid!);
+    }
+    expect(uids[0]).toMatch(UID_PATTERN);
+    expect(uids[1]).toMatch(UID_PATTERN);
+    expect(uids[0]).not.toBe(uids[1]);
+    expect(uids).not.toContain('doc-readview0000001');
+    await ctx.close();
+  }, 60_000);
+
+  it('[X.4] an editor an app mounts on a file with its own hooks.ai (no host AI) gets the AI menu; the reviewed proposal applies', async () => {
+    const ctx = await context();
+    const text = CORPUS.find((c) => c.path === 'md/minimal.md')!.text;
+    const page = await openFile(ctx, 'app-ai.md.html', await assembleReal(text));
+    await page.evaluate(`(async () => {
+      const el = document.createElement('div'); el.className = 'app-ai-host'; el.style.cssText = 'width: 900px; height: 500px'; document.body.append(el);
+      window.__aiEd = globalThis.OrzCarrier.mountEditor(el, { text: ${JSON.stringify(text)}, hooks: { ai: {
+        operations: [{ id: 'shout', title: 'Shout', selection: false }],
+        request: async (op, ctx) => ({ proposed: ctx.text.toUpperCase() }),
+      } } });
+      await window.__aiEd.ready;
+    })()`);
+    const labels = await page.evaluate(() => Array.from(document.querySelectorAll('.app-ai-host, .app-ai-host *')).flatMap((h) => (h.shadowRoot ? Array.from(h.shadowRoot.querySelectorAll('button')).map((x) => x.getAttribute('aria-label') ?? x.textContent ?? '') : [])));
+    expect(labels).toContain('AI');
+    const r = await page.evaluate(async () => {
+      const ed = (window as unknown as { __aiEd: { proposeAi(op: string): Promise<{ ok: boolean; proposal: unknown }>; applyAi(p: unknown): { ok: boolean }; getText(): string; destroy(): void } }).__aiEd;
+      const p = await ed.proposeAi('shout');
+      const a = ed.applyAi(p.proposal);
+      const t = ed.getText();
+      ed.destroy();
+      return { ok: p.ok && a.ok, t };
+    });
+    expect(r).toEqual({ ok: true, t: text.toUpperCase() });
+    await ctx.close();
+  }, 60_000);
+});
+
+
+chrome('round 1 of the carrier-app loop: conflicts, app editors, unresolved includes (real Chrome)', () => {
+  const CLI = join(process.cwd(), 'dist', 'cli.js');
+
+  it('[R.13] a file whose text the CLI rewrote on disk (assemble --force) between two browser saves: the save asks — "Replace it" writes the browser\'s text, "Download a copy instead" downloads it and leaves the file; Cmd/Ctrl+S with the focus on the chrome saves the editor', async () => {
+    const ctx = await context();
+    const dir = tempDir('orz-mdhtml-conflict-');
+    const env = { ...process.env, XDG_CACHE_HOME: join(dir.dir, '.cache') };
+    const run = (...args: string[]): { code: number; out: string } => {
+      try { return { code: 0, out: execFileSync(process.execPath, [CLI, ...args], { cwd: dir.dir, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) }; } catch (e) { return { code: (e as { status: number }).status, out: String((e as { stderr?: string }).stderr ?? '') }; }
+    };
+    expect(run('new', 'doc.md', '--title', 'Conflict', '--html').code).toBe(0);
+    const made = dir.read('doc.md');
+    const disk = join(dir.dir, 'doc.md.html');
+    const page = await ctx.newPage();
+    await page.goto(`file://${disk}`);
+    await bootDone(page);
+    // the picker's "disk" (OPFS) and the real disk the CLI writes are kept in step by hand
+    await writeOpfs(page, 'doc.md.html', readFile(disk, 'utf8'));
+    const toDisk = async (): Promise<void> => { writeFile(disk, (await readOpfs(page, 'doc.md.html'))!, 'utf8'); };
+    const fromDisk = (): Promise<void> => writeOpfs(page, 'doc.md.html', readFile(disk, 'utf8'));
+    const typeAtEnd = async (words: string): Promise<void> => {
+      await page.evaluate(`${APP}.editor().focus()`);
+      await page.keyboard.press(isMac ? 'Meta+ArrowDown' : 'Control+End');
+      await page.keyboard.type(words);
+    };
+
+    // the first browser save: written (the picker, once)
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.evaluate(`${APP}.editor().ready`);
+    await typeAtEnd('\nBrowser one.');
+    await page.keyboard.press(`${MOD}+s`);
+    await page.waitForFunction(`!${APP}.isDirty()`);
+    expect(extract((await readOpfs(page, 'doc.md.html'))!)!.text).toContain('Browser one.');
+    await toDisk();
+
+    // an agent edits the text twin; assemble refuses (the file holds the browser's work), --force rewrites it
+    writeFile(join(dir.dir, 'doc.md'), `${made}\nAgent line.\n`, 'utf8');
+    const refused = run('assemble', 'doc.md');
+    expect(refused.code).toBe(1);
+    expect(refused.out).toMatch(/holds a different text than doc\.md/);
+    expect(run('assemble', 'doc.md', '--force').code).toBe(0);
+    const cliText = extract(readFile(disk, 'utf8'))!.text;
+    expect(cliText).toContain('Agent line.');
+    await fromDisk();
+
+    // the second browser save — Cmd/Ctrl+S with the focus on the chrome — asks; nothing is written until the answer
+    await typeAtEnd(' Browser two.');
+    const two = await page.evaluate(`${APP}.editor().getText()`) as string;
+    await page.getByRole('button', { name: 'Done', exact: true }).focus();
+    await page.keyboard.press(`${MOD}+s`);
+    await page.getByText('This file changed on disk since you opened it').waitFor();
+    expect(extract((await readOpfs(page, 'doc.md.html'))!)!.text).toBe(cliText);
+    expect(await page.evaluate(`${APP}.isDirty()`)).toBe(true);
+    await page.getByRole('button', { name: 'Replace it', exact: true }).click();
+    await page.waitForFunction(`!${APP}.isDirty()`);
+    expect(await readOpfs(page, 'doc.md.html') === libAssemble(two)).toBe(true);
+    expect((await picks(page)).length).toBe(2); // the changed file dropped the session's handle: picked again
+    await toDisk();
+
+    // the CLI rewrites it once more; this time the reader downloads a copy and the file keeps the CLI's text
+    writeFile(join(dir.dir, 'doc.md'), `${made}\nAgent line.\nAnother agent line.\n`, 'utf8');
+    expect(run('assemble', 'doc.md').code).toBe(1);
+    expect(run('assemble', 'doc.md', '--force').code).toBe(0);
+    const cliText2 = extract(readFile(disk, 'utf8'))!.text;
+    await fromDisk();
+    await typeAtEnd(' Browser three.');
+    const three = await page.evaluate(`${APP}.editor().getText()`) as string;
+    const r = await page.evaluate(`${APP}.editor().save()`);
+    expect(r).toMatchObject({ ok: false, via: 'file', error: 'conflict', conflict: true });
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download a copy instead', exact: true }).click();
+    const d = await download;
+    expect(readFile((await d.path())!, 'utf8') === libAssemble(three)).toBe(true);
+    expect(extract((await readOpfs(page, 'doc.md.html'))!)!.text).toBe(cliText2);
+    dir.clean();
+    await ctx.close();
+  }, 120_000);
+
+  it('[X.5] an app\'s editor (no hooks.save, a served page): `includes` and a file include\'s path through fetchInclude reach the preview, an unresolved one is a quiet note; Save goes through the picker (the includes kept in the file), else a download — never the served-page notice', async () => {
+    const ctx = await context();
+    files.write('app/orz-mdhtml.browser.js', b.iife);
+    files.write('app/index.html', '<!doctype html><html><head><meta charset="utf-8"><title>app</title></head><body><div id="ed" style="width:1000px;height:520px"></div><script src="orz-mdhtml.browser.js"></script></body></html>');
+    const page = await ctx.newPage();
+    const errors = recordErrors(page);
+    await page.goto(`${site.url}/app/index.html`);
+    await page.waitForFunction(() => !!(globalThis as { OrzCarrier?: unknown }).OrzCarrier);
+    const text = '# App doc\n\n{{md parts/a.md}}\n\n{{md parts/b.md}}\n\n{{md parts/c.md}}\n';
+    const includes = { 'parts/a.md': 'RECORD-A from includes\n' };
+    await page.evaluate(`(async () => {
+      window.__asked = [];
+      window.__ed = globalThis.OrzCarrier.mountEditor(document.getElementById('ed'), { text: ${JSON.stringify(text)}, mode: 'preview', includes: ${JSON.stringify(includes)}, hooks: {
+        fetchInclude: async (t) => { window.__asked.push(t); return t === 'parts/b.md' ? 'PATH-B from fetchInclude\\n' : null; },
+      } });
+      await window.__ed.ready;
+    })()`);
+    let frame = null as null | import('playwright-core').Frame;
+    for (let i = 0; i < 50 && !frame; i++) {
+      for (const f of page.frames()) if (f !== page.mainFrame() && await f.evaluate(() => (document.getElementById('orz-doc')?.textContent ?? '').includes('PATH-B')).catch(() => false)) frame = f;
+      if (!frame) await page.waitForTimeout(200);
+    }
+    expect(frame).not.toBeNull();
+    const shown = await frame!.evaluate(() => ({ text: document.getElementById('orz-doc')!.textContent ?? '', missing: Array.from(document.querySelectorAll('#orz-doc p.orz-include-missing')).map((p) => p.textContent) }));
+    expect(shown.text).toContain('RECORD-A from includes');
+    expect(shown.missing).toEqual(['Included file not available: parts/c.md']);
+    const asked = await page.evaluate(() => (window as unknown as { __asked: string[] }).__asked);
+    expect(asked).toContain('parts/b.md');
+    expect(asked).not.toContain('parts/a.md'); // includes first
+    // Save: the picker (an app's page is not a served file), the includes go into the file
+    const r1 = await page.evaluate(`window.__ed.save()`);
+    expect(r1).toMatchObject({ ok: true, via: 'file' });
+    const saved = (await readOpfs(page, 'document.md.html'))!;
+    expect(saved === assemble(text, { engineSource: b.iife, includes })).toBe(true);
+    // no picker: a download, never the served notice
+    await page.evaluate(() => { delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker; });
+    await page.evaluate(`window.__ed.setText(${JSON.stringify(`${text}more\n`)})`);
+    const download = page.waitForEvent('download');
+    const r2 = await page.evaluate(`window.__ed.save()`);
+    expect(r2).toMatchObject({ ok: true, via: 'download' });
+    expect(readFile((await (await download).path())!, 'utf8') === assemble(`${text}more\n`, { engineSource: b.iife, includes })).toBe(true);
+    const toasts = await page.evaluate(() => Array.from(document.querySelectorAll('*')).flatMap((h) => (h.shadowRoot ? Array.from(h.shadowRoot.querySelectorAll('.orz-toast, #orz-served-note')).map((t) => t.textContent ?? '') : [])).join(' | '));
+    expect(toasts).not.toMatch(/web address/);
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 60_000);
+
+  it('[R.14] an include nothing resolves is a quiet note in the read view and in the editor\'s preview, its directive kept in data-md', async () => {
+    const ctx = await context();
+    const text = '# Notes\n\nBefore.\n\n{{md missing-part.md}}\n\nAfter.\n';
+    const page = await openFile(ctx, 'missing-include.md.html', await assembleReal(text), { onDisk: false });
+    const note = await page.evaluate(() => Array.from(document.querySelectorAll('#orz-doc p.orz-include-missing')).map((p) => ({ text: p.textContent, md: p.getAttribute('data-md') })));
+    expect(note).toEqual([{ text: 'Included file not available: missing-part.md', md: '{{md missing-part.md}}' }]);
+    await page.evaluate(`${APP}.edit().ready`);
+    await page.evaluate(`${APP}.editor().setMode('preview')`);
+    let found = false;
+    for (let i = 0; i < 50 && !found; i++) {
+      for (const f of page.frames()) if (f !== page.mainFrame() && await f.evaluate(() => (document.querySelector('#orz-doc p.orz-include-missing')?.textContent ?? '') === 'Included file not available: missing-part.md').catch(() => false)) found = true;
+      if (!found) await page.waitForTimeout(200);
+    }
+    expect(found).toBe(true);
+    await ctx.close();
+  }, 60_000);
 });

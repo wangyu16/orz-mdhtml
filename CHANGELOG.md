@@ -64,12 +64,71 @@ Requires `orz-markdown ^2.2.0`.
   for web apps; `release.json`; types in `index.d.ts`. Embedding guide:
   `docs/embedding.md` (hooks, AI review flow, nonce CSP recipe).
 
+### Safety (closed loop, round 1)
+
+- `assemble` refuses whenever the existing `.md.html` holds a different text
+  than the one assembled — also when the text twin is the newer file (a
+  browser save followed by an agent's edit was silently lost) — with advice
+  naming `extract` and `--force`; mixed line endings no longer count as a
+  difference. `--force` keeps every replaced file as `<file>~`.
+- `inspect` reports the sibling twin (same text or not, which is newer) and a
+  file's structure (a cut island, a missing `</html>`, an inline engine that
+  is not its release's); `extract` warns on a cut-off file.
+- `assemble` keeps the includes the existing file holds (`--no-includes`
+  drops them), `--resolve-includes` reads file includes from the text's
+  folder only, and unresolved includes are warnings.
+- `upgrade` never downgrades a newer shell (unless `--force`) and never
+  writes over another document at `-o` without `--force`.
+- Files are written through a temporary file and a rename keeping their
+  mode; a symbolic link stays a link.
+- A 0.x island wrapped in `\r\n…\r\n` (a converted file) is read.
+- The page shows its document at once when a CDN hangs (the stylesheets no
+  longer block the engine) and holds a one-line fallback until the engine
+  runs.
+- `orz-mdhtml-browser`: pure-ASCII bundles, a `prepublishOnly` check of
+  `release.json` against the files, a `require` shim that throws a clear
+  error, `standalone` in the types, `docs/embedding.md` shipped (also in
+  `orz-mdhtml`); an app's own `hooks.ai` gets the AI menu in an editor
+  mounted on a file without host AI.
+
+### The kit's round-1 fixes (orz-markdown 2.2.0 carrier kit, `c271284`)
+
+- **A save never silently overwrites a file changed on disk**: when the
+  picked file is this document's (same `uid`) and its text changed since the
+  page opened it (another program, an agent, `assemble --force`), nothing is
+  written and the reader is asked — *Replace it* / *Download a copy instead*
+  (`save()` → `{ ok: false, via: 'file', error: 'conflict', conflict: true }`).
+- **Smoother `assemble`**: no `--force` needed when the existing `.md.html`
+  holds a known earlier state of the twin — its last commit or staged
+  version in git, or the text the CLI itself last wrote into the file or
+  read out of it (`new --html`, `assemble`, `extract`, `upgrade` keep a
+  SHA-256 per pair in `$XDG_CACHE_HOME/orz-mdhtml/`, else
+  `~/.cache/orz-mdhtml/`). Any other text (a browser save in between) is
+  refused as before. `--json` adds `replaced`; `inspect` adds `twin.earlier`.
+- `mountEditor` takes FC-19 §3 `includes` (the preview reads them first;
+  without `hooks.save` they go into the saved file); `fetchInclude` also gets
+  a file include's path when `includes` lacks it; an include nothing resolves
+  is a quiet "Included file not available" note (read view and preview).
+- An app's editor without `hooks.save` saves through the picker or a
+  download, never the served-page notice; in edit mode Cmd/Ctrl+S with the
+  focus on the chrome saves the editor; the chrome is first in the page
+  order; editor syntax colours follow the chrome's scheme.
+- The read view swaps stylesheets with the kit's `swapStylesheet` and
+  releases charts with `disposeEnhancement`; the IIFE captures only its own
+  bundle as the engine (`captureEngineSource(undefined, { bundle })`).
+
 ### Migration
 
 - 0.x files are not opened as they are: `orz-mdhtml upgrade old.md.html`
   writes a format-1 file and its text twin, keeping the source exactly and
   moving `#orz-meta`, the saved theme and the `<title>` into the header;
   `orz-mdhtml inspect` says what any file is and what to do.
+- Once 1.0.0 is published, a 0.9.x file's own "Framework 1.0.0 available"
+  banner offers an update that cannot read a 1.0 release: it ends with
+  "check your connection" and changes nothing. Use `orz-mdhtml upgrade`.
+- Changing the theme or the measure (in the editor or the read view) now
+  changes the document — they are header data — so the file is unsaved
+  until Save.
 
 ## [0.9.3] — 2026-07-17
 

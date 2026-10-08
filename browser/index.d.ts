@@ -49,6 +49,7 @@ export interface EditorHooks {
   /** App host: persist the text (absent: the standalone save). */
   save?(text: string): Promise<void>;
   ai?: { operations: AiOperation[]; request(op: string, ctx: { text: string; selection?: TextRange }): Promise<{ proposed: string }> };
+  /** An include `includes` lacks: a URL, or a file include's path as written (your trust policy); null = not available. */
   fetchInclude?(target: string): Promise<string | null>;
   resolveAsset?(path: string): string;
   uploadAsset?(file: File): Promise<string>;
@@ -73,10 +74,12 @@ export interface EditorOptions {
   preferences?: PreferenceStore;
   /** FC-19 §3 `nonce`: your CSP nonce, stamped on the preview frame's and CodeMirror's scripts and styles (FC-19 §8.4). */
   nonce?: string;
+  /** FC-19 §3 `includes`: resolved includes for the preview (target as written → text), read before `hooks.fetchInclude`; without `hooks.save` also stored in a saved file. */
+  includes?: Record<string, string>;
 }
 
 export type SaveVia = 'hook' | 'host' | 'file' | 'download';
-export type SaveOutcome = { ok: true; via: SaveVia } | { ok: false; via?: SaveVia | 'served-notice'; error: string; cancelled?: boolean };
+export type SaveOutcome = { ok: true; via: SaveVia } | { ok: false; via?: SaveVia | 'served-notice'; error: string; cancelled?: boolean; conflict?: boolean };
 export type AiOutcome = { ok: true; op: string } | { ok: false; error: string };
 /** An AI proposal awaiting the reader's review (`proposeAi`); only the editor that made it can apply it (`applyAi`). */
 export interface AiProposal {
@@ -131,7 +134,11 @@ export interface RenderPreviewOptions {
   fetchInclude?(target: string): Promise<string | null>;
   includes?: Readonly<Record<string, string>>;
   twinLinks?: boolean;
-  /** A whole script-free HTML document instead of the article's inner HTML. */
+  /**
+   * A whole HTML document (the header's stylesheets, no engine script) instead
+   * of the article's inner HTML. Either way the document's own raw HTML is kept
+   * as written — show it in a sandboxed frame.
+   */
   document?: boolean;
 }
 
@@ -148,6 +155,41 @@ export declare const THEMES: ReadonlyArray<{ id: string; name: string; scheme: '
 export declare const DEFAULT_THEME: string;
 export declare const MEASURES: readonly ['normal', 'wide', 'full'];
 
+/** How a save from an assembled file's page went. */
+export interface StandaloneSaveOutcome { ok: boolean; via?: string; error?: string; cancelled?: boolean }
+
+/**
+ * The page-side handle of an assembled `.md.html` that booted (orz-markdown
+ * `carrier/app` `CarrierApp`; `OrzCarrier.standalone`). Not part of FC-19:
+ * tests, the conformance driver and scripts in a file's own page use it.
+ */
+export interface StandaloneFile {
+  /** The current text: the document being edited (an editor mounted on the file), else the page's. */
+  getText(): string;
+  isDirty(): boolean;
+  /** Enter edit mode (mounting the editor once) and return the editor. */
+  edit(): Editor;
+  /** Leave edit mode (the read view shows the current text). */
+  leave(): Promise<void>;
+  /** The Edit button's editor while editing, else null. */
+  editor(): Editor | null;
+  /** Write header settings as the pickers do (one undoable edit). */
+  setSetting(changes: Record<string, HeaderChange>): void;
+  undo(): boolean;
+  redo(): boolean;
+  /** Save the document (the editor's save while editing). Never rejects. */
+  save(): Promise<StandaloneSaveOutcome>;
+  download(): Promise<StandaloneSaveOutcome>;
+  newDocument(): Promise<StandaloneSaveOutcome>;
+  saveAsCopy(): Promise<StandaloneSaveOutcome>;
+  /** Show a toast in the chrome. */
+  toast(message: string, tone?: 'info' | 'success' | 'warning' | 'error'): void;
+  /** True while a quiet update runs (the document is read-only). */
+  readonly updating: boolean;
+  /** Resolves when the first read view is in the page. */
+  readonly ready: Promise<void>;
+}
+
 export interface OrzCarrierApi {
   kind: 'md';
   version: string;
@@ -157,6 +199,8 @@ export interface OrzCarrierApi {
   readDocument: typeof readDocument;
   mountEditor: typeof mountEditor;
   renderPreview: typeof renderPreview;
+  /** The booted file's handle in an assembled `.md.html` (the IIFE only); null elsewhere. Not in the ES module's `OrzCarrier`. */
+  readonly standalone?: StandaloneFile | null;
 }
 export declare const OrzCarrier: OrzCarrierApi;
 

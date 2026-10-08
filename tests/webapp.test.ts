@@ -127,19 +127,21 @@ chrome('the example web app (real Chrome)', () => {
     await page.context().close();
   }, 120_000);
 
-  it('[X.2] the ESM build mounts the same editor, sets no global, and assembles the Node bytes', async () => {
+  it('[X.2] the ESM build mounts the same editor, sets no global, and assembles the Node bytes (inline by default, the engine fetched from jsDelivr)', async () => {
     const { page, errors } = await open('/examples/webapp/esm.html', []);
     await page.waitForFunction(() => !!(globalThis as unknown as { demo?: unknown }).demo);
     const r = await page.evaluate(async () => {
       const d = (globalThis as unknown as { demo: { editor: Ed; saved: string[]; assemble(t: string, o: unknown): Promise<string>; version: string; global: unknown } }).demo;
       d.editor.setText('# ESM\n\nchanged\n');
       const s = await d.editor.save();
-      return { s, saved: d.saved, version: d.version, global: d.global === undefined, html: await d.assemble('# ESM\n\nchanged\n', { delivery: 'cdn' }) };
+      return { s, saved: d.saved, version: d.version, global: d.global === undefined, html: await d.assemble('# ESM\n\nchanged\n', { delivery: 'cdn' }), inline: await d.assemble('# ESM\n\nchanged\n', {}) };
     });
     expect(r.s).toEqual({ ok: true, via: 'hook' });
     expect(r.saved).toEqual(['# ESM\n\nchanged\n']);
     expect(r.global).toBe(true);
     expect(r.html === assemble('# ESM\n\nchanged\n', { delivery: 'cdn' })).toBe(true);
+    // inline by default: the ES module holds no engine of its own text, so it fetches this release's IIFE from jsDelivr
+    expect(r.inline === assemble('# ESM\n\nchanged\n', { engineSource: b.iife })).toBe(true);
     expect(await page.evaluate(() => (window as unknown as { __csp: string[] }).__csp)).toEqual([]);
     expect(errors).toEqual([]);
     await page.context().close();

@@ -25,11 +25,13 @@ const editor = mountEditor(element, { text, nonce, hooks: { async save(text) { /
 
 `.md.html` files carry the bundle inline (the CLI's default) or load it from
 `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js`
-(`--cdn`). The bundle holds no `<script` / `</script` and no CR, so it can be
-inlined byte for byte and checked against `release.json`.
+(`--cdn`). The bundle holds no `<script` / `</script`, no CR and only ASCII,
+so it can be inlined byte for byte and checked against `release.json`.
+`require('orz-mdhtml-browser')` is not supported (it throws): use `import` or
+a `<script>` tag.
 
-Embedding guide (hooks, the AI review flow, CSP, versions):
-[docs/embedding.md](https://github.com/wangyu16/orz-mdhtml/blob/main/docs/embedding.md).
+Embedding guide (hooks, the AI review flow, CSP, versions): `docs/embedding.md`
+in this package ([on GitHub](https://github.com/wangyu16/orz-mdhtml/blob/main/docs/embedding.md)).
 Versioned in lockstep with `orz-mdhtml`; built by its `build/bundle.ts`.
 
 ## License

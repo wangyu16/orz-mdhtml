@@ -15,6 +15,8 @@ import { VERSION as ORZ_MARKDOWN_VERSION } from 'orz-markdown/version';
 import { corpus, HAZARDS, ENGINE } from './helpers.js';
 
 const CORPUS = corpus('md');
+/** The constant line `#orz-doc` holds until the engine renders (R.11). */
+const FALLBACK_HTML = '<p class="orz-fallback" style="opacity:.6;font:14px/1.5 system-ui,sans-serif">If this page stays blank, open it in a recent browser; the document\'s text is inside this file \u2014 see the comment at the top.</p>';
 const TEXTS: Array<[string, string, Record<string, string> | undefined]> = [
   ...CORPUS.map((c) => [c.path, c.text, c.includes] as [string, string, Record<string, string> | undefined]),
   ...Object.entries(HAZARDS).map(([name, text]) => [`hazard:${name}`, text, undefined] as [string, string, undefined]),
@@ -109,14 +111,14 @@ describe('FC-18 laws', () => {
     const plain = presentationOf('# T\n\ntheme: dark-elegant-1\nmeasure: full\n');
     expect(plain).toEqual({ theme: themeOf(DEFAULT_THEME), measure: 'normal' });
     const dark = assemble('{{nyml\nkind: document\ntheme: dark-elegant-1\nmeasure: wide\n}}\n\n# T\n', { delivery: 'cdn' });
-    expect(dark).toContain(`<link rel="stylesheet" id="orz-theme" href="https://cdn.jsdelivr.net/npm/orz-markdown@${ORZ_MARKDOWN_VERSION}/themes/dark-elegant-1.css">`);
+    expect(dark).toContain(`<link rel="stylesheet" id="orz-theme" href="https://cdn.jsdelivr.net/npm/orz-markdown@${ORZ_MARKDOWN_VERSION}/themes/dark-elegant-1.css" media="not all">`);
     expect(dark).toContain('<meta name="color-scheme" content="dark">');
     expect(dark).toContain('atom-one-dark.min.css');
-    expect(dark).toContain('<article id="orz-doc" class="markdown-body measure-wide"></article>');
+    expect(dark).toContain(`<article id="orz-doc" class="markdown-body measure-wide">${FALLBACK_HTML}</article>`);
     // an unknown theme or measure is the default (the header still holds what the author wrote)
     const unknown = assemble('{{nyml\nkind: document\ntheme: no-such\nmeasure: huge\n}}\n', { delivery: 'cdn' });
     expect(unknown).toContain(`themes/${DEFAULT_THEME}.css`);
-    expect(unknown).toContain('<article id="orz-doc" class="markdown-body"></article>');
+    expect(unknown).toContain(`<article id="orz-doc" class="markdown-body">${FALLBACK_HTML}</article>`);
     const docPart = (html: string): string => html
       .replace(/"delivery":"(inline|cdn)"/, '"delivery":"*"')
       .replace(/<script id="orz-engine"[^>]*>[\s\S]*?<\/script>/, '<engine>');
@@ -148,7 +150,9 @@ describe('the envelope and the shell parts', () => {
     expect(parts).toMatchObject({ kind: 'md', shellVersion: VERSION, delivery: 'inline' });
     // the 1.0 shell: head = viewport, colour scheme, theme / KaTeX / highlight.js stylesheets; body = read view, chrome mount, engine
     expect(parts.headHtml.split('\n').map((l) => /^<(meta name="[a-z-]+"|link rel="stylesheet" id="[a-z-]+")/.exec(l)?.[1])).toEqual(['meta name="viewport"', 'meta name="color-scheme"', 'link rel="stylesheet" id="orz-theme"', 'link rel="stylesheet" id="orz-katex"', 'link rel="stylesheet" id="orz-hljs"']);
-    expect(parts.bodyHtml).toBe(`<main id="orz-view" class="orz-view" data-orz-theme="${DEFAULT_THEME}"><article id="orz-doc" class="markdown-body"></article></main>\n<div id="orz-chrome"></div>\n<script id="orz-engine">${ENGINE}</script>`);
+    expect(parts.bodyHtml).toBe(`<main id="orz-view" class="orz-view" data-orz-theme="${DEFAULT_THEME}"><article id="orz-doc" class="markdown-body">${FALLBACK_HTML}</article></main>\n<div id="orz-chrome"></div>\n<script id="orz-engine">${ENGINE}</script>`);
+    // the stylesheets are switched off until the engine presents the document (a slow CDN never blocks the page, R.11)
+    for (const id of ['orz-theme', 'orz-katex', 'orz-hljs']) expect(parts.headHtml).toMatch(new RegExp(`<link rel="stylesheet" id="${id}" href="[^"]+" media="not all">`));
     expect(shellParts({ engineSource: ENGINE, includes: {} })).not.toHaveProperty('includes');
     // the header decides <title>, lang and #orz-meta
     const doc = CORPUS.find((c) => c.path === 'md/every-construct.md')!;

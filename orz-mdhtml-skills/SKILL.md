@@ -38,13 +38,34 @@ notes.md` is short for `assemble`. Theme ids: `orz-mdhtml themes`.
 
 ## Edit an existing document
 
-1. Have the text twin. If you only have `x.md.html`:
-   `npx orz-mdhtml extract x.md.html` → `x.md` (exact, byte for byte).
+The `.md.html` can be edited and saved in a browser, so it may hold work the
+text twin lacks — even when `x.md` is the newer file. Always compare first.
+
+1. **Compare before you edit.** If you only have `x.md.html`:
+   `npx orz-mdhtml extract x.md.html` → `x.md` (exact, byte for byte). If you
+   have both: `npx orz-mdhtml inspect x.md --json` and read `twin`:
+   - `holds: "same"` → go on;
+   - `holds: "different"` → `x.md.html` holds other (browser) edits: run
+     `npx orz-mdhtml extract x.md.html -o x.browser.md`, merge its changes
+     into `x.md` (or ask the user which to keep), then go on.
 2. Edit `x.md`. Document settings go in the header, not in the HTML and not
    as CLI options (`assemble` refuses `--title`, `--theme`…).
-3. `npx orz-mdhtml assemble x.md` → `x.md.html`. If it refuses because
-   `x.md.html` changed after `x.md` (someone saved in the browser), extract
-   first and merge — the file holds newer work.
+3. `npx orz-mdhtml assemble x.md` → `x.md.html`. No `--force` is needed
+   when `x.md.html` holds an earlier state of `x.md` the CLI can prove: what
+   `orz-mdhtml` itself last wrote into it or read out of it (after `extract`,
+   `new --html` or a previous `assemble`), or `x.md`'s last commit / staged
+   version in git. So: **`extract` first, then edit, then `assemble`** — it
+   just works. It refuses when the file holds any other text — someone saved
+   in the browser in between: do step 1 (extract to another name, merge),
+   then assemble again. Only when `x.md` has everything,
+   `npx orz-mdhtml assemble x.md --force` (the replaced file is kept as
+   `x.md.html~`). `--json` reports `replaced: "cache" | "git-head" |
+   "git-index" | null`.
+
+Includes: `assemble` keeps the includes the old file recorded;
+`assemble --resolve-includes` reads `{{md part.md}}` files from the text's
+folder (never outside it). Includes left unresolved are reported as
+`warnings` — the file shows nothing there.
 
 Content syntax (math, `{{mermaid}}`, `{{smiles}}`, `{{chart}}`, `::: ` containers,
 `{{md path}}` includes, …) is orz-markdown's: read its skill,
@@ -96,12 +117,23 @@ npx orz-mdhtml inspect x.md.html --json    # also works on a text, a 0.x file, a
 Read `input` (`text`, `assembled`, `legacy`, `html`), `kind`, `format`,
 `writable`, `shell.version` and `shell.relation` (`older` / `same` /
 `newer` than this tool), `uid`, `title`, `header.keys`, `includes`, `lint`,
-and **follow `advice`** — it names the command to run:
+`checks` (a file's structure), `twin` (the sibling `x.md` ↔ `x.md.html`:
+same text or not, which is newer), and **follow `advice`** — it names the
+command to run:
 
-- `legacy` (an orz-mdhtml 0.x file) → `upgrade`;
+- `legacy` (an orz-mdhtml 0.x file) → `upgrade` (its own "Framework 1.0.0
+  available" banner cannot update it: that ends with "check your
+  connection" and changes nothing);
+- `twin.holds: "different"` → the text and the file differ: extract and
+  merge before assembling (see "Edit an existing document") — unless
+  `twin.earlier` is set (`cache`, `git-head`, `git-index`): the file holds an
+  earlier text of `x.md`, and `assemble` replaces it without `--force`;
+- `checks.island: "unclosed"` → the file was cut off: the text may be
+  incomplete — find a backup; `checks.engine: "different"` / `"missing"` or
+  `checks.end: "unclosed"` → `upgrade` re-assembles it (the text is intact);
 - an older shell → `upgrade` re-assembles it (text unchanged);
 - a newer shell or a newer text `format` → use `npx orz-mdhtml@latest`; do not
-  re-assemble with an older tool;
+  re-assemble with an older tool (`upgrade` refuses to downgrade);
 - lint errors → fix the header, then assemble;
 - another kind (`slides`, `paged`) → its own tool (`npx orz-slides`, …).
 
@@ -115,8 +147,12 @@ npx orz-mdhtml upgrade old.md.html -o new.md.html --text new.md
 A 0.x file (orz-mdhtml ≤ 0.9.3) keeps its source exactly; its `#orz-meta`
 metadata, saved theme and `<title>` move into the header, and it gets a `uid`.
 The delivery (inline or cdn) is kept unless `--cdn` / `--inline`. A format-1
-file of an older shell is re-assembled with its text and includes unchanged.
-Upgrading twice changes nothing more.
+file of an older shell is re-assembled with its text and includes unchanged
+(this also repairs a damaged engine). A file of a newer shell is refused (no
+downgrades). Upgrading twice changes nothing more. Once orz-mdhtml 1.0.0 is
+published, a 0.9.x file's own "Framework 1.0.0 available" banner offers an
+update that fails harmlessly ("check your connection"): use
+`orz-mdhtml upgrade`.
 
 ## Recover the text from any version by hand
 
@@ -146,8 +182,9 @@ The same editor is a component: `npm install orz-mdhtml-browser`, then
 `mountEditor(element, { text, hooks: { save, ai, fetchInclude, … }, nonce })`
 (ES module, or `globalThis.OrzCarrier` from the IIFE). Store the text; call
 `assemble(text)` only when a file is needed. Hooks, the AI review flow and the
-CSP recipe: `docs/embedding.md` in the orz-mdhtml repository
-(`https://github.com/wangyu16/orz-mdhtml/blob/main/docs/embedding.md`).
+CSP recipe: `docs/embedding.md`, shipped in both packages
+(`node_modules/orz-mdhtml-browser/docs/embedding.md`, or
+`https://cdn.jsdelivr.net/npm/orz-mdhtml-browser/docs/embedding.md`).
 Platforms that show assembled files in an iframe use the host protocols
 (orz-markdown `spec/host-protocols.md`).
 
@@ -157,7 +194,9 @@ Read view with the header's theme; **Edit** (Cmd/Ctrl+E): editor + live
 preview, theme and measure pickers that write the header; **Save**
 (Cmd/Ctrl+S) writes `assemble(text)` back in place in Chromium (File System
 Access) and downloads elsewhere; a served (http) page offers *Download a
-copy*; *New document* and *Save as new copy* (new `uid`) under More; a quiet,
+copy*; if the file changed on disk since the page opened it (you ran
+`assemble --force` while it was open), the save asks the reader — *Replace
+it* or *Download a copy instead* — instead of overwriting your work; *New document* and *Save as new copy* (new `uid`) under More; a quiet,
 once-a-day update offer on local files. Reading and editing work in every
 modern browser; themes, math styles, diagram libraries and the editor load
 from CDNs.
@@ -166,9 +205,15 @@ from CDNs.
 
 - Do not edit `x.md.html` by hand, and never serialize a live page: the text
   is the document.
-- The CLI does not resolve `{{md path}}` / URL includes into the file; a file
-  shows only includes stored in its `#orz-includes` (library callers pass
-  `assemble(text, { includes })`; `upgrade` keeps a file's own).
+- A file shows only includes stored in its `#orz-includes`. The CLI keeps
+  the old file's record and resolves file includes with
+  `assemble --resolve-includes` (from the text's folder only); it never
+  fetches URL includes (library callers pass `assemble(text, { includes })`;
+  `upgrade` keeps a file's own). Unresolved includes are warnings.
+- `--force` keeps what it replaces as `<file>~`; still, compare before you
+  force (see "Edit an existing document"). The pair records live in
+  `$XDG_CACHE_HOME/orz-mdhtml/` (else `~/.cache/orz-mdhtml/`); deleting them
+  only makes `assemble` stricter.
 - Keep the `uid` across revisions of a document. A different document needs
   its own: start it with `new` (or the file's *Save as new copy*), never by
   copying another text's header with its `uid`.

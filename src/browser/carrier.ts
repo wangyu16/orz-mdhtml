@@ -74,7 +74,7 @@ export function readDocument(text: string): DocumentInfo {
 
 /** Options of {@link renderPreview}. */
 export interface RenderPreviewOptions {
-  /** URL include → text (the app's trust policy); without it URL includes stay directives. */
+  /** An include `includes` lacks → text or null (the app's trust policy): a URL, or a file include's path as written. Unresolved includes render a quiet "Included file not available" note. */
   fetchInclude?(target: string): Promise<string | null>;
   /** Resolved includes (`extract(html).includes`): target as written → text. */
   includes?: Readonly<Record<string, string>>;
@@ -83,16 +83,19 @@ export interface RenderPreviewOptions {
   /**
    * `true`: a whole HTML document (theme, KaTeX and highlight.js stylesheets of
    * the header's theme, the article with its measure) for a sandboxed iframe's
-   * `srcdoc` — without scripts. Default `false`: the article's inner HTML.
+   * `srcdoc` — the engine adds no script, but the document's own raw HTML is
+   * kept as written (scripts included): show it only in a sandboxed frame.
+   * Default `false`: the article's inner HTML.
    */
   document?: boolean;
 }
 
 /**
  * Read-only HTML of a text for an app (thumbnails, read views): the article's
- * inner HTML (or, with `document: true`, a script-free HTML document). Put it
- * in a sandboxed frame: a document's raw HTML is not filtered (orz-markdown
- * M.21: documents come from trusted sources).
+ * inner HTML (or, with `document: true`, a whole HTML document with the
+ * header's stylesheets and no engine script). Either way the document's own
+ * raw HTML is kept as written — scripts included (orz-markdown M.21:
+ * documents come from trusted sources): show it in a sandboxed frame.
  */
 export async function renderPreview(text: string, options: RenderPreviewOptions = {}): Promise<string> {
   const inner = await renderMd(text, {
@@ -128,6 +131,14 @@ export interface EditorOptions {
    * style elements. Needed under a nonce-based `script-src`.
    */
   nonce?: string;
+  /**
+   * FC-19 §3 `includes` (orz-markdown 2.2.0): resolved includes the app hands
+   * the renderer (target as written → text), like an assembled file's
+   * `#orz-includes`; the preview reads an include here first, then asks
+   * `hooks.fetchInclude` (a URL, or a file include's path as written). Without
+   * `hooks.save` they also go into the file a save writes.
+   */
+  includes?: Record<string, string>;
 }
 
 /** The Editor of FC-19 §4 (the kit's editor shell, which implements it). */
@@ -171,7 +182,7 @@ export function mountEditor(element: HTMLElement, options: EditorOptions, standa
     ...(options.nonce ? { nonce: options.nonce } : {}),
     ...(ctx?.adapter ? { adapter: ctx.adapter } : {}),
     hooks,
-    ...(isApp ? {} : ctx ? {
+    ...(isApp ? (options.includes ? { includes: options.includes } : {}) : ctx ? {
       assemble: ctx.assemble,
       fileName: ctx.fileName,
       saver: ctx.saver,
@@ -180,8 +191,9 @@ export function mountEditor(element: HTMLElement, options: EditorOptions, standa
       ...(ctx.openedHtml ? { openedHtml: ctx.openedHtml } : {}),
       standalone: ctx.standalone,
     } : {
-      // no hooks.save and no file: an inline file of the text, through the picker or a download
+      // no hooks.save and no file: an inline file of the text (with the app's includes), through the picker or a download
       assemble: (t: string, o?: { includes?: Record<string, string> }) => assemble(t, { ...(o?.includes ? { includes: o.includes } : {}) }),
+      ...(options.includes ? { includes: options.includes } : {}),
     }),
     preview: present(options.text),
   });
@@ -189,8 +201,10 @@ export function mountEditor(element: HTMLElement, options: EditorOptions, standa
   // the carrier's tools in the toolbar (FC-19 §1: the same tools for every host)
   const iconOnly = options.chrome === 'compact';
   const settings = attachSettings(shell, MD_SETTINGS, { iconOnly });
+  // an app's own AI hook gets the AI menu here — also in an editor mounted on a file, unless the
+  // file's host offers AI (then the kit's app adds the host's menu to this editor itself)
   const appAi = appHooks.ai;
-  const aiMenu = !ctx && appAi ? attachAiMenu(shell, { operations: () => (Array.isArray(appAi.operations) ? appAi.operations : []), iconOnly }) : null;
+  const aiMenu = appAi && !ctx?.ai ? attachAiMenu(shell, { operations: () => (Array.isArray(appAi.operations) ? appAi.operations : []), iconOnly }) : null;
   // the preview follows the header's theme and measure
   const unfollow = followPresentation(shell, present);
 

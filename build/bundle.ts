@@ -7,8 +7,12 @@
  *   `script`/`/script` is rewritten as `\x3C` (same value in every string,
  *   template and regular expression), then it must be script-safe (the kit's
  *   `isScriptSafe`) and hold no CR or NUL — else the build fails;
+ *   Both builds are pure ASCII (esbuild `charset: 'ascii'`: every other
+ *   character is a `\u` escape), so they mean the same under any charset a
+ *   server or a page declares, and their bytes equal their text;
  * - `esm/orz-mdhtml.browser.mjs` — the same API as ES module exports
  *   (src/browser/esm.ts), for apps that bundle it themselves;
+ * - `docs/embedding.md` — a copy of the app author's guide (shipped);
  * - `release.json` — the release manifest (kind, version, formats, notes,
  *   bundle path and the SHA-384 integrity of the IIFE's exact bytes, computed
  *   AFTER the rewrite).
@@ -43,6 +47,15 @@ import { VERSION as ORZ_MARKDOWN_VERSION } from 'orz-markdown/version';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const BUNDLE_FILE = 'orz-mdhtml.browser.js';
 export const ESM_FILE = 'esm/orz-mdhtml.browser.mjs';
+
+/**
+ * What esbuild's `charset: 'ascii'` leaves (it does not escape inside regular
+ * expression literals): each remaining non-ASCII UTF-16 unit as a `\uXXXX`
+ * escape — the same character in a string, a template, an identifier and a
+ * regular expression (with or without the `u` flag a surrogate pair of
+ * escapes is the one code point).
+ */
+export const asciiOnly = (code: string): string => code.replace(/[^\x00-\x7f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
 
 /** The bundle rule's rewrite: `<script` / `</script` (any case, after backslashes) → `\x3C…`. */
 export const scriptSafe = (code: string): string => code.replace(/<(\\*)(\/?script)/gi, '\\x3C$1$2');
@@ -91,6 +104,7 @@ export function checkBundleRule(code: string, what: string): void {
   if (!isScriptSafe(code)) throw new Error(`${what}: not script-safe after the rewrite (a <script or </script sequence remains)`);
   if (code.includes('\r')) throw new Error(`${what}: holds a CR (U+000D); an inlined copy would not match its integrity`);
   if (code.includes('\u0000')) throw new Error(`${what}: holds a NUL`);
+  if (/[^\x00-\x7f]/.test(code)) throw new Error(`${what}: holds a non-ASCII character (the build is charset: 'ascii')`);
 }
 
 /** Build the IIFE, the ESM build and release.json in memory. */
@@ -99,14 +113,14 @@ export async function buildBrowser(o: { version?: string } = {}): Promise<Browse
   const version = o.version ?? pkgVersion;
   const common = {
     bundle: true, minify: true, platform: 'browser' as const, target: ['es2020'], write: false, logLevel: 'silent' as const,
-    charset: 'utf8' as const, legalComments: 'none' as const, absWorkingDir: ROOT, plugins: [oneKatex, versionAs(o.version)],
+    charset: 'ascii' as const, legalComments: 'none' as const, absWorkingDir: ROOT, plugins: [oneKatex, versionAs(o.version)],
   };
   const [iifeOut, esmOut] = await Promise.all([
     build({ ...common, entryPoints: ['src/browser/index.ts'], format: 'iife' }),
     build({ ...common, entryPoints: ['src/browser/esm.ts'], format: 'esm' }),
   ]);
-  const iife = scriptSafe(iifeOut.outputFiles![0].text);
-  const esm = scriptSafe(esmOut.outputFiles![0].text);
+  const iife = scriptSafe(asciiOnly(iifeOut.outputFiles![0].text));
+  const esm = scriptSafe(asciiOnly(esmOut.outputFiles![0].text));
   checkBundleRule(iife, BUNDLE_FILE);
   checkBundleRule(esm, ESM_FILE);
   const integrity = sri(iife);
@@ -114,13 +128,15 @@ export async function buildBrowser(o: { version?: string } = {}): Promise<Browse
   return { version, iife, esm, release, integrity };
 }
 
-/** Write a build into a package folder (default browser/). */
-export function writeBrowser(b: BrowserBuild, dir = join(ROOT, 'browser')): { bundle: string; esm: string; release: string } {
+/** Write a build into a package folder (default browser/), with the app author's guide (docs/embedding.md, shipped in the package). */
+export function writeBrowser(b: BrowserBuild, dir = join(ROOT, 'browser')): { bundle: string; esm: string; release: string; guide: string } {
   mkdirSync(join(dir, 'esm'), { recursive: true });
-  const paths = { bundle: join(dir, BUNDLE_FILE), esm: join(dir, ESM_FILE), release: join(dir, 'release.json') };
+  mkdirSync(join(dir, 'docs'), { recursive: true });
+  const paths = { bundle: join(dir, BUNDLE_FILE), esm: join(dir, ESM_FILE), release: join(dir, 'release.json'), guide: join(dir, 'docs', 'embedding.md') };
   writeFileSync(paths.bundle, b.iife, 'utf8');
   writeFileSync(paths.esm, b.esm, 'utf8');
   writeFileSync(paths.release, b.release, 'utf8');
+  writeFileSync(paths.guide, readFileSync(join(ROOT, 'docs', 'embedding.md'), 'utf8'), 'utf8');
   return paths;
 }
 
@@ -143,5 +159,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   console.log(`  ${paths.bundle}  ${kb(b.iife)}  ${b.integrity}`);
   console.log(`  ${paths.esm}  ${kb(b.esm)}`);
   console.log(`  ${paths.release}`);
+  console.log(`  ${paths.guide} (docs/embedding.md, shipped)`);
   console.log(`  ${lib.bundle} + ${lib.release} (the Node library's engine, same bytes)`);
 }

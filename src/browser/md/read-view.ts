@@ -10,8 +10,8 @@
  */
 import { readDocument } from 'orz-markdown/carrier';
 import type { CarrierReadView, ReadViewContext } from 'orz-markdown/carrier/app';
-import { enhanceDocument, PREVIEW_CDN } from 'orz-markdown/preview-frame';
-import { articleClass, presentationOf, themeHref } from '../../presentation.js';
+import { disposeEnhancement, enhanceDocument, PREVIEW_CDN, swapStylesheet } from 'orz-markdown/preview-frame';
+import { articleClass, presentationOf, themeHref, SHELL_STYLESHEETS } from '../../presentation.js';
 import { renderMd } from './render.js';
 
 /** The md read view: the kit's `CarrierReadView` with the article it renders into. */
@@ -39,31 +39,35 @@ export function createReadView(doc: Document): MdReadView {
     main.append(article);
   }
   let generation = 0;
+  let destroyed = false;
 
-  const link = (id: string): HTMLLinkElement => {
-    let l = doc.getElementById(id) as HTMLLinkElement | null;
-    if (!l) {
-      l = doc.createElement('link');
-      l.rel = 'stylesheet';
-      l.id = id;
-      doc.head.append(l);
+  /** The shell writes its stylesheets switched off (`media="not all"`, so a slow CDN never blocks the page): switch them on. */
+  const enableStylesheets = (): void => {
+    for (const id of SHELL_STYLESHEETS) {
+      const l = doc.getElementById(id);
+      if (l && l.getAttribute('media') === 'not all') l.removeAttribute('media');
     }
-    return l;
+  };
+
+  const setTitle = (text: string): void => {
+    try {
+      const title = readDocument(text, { kind: 'md' }).title;
+      if (doc.title !== title) doc.title = title;
+    } catch { /* the title stays */ }
   };
 
   const present = (text: string): { scheme: 'light' | 'dark' } => {
     const p = presentationOf(text);
-    const theme = link('orz-theme');
-    const href = themeHref(p.theme.id);
-    if (theme.getAttribute('href') !== href) theme.setAttribute('href', href);
-    const hljs = link('orz-hljs');
-    const hljsHref = p.theme.scheme === 'dark' ? PREVIEW_CDN.hljsDarkCss : PREVIEW_CDN.hljsLightCss;
-    if (hljs.getAttribute('href') !== hljsHref) hljs.setAttribute('href', hljsHref);
+    // the kit's swap (M.27): the old sheet styles the page until the new one has loaded — no flash
+    swapStylesheet(doc, 'orz-theme', themeHref(p.theme.id));
+    swapStylesheet(doc, 'orz-hljs', p.theme.scheme === 'dark' ? PREVIEW_CDN.hljsDarkCss : PREVIEW_CDN.hljsLightCss);
+    enableStylesheets();
     const scheme = doc.querySelector('meta[name="color-scheme"]');
     if (scheme && scheme.getAttribute('content') !== p.theme.scheme) scheme.setAttribute('content', p.theme.scheme);
     main!.setAttribute('data-orz-theme', p.theme.id);
     const cls = articleClass(p.measure);
     if (article!.className !== cls) article!.className = cls;
+    setTitle(text); // the page title follows the header's title (and the first heading)
     return { scheme: p.theme.scheme };
   };
 
@@ -75,14 +79,16 @@ export function createReadView(doc: Document): MdReadView {
       const mine = ++generation;
       const { scheme } = present(text);
       const html = await renderMd(text, ctx);
-      if (mine !== generation) return; // a newer render won
+      if (mine !== generation || destroyed) return; // a newer render won (or the view is gone)
+      disposeEnhancement(article!); // the old content's charts and QR overlay go with it (M.26)
       article!.innerHTML = html;
-      try {
-        const title = readDocument(text, { kind: 'md' }).title;
-        if (doc.title !== title) doc.title = title;
-      } catch { /* the title stays */ }
       // the libraries load in the background: the content shows now (offline it stays as rendered)
       void enhanceDocument(article!, { scheme }).catch(() => undefined);
+    },
+    destroy() {
+      destroyed = true;
+      generation++;
+      disposeEnhancement(article!);
     },
   };
 }

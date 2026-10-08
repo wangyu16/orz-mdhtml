@@ -19,7 +19,8 @@ import { upgrade as upgradeFile, type UpgradeOptions, type UpgradeResult } from 
 import { engineSource } from './engine.js';
 
 export { extract, readDocument, newDocument, cdnBundleUrl, BUNDLE_FILE, FORMATS, type AssembleOptions, type NewDocumentOptions, type Extracted, type DocumentInfo, type Kind } from './assemble.js';
-export { inspect, type InspectReport } from './inspect.js';
+import { inspect as inspectInput, type InspectOptions, type InspectReport } from './inspect.js';
+export type { InspectOptions, InspectReport } from './inspect.js';
 export { readLegacy, type LegacyFile, type UpgradeResult, type UpgradeOptions } from './legacy.js';
 export { THEMES, DEFAULT_THEME, isThemeId, type ThemeInfo } from './themes.js';
 export { MEASURES, DEFAULT_MEASURE, type Measure } from './presentation.js';
@@ -56,4 +57,17 @@ export function assemble(text: string, options: AssembleOptions = {}): string {
  */
 export function upgrade(html: string, options: UpgradeOptions = {}): UpgradeResult {
   return upgradeFile(html, withEngine(options));
+}
+
+/**
+ * Inspect a text or a file of any version (the isomorphic `inspect`): an
+ * inline file of this shell version is checked against this release's
+ * engine (`checks.engine`), unless `options.engineSource` says otherwise;
+ * when the engine cannot be read here, the check says `unverified`.
+ */
+export function inspect(input: string, options: InspectOptions = {}): InspectReport {
+  if (options.engineSource !== undefined) return inspectInput(input, options);
+  let engine: string | undefined;
+  try { engine = engineSource(); } catch { engine = undefined; }
+  return inspectInput(input, { ...options, ...(engine !== undefined ? { engineSource: engine } : {}) });
 }

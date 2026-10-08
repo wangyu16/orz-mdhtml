@@ -6,7 +6,9 @@ for web apps (family decision FD-06; contract FC-19 in orz-markdown
 **text** (the canonical document, FC-18) wherever it likes, and makes
 assembled `.md.html` files only when someone needs one.
 
-A working example: [`examples/webapp/`](../examples/webapp/) — two editors on
+This guide ships in both packages (`node_modules/orz-mdhtml-browser/docs/embedding.md`,
+`node_modules/orz-mdhtml/docs/embedding.md`). A working example:
+[`examples/webapp/`](https://github.com/wangyu16/orz-mdhtml/tree/main/examples/webapp) — two editors on
 one page with every hook, under a nonce Content-Security-Policy
 (`index.html`, IIFE) and the ES module variant (`esm.html`). The test suite
 runs both in real Chrome (`tests/webapp.test.ts`).
@@ -21,6 +23,7 @@ npm install orz-mdhtml-browser
 |---|---|---|
 | a bundler (Vite, esbuild, webpack) | `import { mountEditor } from 'orz-mdhtml-browser'` | `esm/orz-mdhtml.browser.mjs` (`exports` → `import`) |
 | a plain `<script>` | `<script src=".../orz-mdhtml.browser.js">` → `globalThis.OrzCarrier` | `orz-mdhtml.browser.js` (`exports` → `default`) |
+| `require()` | not supported: it throws, pointing to `import` or `<script>` | `require.cjs` (`exports` → `require`) |
 | the CDN | `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js` | the same IIFE |
 
 Types: `orz-mdhtml-browser/index.d.ts` (`Editor`, `EditorOptions`,
@@ -47,6 +50,7 @@ const editor = mountEditor(element, {
   chrome: 'full',             // 'full' (labels) | 'compact' (icons) | 'none' (your UI drives the API)
   readOnly: false,
   nonce,                      // your CSP nonce (FC-19 §3, see below)
+  includes,                   // resolved includes for the preview: { 'parts/a.md': text, 'https://…': text } (FC-19 §3)
   hooks: { save, ai, fetchInclude, resolveAsset, uploadAsset, resolveLink, mintUid },
   // preferences: your PreferenceStore (default: localStorage, namespaced by the header uid)
 });
@@ -67,7 +71,7 @@ Esc leaves the text for the toolbar.
 
 `getText()` · `setText(text, { resetHistory? })` · `setHeader(changes)` (one
 undoable edit, FC-18 §9 rules) · `undo()` / `redo()` · `isDirty()` /
-`markSaved()` · `save()` → `{ ok, via, error? }` (`via`: `hook`, `host`,
+`markSaved()` · `save()` → `{ ok, via, error?, conflict? }` (`via`: `hook`, `host`,
 `file`, `download`), never rejects · `setMode(m)` / `getMode()` · `focus()` ·
 `on('change' | 'dirty' | 'selection' | 'save' | 'error', fn)` → unsubscribe ·
 `proposeAi(op, { selection? })` / `applyAi(proposal, { proposed? })` (the
@@ -96,18 +100,32 @@ if (r.ok && await myConfirm(r.proposal.original, r.proposal.proposed)) editor.ap
 |---|---|---|
 | `save(text)` | on Save / Cmd+S / `editor.save()` | a promise; reject to report a failure (the editor stays dirty). **With `save`, you own persistence**: nothing is written to disk or downloaded |
 | `ai.operations`, `ai.request(op, { text, selection? })` | the AI menu and `editor.proposeAi` (the proposal is reviewed before `applyAi` writes it), `editor.requestAi` | `{ proposed }` — the replacement of the selection (`selection: true` operations) or of the whole text |
-| `fetchInclude(url)` | the preview meets `{{md https://…}}` / `{{markdown …}}` / `{{md-include …}}` | the Markdown, or `null`. Your trust policy (allowlist) decides |
+| `fetchInclude(target)` | the preview meets an include `includes` lacks: a URL (`{{md https://…}}` / `{{markdown …}}` / `{{md-include …}}`), or a file include's path as written (`{{md parts/a.md}}` → `'parts/a.md'`; you read your own files) | the Markdown, or `null`. Your trust policy (allowlist) decides |
 | `resolveAsset(path)` | every relative `src` / `srcset` / `poster` in the preview | the URL to load (e.g. a signed URL of your storage) |
 | `uploadAsset(file)` | a file pasted or dropped into the editor, `editor.uploadAssets` | the relative path to insert (`![name](path)` for images) |
 | `resolveLink(href)` | a link clicked in the preview (as written, e.g. `week2.md`) | the URL to open |
 | `mintUid()` | `editor.ensureUid()` when the header has no `uid` | a `doc-[0-9a-z]{10,32}` id from your registry (FC-18 §10) |
 
+**Includes.** The preview reads an include from the `includes` option first
+(target as written → text, like an assembled file's `#orz-includes`), then
+asks `hooks.fetchInclude` — with the URL, or with the path as written for a
+file include `includes` lacks. An include neither answers shows a quiet
+"Included file not available: parts/a.md" note in the preview (the directive
+is kept; a printed page hides the note).
+
 Without `hooks.save` the editor saves like a standalone file: an inline
-`.md.html` through the File System Access picker, else a download. (Mounted
+`.md.html` (holding the `includes` you passed) through the File System Access
+picker, else a download. Your app's page is not a served file: such a save
+never shows the "opened from a web address" notice, even over https. If the
+picked file is another copy of this document (same header `uid`) whose text
+changed on disk since the editor opened it (another program or an agent
+edited it), nothing is written: `save()` resolves `{ ok: false, via: 'file',
+error: 'conflict', conflict: true }` and the editor asks the reader — **Replace
+it** writes the file, **Download a copy instead** downloads one. (Mounted
 inside an assembled `.md.html` page, it is an editor of that file: it saves
-through the file's own saver, delivery, includes and host, the page's
-Cmd/Ctrl+S saves it, and its unsaved changes make the page ask before it
-closes.)
+through the file's own saver, delivery, includes and host — with the same
+conflict question — the page's Cmd/Ctrl+S saves it, and its unsaved changes
+make the page ask before it closes.)
 
 ## Content-Security-Policy (FC-19 §8.4)
 
@@ -143,13 +161,19 @@ them). Mermaid inserts `<style>` elements at run time: allow them with
 import { assemble, extract, readDocument, renderPreview } from 'orz-mdhtml-browser';
 
 readDocument(text)                        // header + derived facts (title, author, uid, theme, lint) — no rendering; index with it
-await renderPreview(text, { fetchInclude })            // the article's HTML, for a sandboxed read-only view
-await renderPreview(text, { document: true })          // a whole script-free HTML document (iframe srcdoc, thumbnails)
+await renderPreview(text, { includes, fetchInclude })  // the article's HTML, for a sandboxed read-only view (includes as in the editor)
+await renderPreview(text, { document: true })          // a whole HTML document with the header's stylesheets (iframe srcdoc, thumbnails)
 await assemble(text, { delivery: 'cdn' })              // a small .md.html that loads the engine from jsDelivr
 await assemble(text)                                   // an inline .md.html (fetches this release's bundle once, or pass engineSource)
 await assemble(text, { includes })                     // with resolved includes in #orz-includes
 extract(html)                                          // { text, kind, format, shell, delivery, includes } | null
 ```
+
+`renderPreview` adds no script of its own, but it keeps the document's raw
+HTML as written — a document can hold `<script>` and event handlers (documents
+come from trusted sources; orz-markdown does not filter them). Show its output
+only in a sandboxed frame (`<iframe sandbox srcdoc=…>`, without
+`allow-same-origin`), never with `innerHTML` in your page.
 
 `assemble` writes the same bytes as the Node library (`orz-mdhtml`), so an app
 can publish, preview or download without a server. Store the text; regenerate

@@ -4,7 +4,8 @@
 import { describe, it, expect } from 'vitest';
 import { assembleEnvelope } from 'orz-markdown/carrier';
 import { inspect } from '../src/inspect.js';
-import { assemble, newDocument } from '../src/assemble.js';
+import { inspect as libInspect, engineSource } from '../src/lib.js';
+import { assemble, cdnBundleUrl, newDocument } from '../src/assemble.js';
 import { VERSION } from '../src/version.js';
 import { corpus, ENGINE, LEGACY_FILES, read } from './helpers.js';
 
@@ -117,5 +118,58 @@ describe('inspect', () => {
       expect(JSON.parse(JSON.stringify(r))).toEqual(r);
       expect(inspect(input)).toEqual(r);
     }
+  });
+
+  it('[I.6] the sibling twin: a text and its .md.html holding different texts are reported (which is newer) with advice naming extract and --force; the same text is not', () => {
+    const text = newDocument({ uid: UID });
+    const browser = assemble(`${text}\nsaved in the browser\n`, { delivery: 'cdn' });
+    const r = inspect(text, { filename: 'doc.md', twin: { name: 'doc.md.html', content: browser, newer: 'input' } });
+    expect(r.twin).toEqual({ name: 'doc.md.html', holds: 'different', newer: 'input' });
+    expect(r.advice.join('\n')).toMatch(/doc\.md\.html holds a different text.*this file was modified later.*orz-mdhtml extract doc\.md\.html.*--force/);
+    expect(r.advice.join('\n')).not.toMatch(/a text twin: `orz-mdhtml assemble/);
+    const fromFile = inspect(browser, { filename: 'doc.md.html', twin: { name: 'doc.md', content: text, newer: 'twin' } });
+    expect(fromFile.twin).toEqual({ name: 'doc.md', holds: 'different', newer: 'twin' });
+    expect(fromFile.advice.join('\n')).toMatch(/the text twin doc\.md holds a different text.*doc\.md was modified later|the text twin doc\.md holds a different text/);
+    // the same text (mixed line endings stored in one style count as the same)
+    const mixed = 'a\r\nb\nc\n';
+    expect(inspect(mixed, { twin: { name: 'm.md.html', content: assemble(mixed, { delivery: 'cdn' }) } }).twin).toEqual({ name: 'm.md.html', holds: 'same', newer: 'unknown' });
+    expect(inspect(assemble(mixed, { delivery: 'cdn' }), { twin: { name: 'm.md', content: mixed, newer: 'same-time' } }).twin!.holds).toBe('same');
+    // a sibling that is not an orz file, and no sibling given
+    expect(inspect(text, { twin: { name: 'doc.md.html', content: '<!doctype html><p>x' } }).twin!.holds).toBe('none');
+    expect(inspect(text).twin).toBeNull();
+  });
+
+  it('[I.7] an assembled file\'s structure: a cut island (text may be incomplete), a missing </html>, an altered or cut inline engine (checked against this release\'s bundle; advice: upgrade), a cdn engine URL', () => {
+    const text = newDocument({ title: 'Checked', uid: UID });
+    const cdn = assemble(text, { delivery: 'cdn' });
+    expect(inspect(cdn).checks).toEqual({ island: 'closed', end: 'closed', engine: 'cdn' });
+    expect(inspect(cdn.replace(cdnBundleUrl(), 'https://example.test/evil.js')).checks!.engine).toBe('different');
+    // the Node library verifies an inline file of this version against this release's bundle
+    const inline = assemble(text, { engineSource: engineSource() });
+    expect(libInspect(inline).checks).toEqual({ island: 'closed', end: 'closed', engine: 'same' });
+    expect(libInspect(inline).advice).toEqual([]);
+    const altered = inline.replace('<script id="orz-engine">', '<script id="orz-engine">window.x=1;');
+    const a = libInspect(altered);
+    expect(a.checks!.engine).toBe('different');
+    expect(a.writable).toBe(true); // the text is intact: upgrade re-assembles it
+    expect(a.advice.join('\n')).toMatch(/inline engine is not orz-mdhtml .* release bundle.*orz-mdhtml upgrade/);
+    // without a reference bundle (the isomorphic inspect), or another shell version: not verified
+    expect(inspect(inline).checks!.engine).toBe('unverified');
+    expect(libInspect(inline.replace(`"shell":"${VERSION}"`, '"shell":"0.0.1"')).checks!.engine).toBe('unverified');
+    // cut after the island: the text is complete, the page is not
+    const cutEngine = inline.slice(0, inline.indexOf('<script id="orz-engine">') + 5000);
+    const ce = libInspect(cutEngine);
+    expect(ce.checks).toEqual({ island: 'closed', end: 'unclosed', engine: 'different' });
+    expect(ce.advice.join('\n')).toMatch(/does not end with <\/html>.*upgrade/);
+    // cut inside the island: the text may be incomplete
+    const cutIsland = cdn.slice(0, cdn.indexOf('Start writing') + 5);
+    const ci = inspect(cutIsland);
+    expect(ci.input).toBe('assembled');
+    expect(ci.checks).toMatchObject({ island: 'unclosed', end: 'unclosed' });
+    expect(ci.writable).toBe(false);
+    expect(ci.advice.join('\n')).toMatch(/not closed.*text may be incomplete/);
+    // texts, legacy files and plain HTML have no structure report
+    expect(inspect(text).checks).toBeNull();
+    expect(inspect(read(LEGACY_FILES['fixtures/sample.md.html'])).checks).toBeNull();
   });
 });

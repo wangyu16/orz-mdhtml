@@ -6,13 +6,16 @@
  */
 import { describe, it, expect, afterAll } from 'vitest';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { join } from 'node:path';
 import { escapeScriptText } from 'orz-markdown/carrier/read';
 import { renderMarkdownPreviewWithIncludes } from 'orz-markdown/carrier/editor';
 import { isScriptSafe, parseManifest, sandboxDocument } from 'orz-markdown/carrier/shell';
 import { assemble, extract, readDocument, type AssembleOptions } from '../src/assemble.js';
 import { VERSION } from '../src/version.js';
-import { BUNDLE_FILE, ESM_FILE, buildBrowser, checkBundleRule, scriptSafe, writeBrowser } from '../build/bundle.js';
+import { BUNDLE_FILE, ESM_FILE, asciiOnly, buildBrowser, checkBundleRule, scriptSafe, writeBrowser } from '../build/bundle.js';
 import { bundle, launch, routeCdn, serve, tempDir, type Browser, type Page } from './browser-env.js';
 import { corpus, HAZARDS } from './helpers.js';
 
@@ -34,16 +37,24 @@ describe('the bundle and its package (Node)', () => {
       expect(isScriptSafe(code), name).toBe(true);
       expect(escapeScriptText(code) === code, name).toBe(true);
       expect(() => checkBundleRule(code, name)).not.toThrow();
-      // strict UTF-8 round trip
+      // strict UTF-8 round trip, and pure ASCII (charset: 'ascii' and the escape of what it leaves): the bytes are the text under any charset
       expect(new TextDecoder('utf-8', { fatal: true }).decode(new TextEncoder().encode(code)) === code).toBe(true);
+      expect(/[^\x00-\x7f]/.test(code), name).toBe(false);
+      expect(Buffer.byteLength(code, 'utf8'), name).toBe(code.length);
     }
     // the rewrite is what makes it safe: esbuild emits these sequences, and the check refuses them
     expect(scriptSafe('a="</script>";b="<SCRIPT";c="<\\/script"')).toBe('a="\\x3C/script>";b="\\x3CSCRIPT";c="\\x3C\\/script"');
     expect(() => checkBundleRule('a="</script>"', 'x')).toThrow(/script-safe/);
     expect(() => checkBundleRule('a=1;\r\nb=2;', 'x')).toThrow();
+    expect(() => checkBundleRule('a=/[\u00e9]/;', 'x')).toThrow(/ASCII/);
+    // what charset: 'ascii' leaves (regular expression literals) is escaped to the same characters
+    expect(asciiOnly('a=/[îï]/u.test(s)||"𝒳"')).toBe('a=/[\\u00ee\\u00ef]/u.test(s)||"\\ud835\\udcb3"');
+    // eslint-disable-next-line no-new-func
+    expect(new Function(`return ${asciiOnly('/^[ñ𝒳]+$/u')}`)().test('ñ𝒳ñ')).toBe(true);
     // the build script is the one small copied build file (D-18): it checks after the rewrite and before the integrity
     const src = readFileSync('build/bundle.ts', 'utf8');
-    expect(src.indexOf('checkBundleRule(iife')).toBeGreaterThan(src.indexOf('scriptSafe(iifeOut'));
+    expect(src.indexOf('scriptSafe(asciiOnly(iifeOut')).toBeGreaterThan(0);
+    expect(src.indexOf('checkBundleRule(iife')).toBeGreaterThan(src.indexOf('scriptSafe(asciiOnly(iifeOut'));
     expect(src.indexOf('sri(iife)')).toBeGreaterThan(src.indexOf('checkBundleRule(iife'));
   });
 
@@ -51,8 +62,10 @@ describe('the bundle and its package (Node)', () => {
     for (const gone of ['src/browser/standalone', 'src/browser/ui', 'src/browser/engine-source.ts', 'tests/seam.test.ts']) expect(existsSync(gone), gone).toBe(false);
     const entry = readFileSync('src/browser/index.ts', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(entry).toMatch(/from 'orz-markdown\/carrier\/app'/);
-    expect(entry.indexOf('captureEngineSource()')).toBeGreaterThan(0);
-    expect(entry.indexOf('startCarrier(MD_KIND)')).toBeGreaterThan(entry.indexOf('captureEngineSource()'));
+    // only this carrier's bundle is the engine (orz-markdown A.12): the bundle's file name is given
+    const capture = 'captureEngineSource(undefined, { bundle: BUNDLE_FILE })';
+    expect(entry.indexOf(capture)).toBeGreaterThan(0);
+    expect(entry.indexOf('startCarrier(MD_KIND)')).toBeGreaterThan(entry.indexOf(capture));
     const kind = readFileSync('src/browser/md/kind.ts', 'utf8');
     for (const member of ['readDocument', 'renderPreview', 'extract', 'createReadView', 'settings: MD_SETTINGS']) expect(kind, member).toContain(member);
     expect(kind).not.toMatch(/refreshEditorTools|editorInternals/);
@@ -60,6 +73,10 @@ describe('the bundle and its package (Node)', () => {
     const carrier = readFileSync('src/browser/carrier.ts', 'utf8');
     for (const k of ['attachSettings(shell, MD_SETTINGS', 'followPresentation(shell', 'render: renderMarkdownPreviewWithIncludes,']) expect(carrier, k).toContain(k);
     expect(carrier).not.toMatch(/reviewProposal|menuButton|<style>/);
+    // the read view uses the kit's stylesheet swap and releases its enhancement (orz-markdown M.26, M.27)
+    const view = readFileSync('src/browser/md/read-view.ts', 'utf8');
+    for (const k of ["swapStylesheet(doc, 'orz-theme',", "swapStylesheet(doc, 'orz-hljs',", 'disposeEnhancement(article!); // the old content', 'destroy() {']) expect(view, k).toContain(k);
+    expect(view).not.toMatch(/const swap = |data-orz-leaving/);
   });
 
   it('[L.2] the kit resolves the URL includes of a text with a file include when no include record is given (orz-markdown 14cc3bc; the local workaround is gone)', async () => {
@@ -109,14 +126,45 @@ describe('the bundle and its package (Node)', () => {
     expect(pkg.name).toBe('orz-mdhtml-browser');
     expect(pkg.version).toBe(root.version);
     expect(pkg.main).toBe(BUNDLE_FILE);
-    expect(pkg.exports['.']).toEqual({ types: './index.d.ts', import: `./${ESM_FILE}`, default: `./${BUNDLE_FILE}` });
+    expect(pkg.exports['.']).toEqual({ types: './index.d.ts', import: `./${ESM_FILE}`, require: './require.cjs', default: `./${BUNDLE_FILE}` });
     expect(pkg.exports['./release.json']).toBe('./release.json');
-    expect(pkg.files).toEqual(expect.arrayContaining([BUNDLE_FILE, ESM_FILE, 'release.json', 'index.d.ts', 'README.md']));
+    expect(pkg.files).toEqual(expect.arrayContaining([BUNDLE_FILE, ESM_FILE, 'release.json', 'index.d.ts', 'README.md', 'require.cjs', 'docs/embedding.md']));
+    // the app author's guide ships in both packages (the build copies it into browser/docs/)
+    expect((JSON.parse(readFileSync('package.json', 'utf8')) as { files: string[] }).files).toContain('docs/embedding.md');
+    expect(readFileSync('browser/docs/embedding.md', 'utf8')).toBe(readFileSync('docs/embedding.md', 'utf8'));
     // every runtime export of the ESM build is declared in index.d.ts
     const exported = /export\s*\{([^}]*)\}\s*;?\s*$/.exec(b.esm)![1].split(',').map((s) => s.trim().split(/\s+as\s+/).pop()!).filter(Boolean).sort();
     expect(exported).toEqual(['DEFAULT_THEME', 'MEASURES', 'OrzCarrier', 'THEMES', 'assemble', 'editHeader', 'extract', 'formats', 'kind', 'mountEditor', 'readDocument', 'renderPreview', 'version']);
     const dts = readFileSync('browser/index.d.ts', 'utf8');
     for (const name of exported) expect(dts, name).toMatch(new RegExp(`export declare (const|function) ${name}\\b`));
+    // the IIFE global's booted-file handle is typed too
+    expect(dts).toMatch(/interface OrzCarrierApi \{[^}]*readonly standalone\?: StandaloneFile \| null;/);
+    expect(dts).toMatch(/export interface StandaloneFile \{/);
+  });
+
+  it('[W.7] publishing safety: prepublishOnly refuses a release.json that does not match the files (version, integrity), require() gets a clear error', () => {
+    const pkg = JSON.parse(readFileSync('browser/package.json', 'utf8')) as { scripts?: Record<string, string> };
+    expect(pkg.scripts?.prepublishOnly).toBe('node scripts/check-release.mjs');
+    const run = (dir: string): { status: number | null; out: string } => {
+      const r = spawnSync(process.execPath, [join(dir, 'scripts', 'check-release.mjs')], { encoding: 'utf8' });
+      return { status: r.status, out: `${r.stdout}${r.stderr}` };
+    };
+    // the real package passes
+    expect(run('browser')).toMatchObject({ status: 0 });
+    // a copy with a stale integrity, another version, or a changed bundle is refused
+    const t = tempDir('orz-mdhtml-publish-');
+    try {
+      const pkgDir = join(t.dir, 'browser');
+      cpSync('browser', pkgDir, { recursive: true });
+      const release = JSON.parse(readFileSync(join(pkgDir, 'release.json'), 'utf8')) as { version: string; bundle: { integrity: string } };
+      writeFileSync(join(pkgDir, 'orz-mdhtml.browser.js'), `${b.iife};`, 'utf8');
+      expect(run(pkgDir)).toMatchObject({ status: 1, out: expect.stringMatching(/integrity is not the SHA-384/) });
+      writeFileSync(join(pkgDir, 'orz-mdhtml.browser.js'), b.iife, 'utf8');
+      writeFileSync(join(pkgDir, 'release.json'), JSON.stringify({ ...release, version: '0.0.1' }), 'utf8');
+      expect(run(pkgDir)).toMatchObject({ status: 1, out: expect.stringMatching(/release\.json says version 0\.0\.1/) });
+    } finally { t.clean(); }
+    // require() is not silently an empty object (the IIFE): it throws, naming import and <script>
+    expect(() => createRequire(import.meta.url)('../browser/require.cjs')).toThrow(/require\(\) is not supported.*import.*<script/);
   });
 });
 
@@ -246,18 +294,25 @@ chrome('real Chrome (playwright-core, channel chrome)', () => {
 
   it('[W.6] renderPreview: the article HTML (twin links, includes from a record or the app), or a script-free document with the header\'s theme', async () => {
     const page = await bundlePage();
-    const text = '{{nyml\nkind: document\ntitle: Pre view\ntheme: dark-elegant-1\nmeasure: wide\n}}\n\n# Heading\n\nSee [next](next.md).\n\n{{md parts/a.md}}\n\n{{md https://example.test/b.md}}\n';
+    const text = '{{nyml\nkind: document\ntitle: Pre view <b> & "q"\ntheme: dark-elegant-1\nmeasure: wide\n}}\n\n# Heading\n\nSee [next](next.md).\n\n{{md parts/a.md}}\n\n{{md https://example.test/b.md}}\n';
     const r = await page.evaluate(async (text) => {
       const C = (globalThis as unknown as { OrzCarrier: Carrier }).OrzCarrier;
       return {
         plain: await C.renderPreview(text),
         rec: await C.renderPreview(text, { includes: { 'parts/a.md': 'FILE-INCLUDED\n', 'https://example.test/b.md': 'URL-INCLUDED\n' } }),
         app: await C.renderPreview(text, { fetchInclude: async (u: string) => (u === 'https://example.test/b.md' ? 'APP-INCLUDED\n' : null), twinLinks: false }),
+        // a file include the record lacks goes to fetchInclude with its path as written (FC-19 §3, 2.2.0)
+        path: await C.renderPreview(text, { includes: { 'https://example.test/b.md': 'URL-INCLUDED\n' }, fetchInclude: async (u: string) => (u === 'parts/a.md' ? 'PATH-INCLUDED\n' : null) }),
         doc: await C.renderPreview(text, { document: true }),
       };
     }, text);
     expect(r.plain).toContain('href="next.md.html"');
     expect(r.plain).not.toContain('INCLUDED');
+    // an include nothing resolves is a quiet note, the directive kept (orz-markdown E.30)
+    expect(r.plain).toContain('<p class="orz-include-missing" role="note" data-md="{{md parts/a.md}}"><small>Included file not available: parts/a.md</small></p>');
+    expect(r.path).toContain('PATH-INCLUDED');
+    expect(r.path).toContain('URL-INCLUDED');
+    expect(r.path).not.toContain('orz-include-missing');
     expect(r.rec).toContain('FILE-INCLUDED');
     expect(r.rec).toContain('URL-INCLUDED');
     expect(r.app).toContain('APP-INCLUDED');
@@ -265,8 +320,9 @@ chrome('real Chrome (playwright-core, channel chrome)', () => {
     expect(r.doc.startsWith('<!doctype html>')).toBe(true);
     expect(r.doc).toContain('themes/dark-elegant-1.css');
     expect(r.doc).toContain('<article class="markdown-body measure-wide">');
-    expect(r.doc).toContain('<title>Pre view</title>');
+    expect(r.doc).toContain('<title>Pre view &lt;b&gt; &amp; &quot;q&quot;</title>'); // the title is escaped
     expect(/<script/i.test(r.doc)).toBe(false);
+    expect(r.doc).not.toContain('media="not all"'); // a script-free document: its stylesheets are on
     await page.context().close();
   });
 });

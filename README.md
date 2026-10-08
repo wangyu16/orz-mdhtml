@@ -23,7 +23,9 @@ carrier kit of [orz-markdown](https://www.npmjs.com/package/orz-markdown)
 - **Edit.** The **Edit** button (or Cmd/Ctrl+E) opens the editor: CodeMirror
   beside a live preview (split, editor or preview mode), theme and measure
   pickers that edit the header, undo per document. **Done** goes back to the
-  read view.
+  read view. The theme and the measure are document data (they live in the
+  header), so choosing one — in the editor or from the read view — changes
+  the document: it is unsaved until you Save, and Cmd/Ctrl+Z undoes it.
 - **Save, New, Copy.** **Save** (Cmd/Ctrl+S) writes `assemble(text)` — never
   the live page — back to the file. The **More** menu has *Download a copy*,
   *New document* and *Save as new copy* (the same text with a new `uid`). The
@@ -72,7 +74,7 @@ npm i -g orz-mdhtml                                 # or: the orz-mdhtml command
 
 ```
 orz-mdhtml new [file.md] [--title T] [--theme id] [--measure m] [--lang l] [--html] [--cdn]
-orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn]     (also: orz-mdhtml <file.md>)
+orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn] [--resolve-includes | --no-includes]   (also: orz-mdhtml <file.md>)
 orz-mdhtml extract <file.md.html> [-o out.md]
 orz-mdhtml upgrade <old.md.html> [-o out.md.html] [--text out.md | --no-text] [--cdn | --inline]
 orz-mdhtml inspect <file> [--json]
@@ -82,10 +84,10 @@ orz-mdhtml themes
 | Command | What it does |
 |---|---|
 | `new` | writes a new text twin: a header with `carrier: md`, a fresh `uid` and the given keys, then a starter body. `--html` also assembles it; without a file name the text goes to stdout. |
-| `assemble` | writes `x.md.html` from `x.md` (exact text in, the same bytes every time). |
-| `extract` | writes the exact text twin of an assembled file (`x.md.html` → `x.md`) and reports its includes. A 0.x file is refused with the advice to run `upgrade`. |
-| `upgrade` | turns a 0.x file (or a file of an older 1.x shell) into a file of this version, in place by default, and writes its text twin (`x.md`) unless `--no-text`. Keeps the file's delivery unless `--cdn` / `--inline`. |
-| `inspect` | diagnoses a text or a file of any version: kind, text format, shell version and how it compares to this tool, delivery, uid, header keys, lint, and advice in plain sentences. |
+| `assemble` | writes `x.md.html` from `x.md` (exact text in, the same bytes every time). Keeps the includes the existing file holds; `--resolve-includes` reads file includes from the text's folder; unresolved includes are warnings. |
+| `extract` | writes the exact text twin of an assembled file (`x.md.html` → `x.md`) and reports its includes. A 0.x file is refused with the advice to run `upgrade`; a cut-off file gives a warning. |
+| `upgrade` | turns a 0.x file (or a file of an older 1.x shell) into a file of this version, in place by default, and writes its text twin (`x.md`) unless `--no-text`. Keeps the file's delivery unless `--cdn` / `--inline`. Repairs a damaged engine; never downgrades a newer shell without `--force`. |
+| `inspect` | diagnoses a text or a file of any version: kind, text format, shell version and how it compares to this tool, delivery, uid, header keys, lint, the file's structure (cut off? engine intact?), whether the sibling twin (`x.md` ↔ `x.md.html`) holds the same text and which is newer, and advice in plain sentences. |
 | `themes` | lists the theme ids a header may name. |
 
 **Delivery.** Files are **inline** by default: the browser engine is inside the
@@ -95,15 +97,48 @@ small file that loads the engine from
 — for pages you publish on the web. Either way the theme stylesheets, KaTeX's
 and highlight.js's styles, the content libraries (Mermaid, SMILES, Chart.js)
 and the editor (CodeMirror) load from CDNs: reading styled content and editing
-need a network connection the first time.
+need a network connection the first time. A slow or unreachable CDN never
+holds the page blank: the document shows at once, unstyled, and takes its
+theme when the stylesheets arrive.
 
 **For scripts and agents.** Every command takes `--json` (one JSON object on
 stdout: the result, or `{ "ok": false, "error", "exitCode" }`), `--help` and
 `--force`. Exit status: 0 done, 1 refused or failed, 2 usage error. `assemble`
 has no content options (`--title`, `--theme`… are refused with a pointer to
 the header). Nothing that could hold other work is overwritten without
-`--force`: an output that is not an orz file, a `.md.html` changed after its
-text, a text twin changed after its file, or (for `new`) any existing file.
+`--force`: an output that is not an orz file, a `.md.html` that holds a
+different text than the one being assembled (it may hold work saved in the
+browser — whichever file is newer) unless that text is a known earlier state
+of the twin (below), a text twin changed after its file,
+another document (`upgrade -o`), or (for `new`) any existing file. With
+`--force` the replaced file is kept as `<file>~`. Files are replaced through
+a temporary file and a rename, keeping their mode; a symbolic link stays a
+link.
+
+**The assemble rule.** `orz-mdhtml assemble x.md` replaces `x.md.html`
+without `--force` when the file holds the same text, or **an earlier state of
+`x.md`** that the CLI can prove:
+
+- `x.md`'s last commit (`git show HEAD:x.md`) or its staged version, when
+  `x.md` is tracked in git (git is used only if installed; any failure counts
+  as unknown);
+- the text `orz-mdhtml` itself last wrote into `x.md.html` or read out of it
+  (`new --html`, `assemble`, `extract`, `upgrade` record a SHA-256 per pair in
+  `$XDG_CACHE_HOME/orz-mdhtml/`, else `~/.cache/orz-mdhtml/`; the record only
+  lifts the refusal when the file's text hashes to exactly that value).
+
+So the normal loop — edit `x.md`, assemble, edit, assemble — needs no
+`--force`. Any other text is refused: notably a save in the browser made in
+between (the file then holds work `x.md` lacks). `--json` says which rule
+applied (`replaced`: `git-head`, `git-index`, `cache`, or `null`).
+
+**Editing an existing document (the safe loop).** Before you edit `x.md`,
+run `orz-mdhtml inspect x.md`: if it says `x.md.html` holds a different text
+(and not an earlier text of `x.md`), someone saved in the browser —
+`orz-mdhtml extract x.md.html` first (or `-o x.browser.md` and merge), then
+edit and assemble. If `assemble` refuses, do that now; only when the text has
+everything, `orz-mdhtml assemble x.md --force` (the old file is kept as
+`x.md.html~`).
 
 ## The library
 
@@ -126,7 +161,8 @@ The Node library writes the same bytes as the browser engine's
 `OrzCarrier.assemble` for the same text and options. Includes
 (`{{md part.md}}`, `{{md https://…}}`) are shown by a file only from its
 `#orz-includes` record: pass them resolved as `assemble(text, { includes })`
-(the CLI does not resolve includes; `upgrade` keeps a file's own).
+(the CLI keeps the existing file's record, and `assemble --resolve-includes`
+reads file includes from the text's folder; `upgrade` keeps a file's own).
 
 ## In web apps
 
@@ -136,8 +172,9 @@ ES module or a plain `<script>` that sets `globalThis.OrzCarrier`). An app
 mounts any number of editors, keeps the text wherever it likes through its own
 hooks (save, AI with a review step, includes, assets, links, ids), works under
 a nonce Content-Security-Policy, and assembles `.md.html` files only when it
-needs one. See [docs/embedding.md](docs/embedding.md) and the working example
-in [`examples/webapp/`](examples/webapp/).
+needs one. See [docs/embedding.md](docs/embedding.md) (shipped in both
+packages: `node_modules/orz-mdhtml-browser/docs/embedding.md`) and the
+working example in [`examples/webapp/`](examples/webapp/).
 
 A platform that shows assembled files in an iframe speaks the host protocols
 (`orz-host-save@1`, `orz-host-ai@1`, `orz-host-include@1`; canonical spec:
@@ -172,7 +209,10 @@ host's include resolution.
 
 Only writing to a file on disk needs Chromium's File System Access API;
 everything else works in every modern browser. A page served over http(s) is
-never saved in place: Save says to use *Download a copy*.
+never saved in place: Save says to use *Download a copy*. A save never
+silently overwrites a file that changed on disk since the page opened it
+(another program, an agent, `orz-mdhtml assemble --force`): it asks —
+*Replace it* or *Download a copy instead*.
 
 ## Migrating from 0.x
 
@@ -183,6 +223,11 @@ format 1; 1.0 does not open them as they are. Upgrade each once:
 npx orz-mdhtml inspect old.md.html          # what it is and what to do
 npx orz-mdhtml upgrade old.md.html          # → old.md.html (format 1) and old.md (its text twin)
 ```
+
+Once 1.0.0 is published, a 0.9.x file's own banner ("Framework 1.0.0
+available") offers to update it; that update cannot read a 1.0 release and
+ends harmlessly with "check your connection" — the file is not changed. Use
+`orz-mdhtml upgrade` instead.
 
 `upgrade` keeps the source exactly, moves the `#orz-meta` metadata, the
 saved theme and the `<title>` into the header, keeps the file's delivery, and

@@ -3,17 +3,18 @@ A document is its text twin (x.md); its self-editing file (x.md.html) is assembl
 
 Usage:
   orz-mdhtml new [file.md] [--title T] [--theme id] [--measure m] [--lang l] [--html] [--cdn]
-  orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn]
+  orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn] [--resolve-includes | --no-includes]
   orz-mdhtml <file.md> [-o out.md.html] [--cdn]          same as assemble
   orz-mdhtml extract <file.md.html> [-o out.md]
-  orz-mdhtml upgrade <old.md.html> [-o out.md.html] [--text out.md | --no-text] [--cdn]
+  orz-mdhtml upgrade <old.md.html> [-o out.md.html] [--text out.md | --no-text] [--cdn | --inline]
   orz-mdhtml inspect <file> [--json]
   orz-mdhtml themes
 
 Commands:
   new        write a new text twin (header with a fresh uid); --html also assembles it;
              without a file the text goes to stdout
-  assemble   write the .md.html of a text twin (x.md -> x.md.html); inline by default
+  assemble   write the .md.html of a text twin (x.md -> x.md.html); inline by default;
+             keeps the includes the existing file holds
   extract    write the exact text twin of a .md.html (x.md.html -> x.md)
   upgrade    turn an old file (0.x, or an older 1.x shell) into a file of this version,
              in place by default, and write its text twin (x.md) unless --no-text
@@ -24,13 +25,18 @@ Options:
   -o, --out <path>  output path ("-" = stdout for assemble and extract)
   --cdn             load the engine from jsDelivr (small files, for the web); default: inline
   --inline          the default delivery: the engine inside the file (no engine download)
-  --force           overwrite even when that could lose work (see below)
+  --force           overwrite even when that could lose work (see below); the replaced
+                    file is kept as <file>~
   --json            print one JSON object (the result, or {"ok": false, "error"}) for agents
   -h, --help        help (also: orz-mdhtml <command> --help)
   -v, --version     the version
 
 Content (title, theme, measure, lang, metadata) comes only from the text's {{nyml}} header;
 assemble has no content options. Without --force nothing is overwritten that could hold
-other work: an output that is not an orz file, a .md.html changed after its text, a text
-twin changed after its file, or (new) any existing file.
+other work: an output that is not an orz file, a .md.html that holds a different text
+than the one assembled (unless that text is an earlier state of x.md: its last commit or
+staged version in git, or what orz-mdhtml itself last wrote there), a text twin changed
+after its file, another document (upgrade -o), or (new) any existing file. Before editing
+x.md, `orz-mdhtml inspect x.md` says whether x.md.html holds newer work (saved in the
+browser); `orz-mdhtml extract x.md.html` first brings it in.
 Exit status: 0 done, 1 refused or failed, 2 usage error.

@@ -23,14 +23,16 @@
  */
 import { editHeader, extract, mintUid, readDocument, readHeader, withoutHeader, UID_PATTERN, type HeaderChange } from 'orz-markdown/carrier';
 import { parseDocMetaIsland, type DocMeta } from 'orz-markdown/doc-meta';
+import { compareSemver } from 'orz-markdown/carrier/shell';
 import { assemble, type AssembleOptions } from './assemble.js';
 import { DEFAULT_THEME, isThemeId } from './themes.js';
+import { VERSION } from './version.js';
 
 /** What {@link readLegacy} reads from a 0.x file. */
 export interface LegacyFile {
   /** The source as the 0.x runtime read it: the island, unescaped, without the writer's wrapping line breaks. */
   text: string;
-  /** Whether the island had the 0.x writer's `\n…\n` wrapper (otherwise its content is kept exactly). */
+  /** Whether the island had the 0.x writer's `\n…\n` wrapper (or `\r\n…\r\n`, a file whose line breaks were converted; otherwise its content is kept exactly). */
   wrapped: boolean;
   /** The generator meta (`orz-mdhtml`), if any. */
   generator: string | null;
@@ -162,7 +164,11 @@ export function readLegacy(html: string): LegacyFile | null {
   const str = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 
   const raw = legacyUnescape(html.slice(island.start, island.end));
-  const wrapped = raw.startsWith('\n') && raw.endsWith('\n') && raw.length >= 2;
+  // The 0.x writer wrapped the source in "\n…\n"; a file whose line breaks were
+  // converted to CR LF afterwards (an editor, a git checkout) has "\r\n…\r\n".
+  const lead = raw.startsWith('\r\n') ? 2 : raw.startsWith('\n') ? 1 : 0;
+  const trail = lead === 2 && raw.endsWith('\r\n') ? 2 : raw.endsWith('\n') ? 1 : 0;
+  const wrapped = lead > 0 && trail > 0 && raw.length >= lead + trail;
   if (!wrapped) notes.push('the source island lacks the 0.x writer\'s "\\n…\\n" wrapper; its content is kept exactly');
   if (attr(island.attrs, 'type') !== 'text/markdown') notes.push(`the source island's type is ${JSON.stringify(attr(island.attrs, 'type'))}, not text/markdown`);
 
@@ -172,7 +178,7 @@ export function readLegacy(html: string): LegacyFile | null {
   const engine = scripts.find((e) => attr(e.attrs, 'data-orz-asset') === 'engine');
 
   return {
-    text: wrapped ? raw.slice(1, -1) : raw,
+    text: wrapped ? raw.slice(lead, raw.length - trail) : raw,
     wrapped,
     generator: gen,
     version: str(config['rendererVersion']) ?? str(config['version']),
@@ -203,6 +209,12 @@ export interface UpgradeResult {
 /** Options of {@link upgrade}: the assembly's, and a uid to use instead of minting one (tests). */
 export interface UpgradeOptions extends AssembleOptions {
   uid?: string;
+  /**
+   * Re-assemble a format-1 file whose shell is NEWER than this tool (a
+   * downgrade). Default `false`: such a file is refused — an older shell
+   * would replace a newer one (use the newer tool, `npx orz-mdhtml@latest`).
+   */
+  downgrade?: boolean;
 }
 
 /** A value the header can hold as a single line (FC-18 §9). */
@@ -221,13 +233,16 @@ const writable = (v: string): boolean => v.trim() !== '' && !/[\r\n\u0000]/.test
  * source exactly, else it throws. Throws for a file that is neither.
  */
 export function upgrade(html: string, options: UpgradeOptions = {}): UpgradeResult {
-  const { uid: injected, ...assembleOptions } = options;
+  const { uid: injected, downgrade, ...assembleOptions } = options;
   const legacy = readLegacy(html);
   if (!legacy) {
     const ex = extract(html);
     if (!ex || ex.shell === '') throw new Error('orz-mdhtml upgrade: not an orz-mdhtml file (no 0.x markers and no format-1 #orz-src/#orz-shell)');
     if (ex.kind !== 'md') throw new Error(`orz-mdhtml upgrade: an orz-${ex.kind} file; use orz-${ex.kind}`);
     if (ex.format > 1) throw new Error(`orz-mdhtml upgrade: text format ${ex.format} is newer than this tool writes (format 1)`);
+    if (!downgrade && compareSemver(ex.shell, VERSION) === 1) {
+      throw new Error(`orz-mdhtml upgrade: the file's shell (orz-mdhtml ${ex.shell}) is newer than this tool (${VERSION}); upgrading would downgrade it. Use \`npx orz-mdhtml@latest upgrade\`, or pass --force (library: { downgrade: true }) to re-assemble it with this older shell anyway`);
+    }
     const includes = assembleOptions.includes ?? ex.includes;
     return { text: ex.text, html: assemble(ex.text, { ...assembleOptions, ...(includes ? { includes } : {}) }), from: 'format-1', moved: {}, notes: [] };
   }
