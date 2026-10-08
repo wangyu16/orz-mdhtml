@@ -61,8 +61,8 @@ text twin lacks — even when `x.md` is the newer file. Always compare first.
      `twin.sha256`** (the text the file holds now);
    - if `x.md` itself has nothing of its own to keep (the file is the newer
      work), `npx orz-mdhtml extract x.md.html` replaces it when it is a known
-     state (unchanged since the CLI last synced the pair, or committed in
-     git), or `extract x.md.html --replaces <sha256 of x.md>`. A plain
+     state (unchanged since the CLI last synced the pair — and no other
+     text was synced with the file since — or committed in git), or `extract x.md.html --replaces <sha256 of x.md>`. A plain
      `extract` never overwrites an `x.md` that may hold edits.
 2. Edit `x.md`. Document settings go in the header, not in the HTML and not
    as CLI options (`assemble` refuses `--title`, `--theme`…).
@@ -207,7 +207,10 @@ A failure is `{ "ok": false, "error", "reason", "next"?, "exitCode" }`.
   this pair last had there (saved in the browser, or written from another
   text) → follow `next` (`extract <out> -o x.browser.md`), merge, then the
   assemble command the message names (with `--replaces`); or it holds
-  **another document** (another uid; no `next`) → choose another `-o` path;
+  **another document** (another uid; no `next`) → choose another `-o` path
+  (`extract`/`upgrade` refuse the same way to write another document's text
+  over a text). Every `next` is safe to run verbatim: it never replaces a
+  text with another line of work;
 - `not-orz`, `exists` — an output you did not expect to replace (an empty
   file is reported as empty: damaged) → choose another path;
 - `assembled-input`, `other-kind`, `invalid-text`, `no-such-file`,

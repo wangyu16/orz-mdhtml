@@ -132,6 +132,14 @@ Requires `orz-markdown ^2.2.0`.
   read the pair, or a committed/staged/recent version in git) — whichever
   file is newer; otherwise it refuses with `extract x.md.html -o
   x.browser.md` (merge). `--force` keeps `x.md~`.
+- **One file, one line of work**: the CLI records which text last synced each
+  file (its last writer); a pair's record (and, for the twin, git) says "only
+  the file changed" only while that pair is the file's last writer — so when
+  two texts publish to one `-o` path, neither is told to bring the other's
+  text into itself. An output holding another document (another uid) is
+  never advised into the input, and `extract`/`upgrade` never replace a text
+  with another document's text without `--force`. Every `next` is safe to
+  follow verbatim (no text is lost).
 - **Compare-and-swap**: `inspect` (`sha256`, `twin.sha256`), `extract` and
   `assemble` (`sha256`) report the SHA-256 of the text a file holds;
   `assemble --replaces <sha256>` / `extract --replaces <sha256>` replace only

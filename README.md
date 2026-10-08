@@ -137,7 +137,11 @@ replaces `x.md` when `x.md` itself is a known state:
   SHA-256 of the file's text and of the twin's exact text per pair — `x.md`
   and the output path, `-o` included — in `$XDG_CACHE_HOME/orz-mdhtml/`,
   else `~/.cache/orz-mdhtml/`; the record only lifts a refusal when the text
-  hashes to exactly that value; a line-ending change is a change). When the
+  hashes to exactly that value; a line-ending change is a change) — and,
+  for `extract` (and the "only the file changed" advice), only while that
+  pair is the last the CLI synced the file with: after `b.md -o
+  site.md.html`, `a.md`'s record no longer vouches for `site.md.html`.
+  Another document (another uid) is never replaced this way. When the
   record cannot be written (a read-only cache), the command warns: the next
   assemble needs `--replaces` with the hash it printed;
 - **`--replaces <sha256>`** — a portable compare-and-swap for agents in a
@@ -172,7 +176,7 @@ arguments (`-o`, `--cdn`, `--resolve-includes`, `--text`…) and names a copy
 | `exists` | `new`: the file exists | — |
 | `not-orz` | the output exists and is not an orz file; or the input holds no orz document | `inspect <file>` |
 | `twin-differs` | the twin holds a different text that is not a known state (`assemble`: `x.md.html`; `extract`, `upgrade`: `x.md`) | `extract x.md.html -o x.browser.md` (when only `x.md.html` changed: `extract x.md.html`; a 0.x file: `upgrade x.md.html --text x.browser.md`) |
-| `output-differs` | an `-o` output holds another text than the one this pair last had there (saved in the browser, or written from another text), or another document (another uid: choose another `-o` path) | `extract <out> -o x.browser.md` (another text; when only the output changed: `extract <out> -o x.md`); none for another document |
+| `output-differs` | an `-o` output holds another text than the one this pair last had there (saved in the browser, or written from another text), or any output (`extract`/`upgrade`: the text) holds another document (another uid: choose another path) | `extract <out> -o x.browser.md` (another text; when only the output changed: `extract <out> -o x.md`); none for another document |
 | `replaces-mismatch` | `--replaces`: the file no longer holds the text with that hash | `extract x.md.html -o x.browser.md` |
 | `legacy-file` | a 0.x file: `extract` cannot read it; `assemble` will not replace it | `upgrade x.md.html` (next to a text: `--text x.browser.md`) |
 | `newer-shell` | the file was made by a newer orz-mdhtml (use `npx orz-mdhtml@latest`) | — |

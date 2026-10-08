@@ -16,7 +16,7 @@ import { assemble, extract, inspect, readDocument, upgrade, DEFAULT_THEME, ORZ_M
 import { storedText } from '../src/assemble.js';
 import { sha256 } from '../src/sha256.js';
 import { createHash } from 'node:crypto';
-import { corpus, HAZARDS, LEGACY_FILES, read } from './helpers.js';
+import { corpus, HAZARDS, LEGACY_FILES, read, withLegacySource } from './helpers.js';
 
 const CLI = join(process.cwd(), 'dist', 'cli.js');
 const tmp = realpathSync(mkdtempSync(join(tmpdir(), 'orz-mdhtml-cli-')));
@@ -896,6 +896,9 @@ describe.concurrent('the CLI', () => {
     write(join(d, 'public', 'w.md.html'), assemble(`${base}browser\nagent\nbrowser 2\n`, { delivery: 'cdn' }));
     write(join(d, 'w.md'), `${base}browser\nagent\nagent 2\n`);
     expect(json(await cli([...publish, '--json'], d))).toMatchObject({ reason: 'output-differs', next: { command: 'extract', args: ['public/w.md.html', '-o', 'w.browser-2.md'] } });
+    // --no-includes is carried in the commands it names (C20)
+    const noInc = String(json(await cli([...publish, '--no-includes', '--json'], d)).error);
+    expect(/`orz-mdhtml (assemble [^`]+)`/.exec(noInc)![1]!.split(' ')).toEqual(['assemble', 'w.md', '-o', 'public/w.md.html', '--cdn', '--no-includes', '--replaces', sha256(`${base}browser\nagent\nbrowser 2\n`)]);
     // extract -o onto an edited copy: the advice keeps -o and names a free copy
     write(join(d, 'w.browser.md'), 'merged by hand\n');
     const e = await cli(['extract', 'public/w.md.html', '-o', 'w.browser.md', '--json'], d);
@@ -990,6 +993,16 @@ describe.concurrent('the CLI', () => {
     expect(lstatSync(join(s, 'x.md.html~')).isSymbolicLink()).toBe(true);
     expect(lstatSync(join(s, 'x.md.html~1')).isSymbolicLink()).toBe(true);
     expect(text(join(s, 'x.md.html~2'))).toBe(page('three'));
+    // a symbolic link at <file>~ whose target holds exactly the bytes replaced is not a backup either (lstat; C09)
+    const c = folder();
+    write(join(c, 'y.md'), '# Y\n');
+    write(join(c, 'y.md.html'), page('four'));
+    write(join(d, 'same.txt'), page('four'));
+    symlinkSync(join(d, 'same.txt'), join(c, 'y.md.html~'));
+    expect(json(await cli(['assemble', 'y.md', '--force', '--json'], c))).toMatchObject({ backup: join(c, 'y.md.html~1') });
+    expect(lstatSync(join(c, 'y.md.html~')).isSymbolicLink()).toBe(true);
+    expect(lstatSync(join(c, 'y.md.html~1')).isFile()).toBe(true);
+    expect(text(join(c, 'y.md.html~1'))).toBe(page('four'));
     // extract --force and new --force too
     write(join(s, 'x.md'), '# X edited\n');
     write(join(s, 'x.md~'), 'an older backup\n');
@@ -1020,6 +1033,20 @@ describe.concurrent('the CLI', () => {
     // the human output prints the sha256 (extract, upgrade; assemble: T.1)
     expect((await cli(['extract', 'doc.md.html', '-o', 'copy2.md'], d)).stdout).toMatch(new RegExp(`^  sha256 ${sha256('# Doc\n\nedited\n')} `, 'm'));
     expect((await cli(['upgrade', 'doc.md.html', '--no-text'], d)).stdout).toMatch(new RegExp(`^  sha256 ${sha256('# Doc\n\nedited\n')} `, 'm'));
+    // upgrade's sha256 is of the text the file holds (as stored), not of the text twin it writes: mixed line endings (C19)
+    const u = folder();
+    write(join(u, 'old.md.html'), withLegacySource(read(LEGACY_FILES['fixtures/sample.md.html']!), 'a\r\nb\nc\n'));
+    const up = await cli(['upgrade', 'old.md.html', '--json'], u);
+    expect(up.code, up.stdout).toBe(0);
+    const heldText = extract(text(join(u, 'old.md.html')))!.text;
+    expect(text(join(u, 'old.md'))).not.toBe(heldText); // the twin keeps the mixed endings; the file holds them as stored
+    expect(json(up).sha256).toBe(sha256(heldText));
+    expect(json(up).sha256).not.toBe(sha256(text(join(u, 'old.md'))));
+    write(join(u, 'old2.md.html'), withLegacySource(read(LEGACY_FILES['fixtures/sample.md.html']!), 'a\r\nb\nc\n'));
+    expect((await cli(['upgrade', 'old2.md.html', '--no-text'], u)).stdout).toMatch(new RegExp(`^  sha256 ${sha256(extract(text(join(u, 'old2.md.html')))!.text)} `, 'm'));
+    // and it is the token: with no record, assemble replaces that file only with it
+    write(join(u, 'old.md'), `${text(join(u, 'old.md'))}edited\n`);
+    expect(json(await cli(['assemble', 'old.md', '--replaces', json(up).sha256 as string, '--json'], u, noCache()))).toMatchObject({ ok: true, replaced: 'token' });
     // a fresh checkout: both files clean in git, their times a checkout's — no "changed after it" (M3)
     const g = folder();
     const git = await gitIn(g);
@@ -1171,4 +1198,157 @@ describe.concurrent('the CLI', () => {
       expect(json(await cli(['assemble', 'h.md', '--json'], g, noCache()))).toMatchObject({ ok: false, reason: 'twin-differs' });
     }
   }, 240_000);
+
+  it('[T.21] following every refusal\'s next verbatim never loses a text: two inputs to one -o, an input against another\'s twin, browser saves on the twin and on -o, both sides changed, a copied file — with and without uids, with and without git', async () => {
+    let docs = 0;
+    /** A text: with a well-formed uid in its header, or plain Markdown. */
+    const docText = (title: string, uid: boolean): string => (uid
+      ? `{{nyml\nkind: document\ncarrier: md\nuid: doc-t21${String(++docs).padStart(7, '0')}\ntitle: ${title}\n}}\n\n# ${title}\n\n${title} body\n`
+      : `# ${title}\n\n${title} body\n`);
+    interface Scenario { d: string; env: NodeJS.ProcessEnv; texts: Map<string, string | null>; log: string[] }
+    /** Every text the folder holds now: each file's own text, and the text each orz file holds (backups included). */
+    const present = (s: Scenario): Set<string> => {
+      const all = new Set<string>();
+      for (const rel of readdirSync(s.d, { recursive: true }) as string[]) {
+        if (/^\.(git|cache)(\/|$)/.test(rel)) continue;
+        const path = join(s.d, rel);
+        if (!statSync(path).isFile()) continue;
+        const t = text(path);
+        all.add(t);
+        const held = extract(t);
+        if (held) all.add(held.text);
+      }
+      return all;
+    };
+    /** A text is kept when it, or a later edit of it, still exists. */
+    const kept = (s: Scenario, t: string, here: Set<string>): boolean => here.has(t) || [...s.texts].some(([child, parent]) => parent === t && kept(s, child, here));
+    const lost = (s: Scenario): string[] => { const here = present(s); return [...s.texts.keys()].filter((t) => !kept(s, t, here)); };
+    /** True when `t` is `of` or a later edit of it. */
+    const descends = (s: Scenario, t: string, of: string): boolean => { for (let c: string | null | undefined = t; c; c = s.texts.get(c)) if (c === of) return true; return false; };
+    /** The text files (x.md) of the folder and what they hold. */
+    const textFiles = (s: Scenario): Map<string, string> => new Map((readdirSync(s.d, { recursive: true }) as string[]).filter((rel) => !/^\.(git|cache)(\/|$)/.test(rel) && rel.endsWith('.md') && statSync(join(s.d, rel)).isFile()).map((rel) => [rel, text(join(s.d, rel))]));
+    /** Run one command and check it: no text lost, and a text file it replaced now holds a later edit of its text (never another line of work). */
+    const run = async (s: Scenario, args: string[]): Promise<Run> => {
+      const before = textFiles(s);
+      const r = await cli([...args, '--json'], s.d, s.env);
+      s.log.push(`${args.join(' ')} -> ${r.code} ${r.code ? String(JSON.parse(r.stdout).reason) : ''}`);
+      expect(lost(s), s.log.join('\n')).toEqual([]);
+      for (const [rel, now] of textFiles(s)) {
+        const was = before.get(rel);
+        if (was !== undefined && was !== now) expect(descends(s, now, was), `${s.log.join('\n')}\n${rel}: ${JSON.stringify(was)} became ${JSON.stringify(now)}`).toBe(true);
+      }
+      return r;
+    };
+    /** The user (or the browser) writes a file: a text, or a .md.html holding a text; `from` is the text it is an edit of. */
+    const put = (s: Scenario, rel: string, t: string, from: string | null = null): void => {
+      mkdirSync(join(s.d, rel, '..'), { recursive: true });
+      write(join(s.d, rel), rel.endsWith('.md.html') ? assemble(t, { delivery: 'cdn' }) : t);
+      if (!s.texts.has(t)) s.texts.set(t, from);
+    };
+    /** Run a command; while it is refused with a next, run that next verbatim. No step may lose a text; a next never forces and ends in success. */
+    const step = async (s: Scenario, args: string[]): Promise<Run> => {
+      let r = await run(s, args);
+      for (let depth = 0; r.code !== 0 && JSON.parse(r.stdout).next; depth++) {
+        expect(depth, s.log.join('\n')).toBeLessThan(3);
+        const next = JSON.parse(r.stdout).next as { command: string; args: string[] };
+        expect(next.args, s.log.join('\n')).not.toContain('--force');
+        s.log.push(`  next:`);
+        r = await run(s, [next.command, ...next.args]);
+        if (r.code !== 0) expect(JSON.parse(r.stdout).next, `${s.log.join('\n')}\n${r.stdout}`).toBeDefined();
+      }
+      return r;
+    };
+    const scenario = async (uid: boolean, withGit: boolean): Promise<{ s: Scenario; commit: (...files: string[]) => Promise<void> } | null> => {
+      const d = folder();
+      const git = withGit ? await gitIn(d) : null;
+      if (withGit && !git) return null; // no git on this machine
+      const s: Scenario = { d, env: { XDG_CACHE_HOME: join(d, '.cache') }, texts: new Map(), log: [`uid ${uid}, git ${withGit}`] };
+      return { s, commit: async (...files) => { if (!git) return; expect((await git('add', ...files)).code).toBe(0); expect((await git('commit', '-q', '-m', 'c')).code).toBe(0); } };
+    };
+    for (const uid of [false, true]) {
+      for (const withGit of [false, true]) {
+        // 1. two inputs publish to one -o (the round-4 F1 repro): a.md keeps its text whatever is followed
+        const one = await scenario(uid, withGit);
+        if (!one) continue;
+        {
+          const { s, commit } = one;
+          const A = docText('A', uid);
+          const B = docText('B', uid);
+          put(s, 'a.md', A);
+          put(s, 'b.md', B);
+          await commit('a.md', 'b.md');
+          expect((await step(s, ['assemble', 'a.md', '-o', 'out/site.md.html', '--cdn'])).code).toBe(0);
+          await step(s, ['assemble', 'b.md', '-o', 'out/site.md.html']);
+          await step(s, ['assemble', 'b.md', '-o', 'out/site.md.html', '--replaces', sha256(A)]); // what the refusal names
+          const back = await step(s, ['assemble', 'a.md', '-o', 'out/site.md.html']);
+          if (uid) expect(String(JSON.parse(back.stdout).error ?? ''), s.log.join('\n')).not.toMatch(/brings it into a\.md/);
+          await step(s, ['extract', 'out/site.md.html', '-o', 'a.md']);
+          await step(s, ['upgrade', 'out/site.md.html', '--text', 'a.md']);
+          expect(text(join(s.d, 'a.md')), s.log.join('\n')).toBe(A);
+        }
+        // 2. an input against another input's twin (y.md -o x.md.html), then x.md and its twin
+        const two = (await scenario(uid, withGit))!;
+        {
+          const { s, commit } = two;
+          const X = docText('X', uid);
+          const Y = docText('Y', uid);
+          put(s, 'x.md', X);
+          put(s, 'y.md', Y);
+          await commit('x.md', 'y.md');
+          expect((await step(s, ['assemble', 'x.md', '--cdn'])).code).toBe(0);
+          await step(s, ['assemble', 'y.md', '-o', 'x.md.html']);
+          await step(s, ['assemble', 'y.md', '-o', 'x.md.html', '--replaces', sha256(X)]);
+          await step(s, ['assemble', 'x.md']);
+          await step(s, ['extract', 'x.md.html']);
+          await step(s, ['upgrade', 'x.md.html']);
+          expect(text(join(s.d, 'x.md')), s.log.join('\n')).toBe(X);
+        }
+        // 3. a browser save in the twin, then in an -o copy: the shortcut still brings the work in
+        const three = (await scenario(uid, withGit))!;
+        {
+          const { s, commit } = three;
+          const X = docText('X', uid);
+          put(s, 'x.md', X);
+          await commit('x.md');
+          expect((await step(s, ['assemble', 'x.md', '--cdn'])).code).toBe(0);
+          put(s, 'x.md.html', `${X}browser\n`, X);
+          expect((await step(s, ['assemble', 'x.md'])).code).toBe(0); // next: extract x.md.html, then nothing left to do
+          expect(text(join(s.d, 'x.md'))).toBe(`${X}browser\n`);
+          expect((await step(s, ['assemble', 'x.md', '-o', 'pub/x.md.html', '--cdn'])).code).toBe(0);
+          put(s, 'pub/x.md.html', `${X}browser\npub\n`, `${X}browser\n`);
+          expect((await step(s, ['assemble', 'x.md', '-o', 'pub/x.md.html'])).code).toBe(0);
+          expect(text(join(s.d, 'x.md'))).toBe(`${X}browser\npub\n`);
+        }
+        // 4. both sides changed: the browser's and the agent's work both survive
+        const four = (await scenario(uid, withGit))!;
+        {
+          const { s, commit } = four;
+          const X = docText('X', uid);
+          put(s, 'x.md', X);
+          await commit('x.md');
+          expect((await step(s, ['assemble', 'x.md', '--cdn'])).code).toBe(0);
+          put(s, 'x.md.html', `${X}browser\n`, X);
+          put(s, 'x.md', `${X}agent\n`, X);
+          await step(s, ['assemble', 'x.md']);
+          await step(s, ['extract', 'x.md.html']);
+          await step(s, ['upgrade', 'x.md.html']);
+          expect(text(join(s.d, 'x.md'))).toBe(`${X}agent\n`);
+        }
+        // 5. another document's file copied over the twin (no record of it): uid'd, or with no history to vouch for x.md
+        // (a uid-less text whose committed twin vouches for it reads as "only the file changed": its text stays in git — the limit)
+        if (uid || !withGit) {
+          const s = (await scenario(uid, withGit))!;
+          const X = docText('X', uid);
+          const Y = docText('Y', uid);
+          put(s.s, 'x.md', X);
+          await s.commit('x.md');
+          put(s.s, 'x.md.html', Y);
+          await step(s.s, ['assemble', 'x.md']);
+          await step(s.s, ['extract', 'x.md.html']);
+          await step(s.s, ['upgrade', 'x.md.html']);
+          expect(text(join(s.s.d, 'x.md')), s.s.log.join('\n')).toBe(X);
+        }
+      }
+    }
+  }, 600_000);
 });

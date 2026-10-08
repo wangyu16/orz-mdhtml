@@ -19,11 +19,11 @@
  */
 import { chmodSync, constants as fsConstants, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { decodeText, kindFromFilename, twinName, type Lint } from 'orz-markdown/carrier';
+import { decodeText, kindFromFilename, twinName, UID_PATTERN, type Lint } from 'orz-markdown/carrier';
 import { compareSemver } from 'orz-markdown/carrier/shell';
 import { storedText } from './assemble.js';
 import { isUrl, keepReferenced, resolveFileIncludes, unresolvedIncludes } from './includes.js';
-import { cacheDir, cleanInGit, earlierStateOf, rememberPair as recordPair, sha256, twinStateOf, type EarlierState } from './known-states.js';
+import { cacheDir, cleanInGit, earlierStateOf, lastWriter, rememberPair as recordPair, sha256, twinStateOf, type EarlierState } from './known-states.js';
 import { SHA256_PATTERN } from './sha256.js';
 import { assemble, extract, inspect, newDocument, readDocument, readLegacy, upgrade, DEFAULT_THEME, ORZ_MARKDOWN_VERSION, THEMES, MEASURES, VERSION, type InspectReport } from './lib.js';
 
@@ -44,7 +44,7 @@ export type Reason =
   | 'exists'             // new: the file exists
   | 'not-orz'            // the output exists and is not an orz file; or the input holds no orz document
   | 'twin-differs'       // the twin (x.md.html for assemble, x.md for extract/upgrade) holds a different text that is not a known state
-  | 'output-differs'     // an -o output holds another text (not the one this pair last had there) or another document (another uid)
+  | 'output-differs'     // an -o output holds another text (not the one this pair last had there), or any output holds another document (another uid)
   | 'replaces-mismatch'  // --replaces: the existing file's text is not the one whose SHA-256 was given
   | 'legacy-file'        // a 0.x file where a format-1 file is needed (extract; assemble over one)
   | 'newer-shell'        // the existing file was made by a newer orz-mdhtml (assemble, upgrade)
@@ -183,8 +183,10 @@ may hold work saved in the browser (twin-differs; for -o: output-differs, anothe
 another document): \`orz-mdhtml extract x.md.html -o x.browser.md\`, merge that into
 x.md, then the assemble command the refusal names (your arguments and --replaces). When
 only the file changed (x.md is what orz-mdhtml last synced), the refusal names plain
-\`orz-mdhtml extract x.md.html\`. When x.md has everything, --force replaces it and
-keeps the old file as x.md.html~ (or ~1, ~2, ...).`,
+\`orz-mdhtml extract x.md.html\` — only while x.md's pair is the last orz-mdhtml synced
+the file with (after \`assemble b.md -o x.md.html\` it is not). An output holding another
+document (another uid) is refused with no next: choose another -o path. When x.md has
+everything, --force replaces it and keeps the old file as x.md.html~ (or ~1, ~2, ...).`,
   extract: `orz-mdhtml extract <file.md.html> [-o out.md] [--replaces <sha256>] [--force] [--json]
 
 Writes the exact text twin of an assembled file: x.md.html -> x.md, byte for byte the
@@ -196,14 +198,16 @@ Replaces an existing x.md (or -o output) that holds a different text (no --force
 needed) only when it is a known state — so no edit made to it is lost, whichever file
 is newer:
   - exactly the text orz-mdhtml last wrote or read for this pair (unchanged since, line
-    endings included), or
-  - its last commit, its staged version or one of its 20 most recent commits in git
-    (a full clone; in a shallow checkout use --replaces). A text equal to one of them
-    counts as known, so a deliberate revert of x.md to such a text is replaced —
+    endings included), while this pair is the last orz-mdhtml synced the file with, or
+  - (x.md, the file's own twin, only) its last commit, its staged version or one of its
+    20 most recent commits in git (a full clone; in a shallow checkout use --replaces).
+    A text equal to one of them counts as known, so a deliberate revert of x.md to such
+    a text is replaced —
     commit the revert first, or
   - with --replaces <sha256>: exactly the x.md with that SHA-256 (\`sha256sum x.md\`,
     the "sha256" the last command printed, or of \`orz-mdhtml inspect x.md --json\`);
     with --replaces, nothing else counts.
+Never (without --force) when x.md holds another document (another uid): output-differs.
 Otherwise it refuses (x.md may hold edits the file lacks): extract to another name,
 \`orz-mdhtml extract x.md.html -o x.browser.md\`, and merge the two into x.md.
 --force replaces it anyway and keeps the old text as x.md~ (or ~1, ~2, ...). An empty
@@ -369,6 +373,8 @@ function backup(path: string, o: Io): string {
 }
 
 const mtime = (path: string): number => statSync(path).mtimeMs;
+/** A path with symbolic links resolved when it exists (as the pair records key it). */
+const realOrSelf = (path: string): string => { try { return realpathSync(path); } catch { return path; } };
 const looksHtml = (s: string): boolean => /^\uFEFF?\s*(?:<!doctype\s+html|<html[\s>])/i.test(s.slice(0, 1024));
 
 /** The text an existing orz file holds (format 1 or 0.x), or null when it is not one. */
@@ -381,6 +387,16 @@ function documentTextOf(html: string): string | null {
 /** An existing file as text, or null when it is not valid UTF-8. */
 function readMaybe(path: string): string | null {
   try { return readText(path); } catch { return null; }
+}
+
+/** A text's uid when its header has a well-formed one (`UID_PATTERN`), else null. */
+function uidOf(text: string): string | null {
+  try {
+    const uid = readDocument(text).meta.uid;
+    return typeof uid === 'string' && UID_PATTERN.test(uid.trim()) ? uid.trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Where an earlier state of the twin was found (the human line after "Wrote …"). */
@@ -515,6 +531,15 @@ function assembledOutputCheck(t: AssembleTarget, existing: string | null): { ris
   }
   const earlier = earlierStateOf(input, out, held, storedText, { git: names.twin });
   if (earlier !== null) return { risk: null, earlier };
+  // another document (another well-formed uid) — never "bring its text into this input": nothing to merge, no next
+  const heldUid = uidOf(held);
+  const ownUid = uidOf(text);
+  if (heldUid && ownUid && heldUid !== ownUid) {
+    return {
+      risk: { message: `${names.out} holds another document (uid ${heldUid}; ${names.input} is ${ownUid}); not replaced. Choose another -o path, or pass --force to replace it (the old file is kept as ${names.out}~)`, reason: 'output-differs' },
+      earlier: null,
+    };
+  }
   if (legacy) {
     return {
       risk: {
@@ -525,8 +550,9 @@ function assembledOutputCheck(t: AssembleTarget, existing: string | null): { ris
       earlier: null,
     };
   }
-  // only the file changed: the text is the very one the CLI last synced (or committed) — bring the file's work in, nothing to merge
-  if (twinStateOf(input, out, text) !== null) {
+  // only the file changed: the text is the very one the CLI last synced with this file (this pair is the file's last
+  // writer), or, for the twin, committed — bring the file's work in, nothing to merge
+  if (twinStateOf(input, out, text, { git: names.twin }) !== null) {
     const bring: Next = { command: 'extract', args: [names.out, ...(twinName(out) === input ? [] : ['-o', names.input])] };
     return {
       risk: {
@@ -537,16 +563,11 @@ function assembledOutputCheck(t: AssembleTarget, existing: string | null): { ris
       earlier: null,
     };
   }
-  const later = changedAfter(out, input, () => ' and was changed after it (saved in the browser?)', names.input);
+  const writer = lastWriter(out);
+  const later = writer !== null && writer !== realOrSelf(input)
+    ? ` (orz-mdhtml last wrote it from ${shown(writer)})`
+    : changedAfter(out, input, () => ' and was changed after it (saved in the browser?)', names.input);
   if (!names.twin) {
-    const heldUid = readDocument(held).meta.uid;
-    const ownUid = readDocument(text).meta.uid;
-    if (heldUid && ownUid && heldUid !== ownUid) {
-      return {
-        risk: { message: `${names.out} holds another document (uid ${heldUid}; ${names.input} is ${ownUid}); not replaced. Choose another -o path, or pass --force to replace it (the old file is kept as ${names.out}~)`, reason: 'output-differs' },
-        earlier: null,
-      };
-    }
     return {
       risk: {
         message: `${names.out} holds another text than ${names.input}${later} — not the text orz-mdhtml last wrote there from ${names.input}; not replaced. If it has changes ${names.input} lacks, bring them in first: \`${commandLine(pull)}\`, then merge, then \`${again(['--replaces', heldHash])}\` (it replaces ${names.out} only while it still holds that text). When ${names.input} has everything, run again with --force (the old file is kept as ${names.out}~)`,
@@ -568,25 +589,32 @@ function assembledOutputCheck(t: AssembleTarget, existing: string | null): { ris
 
 /**
  * Whether the text file `out` may be replaced by `text` (the text of the
- * file `file`; extract and upgrade, claims T.7, T.12): it does not exist or
- * holds exactly that text; with `--replaces`, its own text has the given
- * hash (and nothing else counts); or it is a known state
- * (src/known-states.ts `twinStateOf`: exactly the text the CLI last wrote or
- * read for the pair, or a committed/staged/recent version in git). Anything
- * else may hold edits the file lacks — whichever is newer.
+ * file `file`; extract and upgrade, claims T.7, T.12, T.14): it does not
+ * exist or holds exactly that text; never (without `--force`) when it holds
+ * another document (another well-formed uid than `uid`, the uid of `text`;
+ * null: not checked); with `--replaces`, its own text has the given hash
+ * (and nothing else counts); or it is a known state (src/known-states.ts
+ * `twinStateOf`: exactly the text the CLI last wrote or read for the pair
+ * while that pair is the file's last writer, or — when `out` is the file's
+ * own twin — a committed/staged/recent version in git). Anything else may
+ * hold edits the file lacks — whichever is newer.
  */
-function textOutputCheck(out: string, text: string, file: string, names: { out: string; file: string }, token: string | null, advice: (h: string) => { message: string; next?: Next }): { risk: Risk | null; earlier: EarlierState | null } {
+function textOutputCheck(out: string, text: string, file: string, names: { out: string; file: string }, token: string | null, uid: string | null, advice: (h: string) => { message: string; next?: Next }): { risk: Risk | null; earlier: EarlierState | null } {
   if (!existsSync(out)) return { risk: null, earlier: null };
   const existing = readMaybe(out);
   if (existing === text) return { risk: null, earlier: null };
   const h = existing === null ? null : sha256(existing);
+  const existingUid = existing === null ? null : uidOf(existing);
+  if (uid !== null && existingUid !== null && uid !== existingUid) {
+    return { risk: { message: `${names.out} holds another document (uid ${existingUid}; ${names.file} is ${uid}); not overwritten. Write it to another path (-o), or pass --force to replace it (the old text is kept as ${names.out}~)`, reason: 'output-differs' }, earlier: null };
+  }
   if (token !== null) {
     if (h === token) return { risk: null, earlier: 'token' };
     const a = advice(h ?? '');
     return { risk: { message: `${names.out} no longer holds the text you named (--replaces ${token})${h ? `: it holds another one (sha256 ${h})` : ''}; not overwritten. ${a.message}`, reason: 'replaces-mismatch', ...(a.next ? { next: a.next } : {}) }, earlier: null };
   }
   if (existing !== null) {
-    const known = twinStateOf(out, file, existing);
+    const known = twinStateOf(out, file, existing, { git: twinName(file) === out });
     if (known !== null) return { risk: null, earlier: known };
   }
   const later = changedAfter(out, file, (n) => `, changed after ${n}`, names.file);
@@ -830,7 +858,7 @@ function cmdExtract(p: Parsed, o: Io): void {
   const names = { out: shown(out, outArg ?? twinName(file) ?? undefined), file };
   const other = otherName(names.out);
   const outArgs = outArg !== undefined ? ['-o', outArg] : [];
-  const check = textOutputCheck(out, ex.text, input, names, token, (h) => {
+  const check = textOutputCheck(out, ex.text, input, names, token, uidOf(ex.text), (h) => {
     const pull: Next = { command: 'extract', args: [file, '-o', other] };
     return {
       message: `If ${names.out} has edits of its own, extract to another name and merge the two: \`${commandLine(pull)}\`.${h ? ` When ${names.out} holds no edit you want to keep, \`${commandLine({ command: 'extract', args: [file, ...outArgs, '--replaces', h] })}\` replaces it while it still holds that text;` : ''} --force replaces it anyway (the old text is kept as ${names.out}~)`,
@@ -888,7 +916,10 @@ function cmdUpgrade(p: Parsed, o: Io): void {
   }
   const textName = textOut === null ? '' : shown(textOut, p.values['--text'] ?? twinName(outName) ?? undefined);
   const otherText = otherName(textName);
-  const textCheck = textOut ? textOutputCheck(textOut, r.text, out, { out: textName, file: outName }, null, () => ({
+  // the upgraded text's uid — unless upgrade minted it for a 0.x file without one (then it says nothing about identity)
+  const newUid = uidOf(r.text);
+  const ownUids = legacy ? [uidOf(legacy.text), legacy.meta?.uid, legacy.docId].map((u) => (typeof u === 'string' ? u.trim() : null)) : [newUid];
+  const textCheck = textOut ? textOutputCheck(textOut, r.text, out, { out: textName, file: outName }, null, newUid !== null && ownUids.includes(newUid) ? newUid : null, () => ({
     message: legacy
       ? `Upgrade to another name instead: \`${commandLine({ command: 'upgrade', args: [file, ...(p.values['--out'] !== undefined ? ['-o', outName] : []), ...(p.flags.has('--cdn') ? ['--cdn'] : p.flags.has('--inline') ? ['--inline'] : []), '--text', otherText] })}\`, then compare ${otherText} with ${textName} and merge (keep the new header); or --no-text, or --force (the old text is kept as ${textName}~)`
       : `Pass --text ${otherText} (then merge), --no-text, or --force to replace it (the old text is kept as ${textName}~)`,

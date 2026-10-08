@@ -29,6 +29,14 @@
  *   write a pair. The record only ever relaxes a refusal when the text hashes
  *   to exactly that value; a browser save (or an edit of the twin) changes
  *   the text, so its hash no longer matches and the refusal stands.
+ *   Beside it, per file, the LAST WRITER: the twin whose pair the CLI last
+ *   synced with that file (wrote it from, or read it into). Two texts may
+ *   publish to one path (`a.md -o site.md.html`, then `b.md -o
+ *   site.md.html --replaces …`): a.md's pair record still says what a.md
+ *   held then, but the file now holds b.md's line, so a.md's record (and its
+ *   git history) no longer says "only the file changed" — `twinStateOf`
+ *   counts the twin's own states only while its pair is the file's last
+ *   writer (or no writer is recorded: a fresh clone; git, for the twin).
  * - **the caller's token** (`--replaces <sha256>`, in the CLI): a portable
  *   compare-and-swap for agents in fresh sandboxes — the SHA-256 of the text
  *   the caller saw (`inspect`, `extract`, `assemble` print it).
@@ -76,6 +84,26 @@ function recordPath(twin: string, file: string): string | null {
   return dir ? join(dir, 'pairs', `${sha256(`${canonical(twin)}\0${canonical(file)}`)}.json`) : null;
 }
 
+/** Where the last writer of `file` is recorded (one record per file). */
+function writerPath(file: string): string | null {
+  const dir = cacheDir();
+  return dir ? join(dir, 'files', `${sha256(canonical(file))}.json`) : null;
+}
+
+/** Write a small JSON record atomically; false on any failure. */
+function writeRecord(path: string, value: unknown): boolean {
+  const tmp = `${path}.${process.pid}.tmp`;
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(tmp, `${JSON.stringify(value)}\n`, 'utf8');
+    renameSync(tmp, path);
+    return true;
+  } catch {
+    try { unlinkSync(tmp); } catch { /* not created */ }
+    return false;
+  }
+}
+
 /**
  * Whether the pair was recorded: `recorded`, `no-cache` (no cache folder:
  * no `$XDG_CACHE_HOME`, no home), or `failed` (the cache is not writable).
@@ -90,17 +118,40 @@ export type Remembered = 'recorded' | 'no-cache' | 'failed';
  */
 export function rememberPair(twin: string, file: string, held: string, twinText: string): Remembered {
   const path = recordPath(twin, file);
-  if (!path) return 'no-cache';
-  const tmp = `${path}.${process.pid}.tmp`;
+  const writer = writerPath(file);
+  if (!path || !writer) return 'no-cache';
+  // the last writer first: if the pair record then fails, the file names this pair with no record (nothing relaxed)
+  const ok = writeRecord(writer, { file: canonical(file), twin: canonical(twin) })
+    && writeRecord(path, { twin: canonical(twin), file: canonical(file), text: sha256(held), twinText: sha256(twinText) });
+  return ok ? 'recorded' : 'failed';
+}
+
+/**
+ * The twin whose pair the CLI last synced with `file` (its canonical path):
+ * a string, `null` when no writer is recorded (no cache, never written by
+ * this CLI with this cache), or `undefined` when the record is unreadable.
+ */
+function lastWriterOf(file: string): string | null | undefined {
+  const path = writerPath(file);
+  if (!path) return null;
+  let raw: string;
+  try { raw = readFileSync(path, 'utf8'); } catch (e) { return (e as NodeJS.ErrnoException).code === 'ENOENT' ? null : undefined; }
   try {
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(tmp, `${JSON.stringify({ twin: canonical(twin), file: canonical(file), text: sha256(held), twinText: sha256(twinText) })}\n`, 'utf8');
-    renameSync(tmp, path);
-    return 'recorded';
+    const r = JSON.parse(raw) as { file?: unknown; twin?: unknown };
+    return r.file === canonical(file) && typeof r.twin === 'string' ? r.twin : undefined;
   } catch {
-    try { unlinkSync(tmp); } catch { /* not created */ }
-    return 'failed';
+    return undefined;
   }
+}
+
+/** The path of the text the CLI last synced `file` with (its last writer), or null when none is recorded or readable. */
+export function lastWriter(file: string): string | null {
+  return lastWriterOf(file) ?? null;
+}
+
+/** True when the pair `twin` ↔ `file` is the file's last writer (the CLI last synced the file with this twin). */
+export function isLastWriter(twin: string, file: string): boolean {
+  return lastWriterOf(file) === canonical(twin);
 }
 
 interface PairRecord { twin?: unknown; file?: unknown; text?: unknown; twinText?: unknown }
@@ -189,15 +240,21 @@ export function earlierStateOf(twin: string, file: string, held: string, stored:
 }
 
 /**
- * Whether the text twin's current text `current` is a known state, so
- * `extract` may replace it with the file's text without losing an edit: the
- * exact text (raw: a line-ending change is a change) the CLI last wrote or
- * read for the pair (the twin unchanged since), or a committed or staged
- * version of it in git (its content is in the history), compared exactly.
- * Null: unknown — it may hold edits made since.
+ * Whether the text twin's current text `current` is a known state of the
+ * pair, so `extract` may replace it with the file's text without losing an
+ * edit (and `assemble` may say "only the file changed"): the exact text (raw:
+ * a line-ending change is a change) the CLI last wrote or read for the pair
+ * (the twin unchanged since) — only while this pair is the file's last
+ * writer — or, with `git` (the twin's own file only), a committed, staged or
+ * recent version of it in git, compared exactly — only while no other twin
+ * is the file's last writer. Null: unknown — it may hold edits made since, or the
+ * file holds another input's line of work.
  */
-export function twinStateOf(twin: string, file: string, current: string): EarlierState | null {
-  if (rememberedTwin(twin, file, current)) return 'cache';
+export function twinStateOf(twin: string, file: string, current: string, options: { git?: boolean } = {}): EarlierState | null {
+  const writer = lastWriterOf(file);
+  if (writer === canonical(twin) && rememberedTwin(twin, file, current)) return 'cache';
+  if (writer !== null && writer !== canonical(twin)) return null; // another input (or an unreadable record) last synced the file: this twin's states say nothing about it
+  if (options.git === false) return null;
   for (const [state, text] of gitStates(twin, Date.now() + GIT_BUDGET_MS)) if (text === current) return state;
   return null;
 }
