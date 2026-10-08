@@ -100,7 +100,7 @@ export function shellParts(options: AssembleOptions = {}, presentation: Presenta
     shellVersion: VERSION,
     delivery,
     headHtml: shellHead(presentation, { deferred: true }),
-    bodyHtml: `${readViewMarkup(presentation)}\n<div id="${CHROME_MOUNT_ID}"></div>\n${engine}`,
+    bodyHtml: `${readViewMarkup(presentation, delivery)}\n<div id="${CHROME_MOUNT_ID}"></div>\n${engine}`,
     ...(includes ? { includes } : {}),
   };
 }

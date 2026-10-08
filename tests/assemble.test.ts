@@ -17,6 +17,8 @@ import { corpus, HAZARDS, ENGINE } from './helpers.js';
 const CORPUS = corpus('md');
 /** The constant line `#orz-doc` holds until the engine renders (R.11). */
 const FALLBACK_HTML = '<p class="orz-fallback" style="opacity:.6;font:14px/1.5 system-ui,sans-serif">If this page stays blank, open it in a recent browser; the document\'s text is inside this file \u2014 see the comment at the top.</p>';
+/** A cdn file's line names the connection first (its engine comes from the web). */
+const FALLBACK_HTML_CDN = '<p class="orz-fallback" style="opacity:.6;font:14px/1.5 system-ui,sans-serif">If this page stays blank, check your connection (this page loads its engine from the web) or open it in a recent browser; the document\'s text is inside this file \u2014 see the comment at the top.</p>';
 const TEXTS: Array<[string, string, Record<string, string> | undefined]> = [
   ...CORPUS.map((c) => [c.path, c.text, c.includes] as [string, string, Record<string, string> | undefined]),
   ...Object.entries(HAZARDS).map(([name, text]) => [`hazard:${name}`, text, undefined] as [string, string, undefined]),
@@ -64,7 +66,7 @@ describe('FC-18 laws', () => {
   });
 
   it('[A.2] the assembler modules read no clock, randomness or environment', () => {
-    for (const file of ['src/assemble.ts', 'src/presentation.ts', 'src/inspect.ts', 'src/legacy.ts', 'src/themes.ts', 'src/version.ts']) {
+    for (const file of ['src/assemble.ts', 'src/presentation.ts', 'src/inspect.ts', 'src/legacy.ts', 'src/sha256.ts', 'src/themes.ts', 'src/version.ts']) {
       const code = readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '');
       expect(code, file).not.toMatch(/\bDate\b|Math\.random|\bprocess\b|\bnavigator\b|\blocation\b|performance\.now|crypto\./);
     }
@@ -114,13 +116,15 @@ describe('FC-18 laws', () => {
     expect(dark).toContain(`<link rel="stylesheet" id="orz-theme" href="https://cdn.jsdelivr.net/npm/orz-markdown@${ORZ_MARKDOWN_VERSION}/themes/dark-elegant-1.css" media="not all">`);
     expect(dark).toContain('<meta name="color-scheme" content="dark">');
     expect(dark).toContain('atom-one-dark.min.css');
-    expect(dark).toContain(`<article id="orz-doc" class="markdown-body measure-wide">${FALLBACK_HTML}</article>`);
+    expect(dark).toContain(`<article id="orz-doc" class="markdown-body measure-wide">${FALLBACK_HTML_CDN}</article>`);
     // an unknown theme or measure is the default (the header still holds what the author wrote)
     const unknown = assemble('{{nyml\nkind: document\ntheme: no-such\nmeasure: huge\n}}\n', { delivery: 'cdn' });
     expect(unknown).toContain(`themes/${DEFAULT_THEME}.css`);
-    expect(unknown).toContain(`<article id="orz-doc" class="markdown-body">${FALLBACK_HTML}</article>`);
+    expect(unknown).toContain(`<article id="orz-doc" class="markdown-body">${FALLBACK_HTML_CDN}</article>`);
+    expect(assemble('# T\n', { engineSource: ENGINE })).toContain(`<article id="orz-doc" class="markdown-body">${FALLBACK_HTML}</article>`);
     const docPart = (html: string): string => html
       .replace(/"delivery":"(inline|cdn)"/, '"delivery":"*"')
+      .replace(/<p class="orz-fallback"[^>]*>[^<]*<\/p>/, '<fallback>')
       .replace(/<script id="orz-engine"[^>]*>[\s\S]*?<\/script>/, '<engine>');
     for (const [id, text] of TEXTS) {
       const a = docPart(assemble(text, { engineSource: ENGINE }));
@@ -174,7 +178,7 @@ describe('the envelope and the shell parts', () => {
     expect(bundleUrl({ kind: 'md', version: VERSION, bundle: { path: BUNDLE_FILE, integrity: '' } })).toBe(url);
     expect(cdn).toContain(`<script id="orz-engine" src="${url}"></script>`);
     expect(cdn).not.toContain(ENGINE);
-    expect(cdn.length).toBeLessThan(inline.length + url.length);
+    expect(cdn.length - FALLBACK_HTML_CDN.length).toBeLessThan(inline.length - FALLBACK_HTML.length + url.length); // the cdn line is longer (it names the connection)
   });
 
   it('[A.7] refusals: NUL, lone surrogate, newer format, unknown delivery, missing or unsafe engine', () => {
@@ -197,7 +201,7 @@ describe('the envelope and the shell parts', () => {
 
 // ── isomorphic: no Node built-ins, and the same bytes in real Chrome ────────
 
-const MODULES = ['src/assemble.ts', 'src/presentation.ts', 'src/inspect.ts', 'src/legacy.ts', 'src/themes.ts', 'src/version.ts'];
+const MODULES = ['src/assemble.ts', 'src/presentation.ts', 'src/inspect.ts', 'src/legacy.ts', 'src/sha256.ts', 'src/themes.ts', 'src/version.ts'];
 
 describe('isomorphic', () => {
   it('[A.8] the assembler modules bundle for the browser with no Node built-in', async () => {

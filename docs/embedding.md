@@ -51,6 +51,7 @@ const editor = mountEditor(element, {
   readOnly: false,
   nonce,                      // your CSP nonce (FC-19 §3, see below)
   includes,                   // resolved includes for the preview: { 'parts/a.md': text, 'https://…': text } (FC-19 §3)
+  fileName: 'notes.md.html',  // the suggested name of saves without hooks.save (picker, download); default document.md.html
   hooks: { save, ai, fetchInclude, resolveAsset, uploadAsset, resolveLink, mintUid },
   // preferences: your PreferenceStore (default: localStorage, namespaced by the header uid)
 });
@@ -77,7 +78,11 @@ undoable edit, FC-18 §9 rules) · `undo()` / `redo()` · `isDirty()` /
 `proposeAi(op, { selection? })` / `applyAi(proposal, { proposed? })` (the
 review flow, below) · `requestAi(op, { selection? })` (propose and apply at
 once) · `uploadAssets(files)` · `ensureUid()` · `setReadOnly(flag)` /
-`isReadOnly()` · `destroy()`.
+`isReadOnly()` · `refreshPreview({ includes? })` (render now; with `includes`
+the preview's include record is replaced and every include read again — e.g.
+after your app resolved one; saves keep the mounted includes) · `ready` (a
+promise: the text engine is final, `{ engine: 'codemirror6' }` or
+`{ engine: 'textarea', error }`; the editor is usable before) · `destroy()`.
 
 ### AI with a review step
 

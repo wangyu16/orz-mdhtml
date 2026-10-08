@@ -117,6 +117,34 @@ Requires `orz-markdown ^2.2.0`.
   releases charts with `disposeEnhancement`; the IIFE captures only its own
   bundle as the engine (`captureEngineSource(undefined, { bundle })`).
 
+### Safety and agents (closed loop, round 2)
+
+- **`extract` no longer loses edits of `x.md`**: it replaces a different
+  `x.md` only when it is a known state (unchanged since the CLI last wrote or
+  read the pair, or a committed/staged/recent version in git) — whichever
+  file is newer; otherwise it refuses with `extract x.md.html -o
+  x.browser.md` (merge). `--force` keeps `x.md~`.
+- **Compare-and-swap**: `inspect` (`sha256`, `twin.sha256`), `extract` and
+  `assemble` (`sha256`) report the SHA-256 of the text a file holds;
+  `assemble --replaces <sha256>` / `extract --replaces <sha256>` replace only
+  that exact text — for agents in fresh sandboxes without a cache. Known
+  states also include the twin's 20 most recent commits (`git log`, bounded
+  in time): a fresh clone works.
+- `assemble` refuses to replace a file of a newer shell (as `upgrade` does)
+  unless `--force`; `upgrade` refuses a file cut off inside its text unless
+  `--force`; `new --force` keeps both replaced files as `<file>~`.
+- **Machine-readable refusals**: every `--json` failure has a stable
+  `reason` (`twin-differs`, `replaces-mismatch`, `legacy-file`,
+  `newer-shell`, `unclosed-island`, `not-orz`, `exists`, `bad-usage`, …) and,
+  where useful, `next: { command, args }`; `assemble --json` lists
+  `unresolved` includes (`{ target, kind, reason }`), each warned once.
+- A 0.x file next to a text: `assemble`, `upgrade` and `inspect` advise
+  `upgrade x.md.html --text x.browser.md` and a merge (never `extract`).
+  `inspect` advice names the files as given (no `<file>` placeholders).
+- A cdn file's fallback line names the connection first.
+- `mountEditor` takes FC-19 §3 `fileName`; the types add `Editor.ready` and
+  `refreshPreview({ includes })`.
+
 ### Migration
 
 - 0.x files are not opened as they are: `orz-mdhtml upgrade old.md.html`

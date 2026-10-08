@@ -20,7 +20,7 @@
  *   in-file update — so no `previous` release exists whose files must update
  *   to this one, and `C.update.from-previous` is not applicable.
  *
- * No `allowSkips`: the final `[conformant]` test fails unless all 45 checks ran
+ * No `allowSkips`: the final `[conformant]` test fails unless all 46 checks ran
  * in real Chrome and passed. Runs as its own vitest project after the others
  * (vitest.config.ts).
  */
@@ -131,7 +131,7 @@ describe('the conformance target', () => {
     expect(t.previous).toBeUndefined();
     const text = await t.create();
     expect(await t.assemble(text)).toBe(assemble(text, { engineSource: own.iife }));
-    expect(CHECK_IDS.length).toBe(45);
+    expect(CHECK_IDS.length).toBe(46);
   });
 });
 

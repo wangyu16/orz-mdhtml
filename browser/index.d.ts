@@ -76,6 +76,8 @@ export interface EditorOptions {
   nonce?: string;
   /** FC-19 §3 `includes`: resolved includes for the preview (target as written → text), read before `hooks.fetchInclude`; without `hooks.save` also stored in a saved file. */
   includes?: Record<string, string>;
+  /** FC-19 §3 `fileName`: the suggested file name of saves without `hooks.save` (picker and download), e.g. `notes.md.html`; default `document.md.html`. */
+  fileName?: string;
 }
 
 export type SaveVia = 'hook' | 'host' | 'file' | 'download';
@@ -128,6 +130,15 @@ export interface Editor {
   ensureUid(): Promise<string>;
   setReadOnly(readOnly: boolean): void;
   isReadOnly(): boolean;
+  /**
+   * Render the preview now, also when the text has not changed. With
+   * `includes`: the preview's include record is replaced by it (`null` or `{}`:
+   * none) and fetched includes are read again (e.g. after the app resolved
+   * one). Saves keep the includes the editor was mounted with.
+   */
+  refreshPreview(options?: { includes?: Record<string, string> | null }): Promise<void>;
+  /** Resolves when the text engine is final: `codemirror6`, or `textarea` with the load error (the editor is usable before). */
+  readonly ready: Promise<{ engine: string; error?: unknown }>;
 }
 
 export interface RenderPreviewOptions {

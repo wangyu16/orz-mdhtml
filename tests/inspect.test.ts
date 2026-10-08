@@ -7,6 +7,8 @@ import { inspect } from '../src/inspect.js';
 import { inspect as libInspect, engineSource } from '../src/lib.js';
 import { assemble, cdnBundleUrl, newDocument } from '../src/assemble.js';
 import { VERSION } from '../src/version.js';
+import { sha256 } from '../src/sha256.js';
+import { extract } from 'orz-markdown/carrier';
 import { corpus, ENGINE, LEGACY_FILES, read } from './helpers.js';
 
 const UID = 'doc-inspect00000001';
@@ -55,7 +57,7 @@ describe('inspect', () => {
       expect(r.legacy!.delivery).toBe('cdn');
       expect(r.legacy!.docId).toMatch(/^[0-9a-f-]{36}$/);
       expect(r.legacy!.theme).toBe('light-neat-3');
-      expect(r.advice[0]).toMatch(/legacy orz-mdhtml 0\.\d+\.\d+ file.*`orz-mdhtml upgrade <file>`/);
+      expect(r.advice[0]).toMatch(/legacy orz-mdhtml 0\.\d+\.\d+ file.*`orz-mdhtml upgrade file\.md\.html`/);
     }
     const meta = inspect(read(LEGACY_FILES['fixtures/metadata.md.html']));
     expect(meta.legacy).toMatchObject({ title: 'Portable Metadata Example', metaKeys: ['title', 'author', 'description', 'source', 'date', 'keywords', 'license'] });
@@ -120,19 +122,33 @@ describe('inspect', () => {
     }
   });
 
-  it('[I.6] the sibling twin: a text and its .md.html holding different texts are reported (which is newer) with advice naming extract and --force; the same text is not', () => {
+  it('[I.6] the sibling twin: a text and its .md.html holding different texts are reported (which is newer, the SHA-256 of the twin\'s text) with advice naming extract -o <x>.browser.md, --replaces <sha256> and --force; a 0.x twin gets upgrade --text <x>.browser.md, never extract; the same text is not', () => {
     const text = newDocument({ uid: UID });
-    const browser = assemble(`${text}\nsaved in the browser\n`, { delivery: 'cdn' });
+    const browserText = `${text}\nsaved in the browser\n`;
+    const browser = assemble(browserText, { delivery: 'cdn' });
     const r = inspect(text, { filename: 'doc.md', twin: { name: 'doc.md.html', content: browser, newer: 'input' } });
-    expect(r.twin).toEqual({ name: 'doc.md.html', holds: 'different', newer: 'input' });
-    expect(r.advice.join('\n')).toMatch(/doc\.md\.html holds a different text.*this file was modified later.*orz-mdhtml extract doc\.md\.html.*--force/);
+    expect(r.twin).toEqual({ name: 'doc.md.html', holds: 'different', newer: 'input', sha256: sha256(browserText) });
+    expect(r.sha256).toBe(sha256(text));
+    expect(r.advice.join('\n')).toMatch(new RegExp(`doc\\.md\\.html holds a different text.*this file was modified later.*orz-mdhtml extract doc\\.md\\.html -o doc\\.browser\\.md.*orz-mdhtml assemble doc\\.md --replaces ${sha256(browserText)}.*--force`));
     expect(r.advice.join('\n')).not.toMatch(/a text twin: `orz-mdhtml assemble/);
     const fromFile = inspect(browser, { filename: 'doc.md.html', twin: { name: 'doc.md', content: text, newer: 'twin' } });
-    expect(fromFile.twin).toEqual({ name: 'doc.md', holds: 'different', newer: 'twin' });
-    expect(fromFile.advice.join('\n')).toMatch(/the text twin doc\.md holds a different text.*doc\.md was modified later|the text twin doc\.md holds a different text/);
+    expect(fromFile.twin).toEqual({ name: 'doc.md', holds: 'different', newer: 'twin', sha256: sha256(text) });
+    expect(fromFile.sha256).toBe(sha256(browserText));
+    expect(fromFile.advice.join('\n')).toMatch(new RegExp(`the text twin doc\\.md holds a different text.*doc\\.md was modified later.*orz-mdhtml extract doc\\.md\\.html -o doc\\.browser\\.md.*orz-mdhtml assemble doc\\.md --replaces ${sha256(browserText)}.*orz-mdhtml extract doc\\.md\\.html --replaces ${sha256(text)}`));
+    // a 0.x .md.html next to a (0.x) text twin: upgrade --text <x>.browser.md, then merge (round 2, B#3) — from either side
+    const legacy = read(LEGACY_FILES['fixtures/sample.md.html']);
+    const oldText = '{{nyml\nkind: meta\ntitle: Old\n}}\n\n# my own text\n';
+    const fromText = inspect(oldText, { filename: 'sample.md', twin: { name: 'sample.md.html', content: legacy } });
+    expect(fromText.twin!.holds).toBe('different');
+    expect(fromText.advice.join('\n')).toMatch(/sample\.md\.html is a legacy orz-mdhtml 0\.x file.*orz-mdhtml upgrade sample\.md\.html --text sample\.browser\.md.*merge.*Not `extract`/);
+    expect(fromText.advice.join('\n')).not.toMatch(/orz-mdhtml extract/);
+    const fromLegacy = inspect(legacy, { filename: 'sample.md.html', twin: { name: 'sample.md', content: oldText } });
+    expect(fromLegacy.twin!.holds).toBe('different');
+    expect(fromLegacy.advice.join('\n')).toMatch(/next to the text sample\.md: run `orz-mdhtml upgrade sample\.md\.html --text sample\.browser\.md`.*merge/);
+    expect(inspect(legacy, { filename: 'sample.md.html' }).advice.join('\n')).toMatch(/run `orz-mdhtml upgrade sample\.md\.html` for its format-1 text twin/);
     // the same text (mixed line endings stored in one style count as the same)
     const mixed = 'a\r\nb\nc\n';
-    expect(inspect(mixed, { twin: { name: 'm.md.html', content: assemble(mixed, { delivery: 'cdn' }) } }).twin).toEqual({ name: 'm.md.html', holds: 'same', newer: 'unknown' });
+    expect(inspect(mixed, { twin: { name: 'm.md.html', content: assemble(mixed, { delivery: 'cdn' }) } }).twin).toEqual({ name: 'm.md.html', holds: 'same', newer: 'unknown', sha256: sha256(extract(assemble(mixed, { delivery: 'cdn' }))!.text) });
     expect(inspect(assemble(mixed, { delivery: 'cdn' }), { twin: { name: 'm.md', content: mixed, newer: 'same-time' } }).twin!.holds).toBe('same');
     // a sibling that is not an orz file, and no sibling given
     expect(inspect(text, { twin: { name: 'doc.md.html', content: '<!doctype html><p>x' } }).twin!.holds).toBe('none');
@@ -167,9 +183,34 @@ describe('inspect', () => {
     expect(ci.input).toBe('assembled');
     expect(ci.checks).toMatchObject({ island: 'unclosed', end: 'unclosed' });
     expect(ci.writable).toBe(false);
-    expect(ci.advice.join('\n')).toMatch(/not closed.*text may be incomplete/);
+    expect(ci.advice.join('\n')).toMatch(/not closed.*text may be incomplete — recover what you can: `orz-mdhtml extract file\.md\.html -o file\.recovered\.md`/);
+    expect(ci.advice.join('\n')).not.toMatch(/upgrade file\.md\.html` re-assembles/); // never "re-assemble it" from a cut text (round 2, B#4)
+    const ciNamed = inspect(cutIsland.split(`"shell":"${VERSION}"`).join('"shell":"0.0.1"'), { filename: 'notes.md.html' });
+    expect(ciNamed.advice.join('\n')).toMatch(/orz-mdhtml extract notes\.md\.html -o notes\.recovered\.md/);
+    expect(ciNamed.advice.join('\n')).not.toMatch(/older than this tool/);
     // texts, legacy files and plain HTML have no structure report
     expect(inspect(text).checks).toBeNull();
     expect(inspect(read(LEGACY_FILES['fixtures/sample.md.html'])).checks).toBeNull();
+  });
+
+  it('[I.8] advice names the files as the caller named them (quoted for the shell when needed), never a literal placeholder: an assembled file, a text, a legacy file, a damaged engine, an older shell', () => {
+    const text = newDocument({ uid: UID });
+    const cdn = assemble(text, { delivery: 'cdn' });
+    const cases: Array<[string, string]> = [
+      [text, 'sub/notes.md'],
+      [cdn.split(`"shell":"${VERSION}"`).join('"shell":"0.0.1"'), 'sub/notes.md.html'],
+      [cdn.slice(0, cdn.indexOf('Start writing') + 5), 'sub/notes.md.html'],
+      [read(LEGACY_FILES['fixtures/sample.md.html']), 'sub/notes.md.html'],
+      [assemble(text, { engineSource: 'void 0;' }), 'sub/notes.md.html'],
+    ];
+    for (const [input, filename] of cases) {
+      const advice = libInspect(input, { filename }).advice.join('\n');
+      expect(advice, filename).not.toMatch(/<file>|<other>/);
+      expect(advice, filename).toContain(` ${filename}`);
+    }
+    // a name with a space is quoted for the shell
+    expect(inspect(text, { filename: 'my notes.md' }).advice.join('\n')).toContain("`orz-mdhtml assemble 'my notes.md'`");
+    // without a name: a generic one, not a placeholder in angle brackets
+    expect(inspect(text).advice.join('\n')).toContain('`orz-mdhtml assemble file.md`');
   });
 });

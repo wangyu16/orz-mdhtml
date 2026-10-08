@@ -38,8 +38,8 @@ The CLI (`orz-mdhtml --help`; FC-10, inline by default, `--cdn` for the web):
 
 ```bash
 orz-mdhtml new [x.md] [--title T] [--theme id] [--measure m] [--lang l] [--html] [--cdn]
-orz-mdhtml assemble x.md [-o out] [--cdn] [--resolve-includes | --no-includes]   # also: orz-mdhtml x.md
-orz-mdhtml extract x.md.html [-o out]         # the exact text twin; 0.x files → upgrade
+orz-mdhtml assemble x.md [-o out] [--cdn] [--resolve-includes | --no-includes] [--replaces sha256]   # also: orz-mdhtml x.md
+orz-mdhtml extract x.md.html [-o out] [--replaces sha256]   # the exact text twin; 0.x files → upgrade
 orz-mdhtml upgrade old.md.html [-o out] [--text t.md | --no-text] [--cdn | --inline]
 orz-mdhtml inspect <file> [--json]
 orz-mdhtml themes
@@ -50,12 +50,16 @@ exit 0 done / 1 refused or failed / 2 usage. Content (title, theme, measure,
 lang, metadata) comes only from the text's header — `assemble` has no content
 options. Files that could hold other work are not overwritten without
 `--force`, which keeps the replaced file as `<file>~` (see `src/cli.ts`
-guards, claims T.7–T.11): notably `assemble` refuses when the existing
-`.md.html` holds a different text, whichever file is newer (browser saves) —
-unless that text is a known earlier state of the twin (its git HEAD/staged
-version, or what the CLI itself last wrote or read for the pair, recorded by
-hash in `$XDG_CACHE_HOME/orz-mdhtml/`; `src/known-states.ts`, T.11). Tests
-point `XDG_CACHE_HOME` at a temporary folder.
+guards, claims T.7–T.13): notably `assemble` refuses when the existing
+`.md.html` holds a different text, and `extract` when `x.md` differs,
+whichever file is newer (browser saves, agent edits) — unless what is
+replaced is a known state (git HEAD/staged/one of the 20 most recent
+commits of the twin, or what the CLI itself last wrote or read for the pair,
+recorded by hash in `$XDG_CACHE_HOME/orz-mdhtml/`; `src/known-states.ts`,
+T.11) or the caller's `--replaces <sha256>` token (T.12; `src/sha256.ts`,
+isomorphic). Every `--json` failure carries a stable `reason` code and,
+where useful, `next` (T.13; the codes are listed in `src/cli.ts` `Reason`
+and the README). Tests point `XDG_CACHE_HOME` at a temporary folder.
 `inspect` reports the sibling twin and a file's structure (I.6, I.7);
 `src/includes.ts` (Node only) lists, carries and resolves includes (T.8).
 
@@ -65,7 +69,7 @@ Tests live in `tests/` and are bound to the claims in `notes/CLAIMS.md`
 engine into `dist/` first (the CLI tests spawn `dist/cli.js`). The
 `conformance` project (`tests/conformance.test.ts`, ~2 min of Chrome) runs
 orz-markdown's carrier harness against the real carrier after the others; it
-must stay conformant (45 checks, no `allowSkips`). Real-Chrome tests skip
+must stay conformant (46 checks, no `allowSkips`). Real-Chrome tests skip
 without an installed Chrome (playwright-core, channel `chrome`) — such a run
 verifies nothing "real". Still **verify generated files in a real browser**
 (Save in place needs Chromium); `build/serve.cjs` is a dependency-free
@@ -82,7 +86,8 @@ examples. Next: step 8 (closed loop), step 9 (publish 1.0.0 after orz-markdown
 
 - **Isomorphic core** (no Node built-ins, no clock, no randomness except
   `mintUid`; claim A.8): `src/assemble.ts` (`assemble`, `shellParts`,
-  `newDocument`, re-exported kit `extract`/`readDocument`),
+  `newDocument`, re-exported kit `extract`/`readDocument`), `src/sha256.ts`
+  (the `--replaces` hash),
   `src/presentation.ts` (header `theme`/`measure` → head links, article
   class, preview presentation), `src/inspect.ts`, `src/legacy.ts`
   (`readLegacy`, `upgrade` of 0.x files), `src/themes.ts` (re-exports the

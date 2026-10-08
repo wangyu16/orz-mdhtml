@@ -82,17 +82,23 @@ export const SHELL_STYLESHEETS = Object.freeze(['orz-theme', 'orz-katex', 'orz-h
 /**
  * What `#orz-doc` holds until the engine renders the document: one constant,
  * quiet line for a reader whose browser cannot run the engine (the read view
- * replaces it). The same for every document (A.4).
+ * replaces it). The same for every document of a delivery (A.4): an inline
+ * file carries its engine; a cdn file loads it from the web, so its line
+ * names the connection first ({@link FALLBACK_LINE_CDN}).
  */
 export const FALLBACK_LINE = 'If this page stays blank, open it in a recent browser; the document\'s text is inside this file \u2014 see the comment at the top.';
+
+/** The fallback line of a cdn file (its engine comes from jsDelivr). */
+export const FALLBACK_LINE_CDN = 'If this page stays blank, check your connection (this page loads its engine from the web) or open it in a recent browser; the document\'s text is inside this file \u2014 see the comment at the top.';
 
 /**
  * The read view's markup: the page renders the document into `#orz-doc`
  * (in the page, not an iframe — owner decision 3) with the measure's class;
- * until then the article holds {@link FALLBACK_LINE}.
+ * until then the article holds the fallback line of the delivery.
  */
-export function readViewMarkup(p: Presentation): string {
-  return `<main id="orz-view" class="orz-view" data-orz-theme="${attr(p.theme.id)}"><article id="orz-doc" class="${articleClass(p.measure)}"><p class="orz-fallback" style="opacity:.6;font:14px/1.5 system-ui,sans-serif">${FALLBACK_LINE.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p></article></main>`;
+export function readViewMarkup(p: Presentation, delivery: 'inline' | 'cdn' = 'inline'): string {
+  const line = delivery === 'cdn' ? FALLBACK_LINE_CDN : FALLBACK_LINE;
+  return `<main id="orz-view" class="orz-view" data-orz-theme="${attr(p.theme.id)}"><article id="orz-doc" class="${articleClass(p.measure)}"><p class="orz-fallback" style="opacity:.6;font:14px/1.5 system-ui,sans-serif">${line.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p></article></main>`;
 }
 
 /**

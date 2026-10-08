@@ -12,7 +12,7 @@
  *   that leaves the folder (symlinks followed) — the renderer's
  *   `markdownIncludeRoot` rule;
  * - names the directives a record leaves unresolved (`unresolvedIncludes`):
- *   the file shows nothing there.
+ *   the file shows an "Included file not available" note there.
  *
  * One level, as the renderer: a directive inside an included file is not
  * expanded (and not resolved here).
@@ -25,7 +25,7 @@ import { decodeText, withoutHeader } from 'orz-markdown/carrier';
 /** The include directive names (orz-markdown's `INCLUDE_DIRECTIVES`). */
 const DIRECTIVES: ReadonlySet<string> = new Set(['markdown', 'md', 'md-include']);
 
-const isUrl = (t: string): boolean => /^[a-z][a-z0-9+.-]*:\/\//i.test(t);
+export const isUrl = (t: string): boolean => /^[a-z][a-z0-9+.-]*:\/\//i.test(t);
 
 /** A file target on a virtual root (as the record's reader normalizes it: `./a.md` = `a.md`). */
 function rootPath(target: string): string {
@@ -73,36 +73,40 @@ export function unresolvedIncludes(text: string, record: Readonly<Record<string,
   return includeTargets(text).filter((t) => entryFor(record, t) === null);
 }
 
+/** Why a file include was not read (`resolveFileIncludes`). */
+export type IncludeProblem = 'no-such-file' | 'outside-folder' | 'unreadable' | 'not-utf8';
+
 /**
  * Read the text's file includes from `folder` (the text twin's folder): each
  * target as written → the file's exact text (UTF-8). A target outside the
- * folder (after symlinks), missing or not UTF-8 is not resolved, with the
- * reason in `problems`. URL targets are left alone.
+ * folder (after symlinks), missing, unreadable or not UTF-8 is not resolved:
+ * `problems` holds its reason code and a sentence. URL targets are left
+ * alone. `folderProblem`: the folder itself cannot be read (nothing resolved).
  */
-export function resolveFileIncludes(text: string, folder: string): { includes: Record<string, string>; problems: string[] } {
+export function resolveFileIncludes(text: string, folder: string): { includes: Record<string, string>; problems: Array<{ target: string; reason: IncludeProblem; message: string }>; folderProblem: string | null } {
   const includes: Record<string, string> = {};
-  const problems: string[] = [];
+  const problems: Array<{ target: string; reason: IncludeProblem; message: string }> = [];
   let root: string;
-  try { root = realpathSync(folder); } catch { return { includes, problems: [`the folder ${folder} cannot be read`] }; }
+  try { root = realpathSync(folder); } catch { return { includes, problems, folderProblem: `the folder ${folder} cannot be read` }; }
   for (const target of includeTargets(text)) {
     if (isUrl(target)) continue;
     const path = resolve(folder, target.replace(/\\/g, '/'));
     let real: string;
     try { real = realpathSync(path); } catch {
-      problems.push(`{{md ${target}}}: no such file (${path})`);
+      problems.push({ target, reason: 'no-such-file', message: `no such file (${path})` });
       continue;
     }
     const rel = relative(root, real);
     if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
-      problems.push(`{{md ${target}}}: outside the text's folder (${root}); not read`);
+      problems.push({ target, reason: 'outside-folder', message: `outside the text's folder (${root}); not read` });
       continue;
     }
     try {
       includes[target] = decodeText(readFileSync(real), { fatal: true });
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code;
-      problems.push(`{{md ${target}}}: ${code === 'EISDIR' ? 'a folder' : code ? (e as Error).message : 'not valid UTF-8'}`);
+      problems.push({ target, reason: code ? 'unreadable' : 'not-utf8', message: code === 'EISDIR' ? 'a folder' : code ? (e as Error).message : 'not valid UTF-8' });
     }
   }
-  return { includes, problems };
+  return { includes, problems, folderProblem: null };
 }

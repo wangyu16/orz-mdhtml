@@ -74,8 +74,8 @@ npm i -g orz-mdhtml                                 # or: the orz-mdhtml command
 
 ```
 orz-mdhtml new [file.md] [--title T] [--theme id] [--measure m] [--lang l] [--html] [--cdn]
-orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn] [--resolve-includes | --no-includes]   (also: orz-mdhtml <file.md>)
-orz-mdhtml extract <file.md.html> [-o out.md]
+orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn] [--resolve-includes | --no-includes] [--replaces sha256]   (also: orz-mdhtml <file.md>)
+orz-mdhtml extract <file.md.html> [-o out.md] [--replaces sha256]
 orz-mdhtml upgrade <old.md.html> [-o out.md.html] [--text out.md | --no-text] [--cdn | --inline]
 orz-mdhtml inspect <file> [--json]
 orz-mdhtml themes
@@ -84,10 +84,10 @@ orz-mdhtml themes
 | Command | What it does |
 |---|---|
 | `new` | writes a new text twin: a header with `carrier: md`, a fresh `uid` and the given keys, then a starter body. `--html` also assembles it; without a file name the text goes to stdout. |
-| `assemble` | writes `x.md.html` from `x.md` (exact text in, the same bytes every time). Keeps the includes the existing file holds; `--resolve-includes` reads file includes from the text's folder; unresolved includes are warnings. |
-| `extract` | writes the exact text twin of an assembled file (`x.md.html` → `x.md`) and reports its includes. A 0.x file is refused with the advice to run `upgrade`; a cut-off file gives a warning. |
-| `upgrade` | turns a 0.x file (or a file of an older 1.x shell) into a file of this version, in place by default, and writes its text twin (`x.md`) unless `--no-text`. Keeps the file's delivery unless `--cdn` / `--inline`. Repairs a damaged engine; never downgrades a newer shell without `--force`. |
-| `inspect` | diagnoses a text or a file of any version: kind, text format, shell version and how it compares to this tool, delivery, uid, header keys, lint, the file's structure (cut off? engine intact?), whether the sibling twin (`x.md` ↔ `x.md.html`) holds the same text and which is newer, and advice in plain sentences. |
+| `assemble` | writes `x.md.html` from `x.md` (exact text in, the same bytes every time). Keeps the includes the existing file holds; `--resolve-includes` reads file includes from the text's folder. An include left unresolved shows an "Included file not available" note in the file and is reported once (a warning, and `unresolved` in `--json`). |
+| `extract` | writes the exact text twin of an assembled file (`x.md.html` → `x.md`) and reports its includes. Replaces an existing, different `x.md` only when it is a known state (below). A 0.x file is refused with the advice to run `upgrade`; a cut-off file gives a warning. |
+| `upgrade` | turns a 0.x file (or a file of an older 1.x shell) into a file of this version, in place by default, and writes its text twin (`x.md`) unless `--no-text`. Keeps the file's delivery unless `--cdn` / `--inline`. Repairs a damaged engine; refuses (unless `--force`) to downgrade a newer shell or to upgrade a file cut off inside its text. |
+| `inspect` | diagnoses a text or a file of any version: kind, text format, shell version and how it compares to this tool, delivery, uid, header keys, lint, the file's structure (cut off? engine intact?), the SHA-256 of the text it holds, whether the sibling twin (`x.md` ↔ `x.md.html`) holds the same text (and that text's SHA-256) and which is newer, and advice in plain sentences naming the files. |
 | `themes` | lists the theme ids a header may name. |
 
 **Delivery.** Files are **inline** by default: the browser engine is inside the
@@ -102,43 +102,90 @@ holds the page blank: the document shows at once, unstyled, and takes its
 theme when the stylesheets arrive.
 
 **For scripts and agents.** Every command takes `--json` (one JSON object on
-stdout: the result, or `{ "ok": false, "error", "exitCode" }`), `--help` and
-`--force`. Exit status: 0 done, 1 refused or failed, 2 usage error. `assemble`
-has no content options (`--title`, `--theme`… are refused with a pointer to
-the header). Nothing that could hold other work is overwritten without
-`--force`: an output that is not an orz file, a `.md.html` that holds a
-different text than the one being assembled (it may hold work saved in the
-browser — whichever file is newer) unless that text is a known earlier state
-of the twin (below), a text twin changed after its file,
-another document (`upgrade -o`), or (for `new`) any existing file. With
-`--force` the replaced file is kept as `<file>~`. Files are replaced through
-a temporary file and a rename, keeping their mode; a symbolic link stays a
-link.
+stdout), `--help` and `--force`. Exit status: 0 done, 1 refused or failed, 2
+usage error. `assemble` has no content options (`--title`, `--theme`… are
+refused with a pointer to the header). Nothing that could hold other work is
+overwritten without `--force`: an output that is not an orz file, a
+`.md.html` that holds a different text than the one being assembled (it may
+hold work saved in the browser — whichever file is newer), an `x.md` that
+differs from the text being extracted (it may hold edits — whichever file is
+newer), unless what is replaced is a known state (below); a file made by a
+newer orz-mdhtml; another document (`upgrade -o`); or (for `new`) any
+existing file. With `--force` the replaced file is kept as `<file>~`. Files
+are replaced through a temporary file and a rename, keeping their mode; a
+symbolic link stays a link.
 
-**The assemble rule.** `orz-mdhtml assemble x.md` replaces `x.md.html`
-without `--force` when the file holds the same text, or **an earlier state of
-`x.md`** that the CLI can prove:
+**Known states.** `orz-mdhtml assemble x.md` replaces `x.md.html` without
+`--force` when the file holds the same text, or **an earlier state of
+`x.md`** the CLI can prove; `orz-mdhtml extract x.md.html` replaces `x.md`
+when `x.md` itself is a known state:
 
-- `x.md`'s last commit (`git show HEAD:x.md`) or its staged version, when
-  `x.md` is tracked in git (git is used only if installed; any failure counts
-  as unknown);
+- a committed version of `x.md` — its last commit (`git show HEAD:x.md`), its
+  staged version, or one of its 20 most recent commits (`git log -n 20 --
+  x.md`) — when `x.md` is tracked in git (git is used only if installed,
+  for a few seconds at most; any failure counts as unknown). A fresh clone or
+  a CI checkout knows what its history holds;
 - the text `orz-mdhtml` itself last wrote into `x.md.html` or read out of it
   (`new --html`, `assemble`, `extract`, `upgrade` record a SHA-256 per pair in
   `$XDG_CACHE_HOME/orz-mdhtml/`, else `~/.cache/orz-mdhtml/`; the record only
-  lifts the refusal when the file's text hashes to exactly that value).
+  lifts a refusal when the text hashes to exactly that value);
+- **`--replaces <sha256>`** — a portable compare-and-swap for agents in a
+  fresh sandbox (no cache, no history): `inspect --json` prints `sha256` (the
+  text the inspected file holds; for `x.md`, the SHA-256 of its bytes, as
+  `sha256sum`) and `twin.sha256` (the sibling's); `extract` and `assemble`
+  print the `sha256` of the text they wrote. `assemble x.md --replaces <h>`
+  replaces `x.md.html` only while its text has hash `h`; `extract x.md.html
+  --replaces <h>` replaces `x.md` only while it has hash `h`. Any other text
+  is refused (`replaces-mismatch`).
 
 So the normal loop — edit `x.md`, assemble, edit, assemble — needs no
-`--force`. Any other text is refused: notably a save in the browser made in
-between (the file then holds work `x.md` lacks). `--json` says which rule
-applied (`replaced`: `git-head`, `git-index`, `cache`, or `null`).
+`--force`. Anything else is refused: notably a save in the browser made in
+between (the file then holds work `x.md` lacks), or an `x.md` edited since
+the CLI last synced the pair. `--json` says which rule applied (`replaced`:
+`git-head`, `git-index`, `git-log`, `cache`, `token`, or `null`).
+
+**Refusals, for machines.** A `--json` failure is
+`{ "ok": false, "command", "error", "reason", "next"?, "exitCode" }`. `reason`
+is a stable code; `next` (when one command resolves it) is
+`{ "command", "args" }` — run `orz-mdhtml <command> <args…>`:
+
+| `reason` | Meaning | `next` |
+|---|---|---|
+| `bad-usage` | unknown option, missing argument, options that exclude each other (exit 2) | — |
+| `no-such-file`, `unreadable`, `not-utf8` | the input cannot be read as UTF-8 text | — |
+| `exists` | `new`: the file exists | — |
+| `not-orz` | the output exists and is not an orz file; or the input holds no orz document | `inspect <file>` |
+| `twin-differs` | the twin holds a different text that is not a known state (`assemble`: `x.md.html`; `extract`, `upgrade`: `x.md`) | `extract x.md.html -o x.browser.md` (a 0.x file: `upgrade x.md.html --text x.browser.md`) |
+| `output-differs` | an `-o` output holds another document | `extract … -o x.browser.md` |
+| `replaces-mismatch` | `--replaces`: the file no longer holds the text with that hash | `extract x.md.html -o x.browser.md` |
+| `legacy-file` | a 0.x file: `extract` cannot read it; `assemble` will not replace it | `upgrade x.md.html` (next to a text: `--text x.browser.md`) |
+| `newer-shell` | the file was made by a newer orz-mdhtml (use `npx orz-mdhtml@latest`) | — |
+| `newer-format` | the text's format is newer than this tool writes | — |
+| `unclosed-island` | `upgrade`: the file was cut off inside its text | `extract x.md.html -o x.recovered.md` |
+| `other-kind` | an orz slides/paged document: use its own tool | — |
+| `assembled-input` | `assemble` was given a `.md.html` | `extract x.md.html` |
+| `invalid-text` | the text cannot be assembled (NUL, a lone surrogate…) | — |
+| `engine-unavailable` | the inline engine is missing or stale (source checkout: `npm run bundle`) | — |
+| `write-failed`, `failed` | an output (or its `~` copy) could not be written; anything else | — |
+
+`assemble --json` lists the includes left unresolved as `unresolved: [{
+target, kind: "file" | "url", reason }]` (`not-recorded` — pass
+`--resolve-includes`; `url` — the CLI fetches no URLs; `no-such-file`,
+`outside-folder`, `unreadable`, `not-utf8`, `folder-unreadable`).
+`inspect --json`'s `twin` is `{ name, holds: "same" | "different" | "none",
+newer: "input" | "twin" | "same-time" | "unknown", sha256, earlier? }` —
+`newer` says which file was modified last: `input` the inspected one, `twin`
+its sibling.
 
 **Editing an existing document (the safe loop).** Before you edit `x.md`,
 run `orz-mdhtml inspect x.md`: if it says `x.md.html` holds a different text
 (and not an earlier text of `x.md`), someone saved in the browser —
-`orz-mdhtml extract x.md.html` first (or `-o x.browser.md` and merge), then
-edit and assemble. If `assemble` refuses, do that now; only when the text has
-everything, `orz-mdhtml assemble x.md --force` (the old file is kept as
-`x.md.html~`).
+`orz-mdhtml extract x.md.html -o x.browser.md`, merge it into `x.md`, then
+`orz-mdhtml assemble x.md --replaces <twin.sha256>`. If `x.md` has no edits
+of its own (inspect says the file holds the newer work), `orz-mdhtml extract
+x.md.html` replaces it when it is a known state (or `--replaces <sha256>`).
+Only when the text has everything, `orz-mdhtml assemble x.md --force` (the
+old file is kept as `x.md.html~`).
 
 ## The library
 
@@ -162,7 +209,9 @@ The Node library writes the same bytes as the browser engine's
 (`{{md part.md}}`, `{{md https://…}}`) are shown by a file only from its
 `#orz-includes` record: pass them resolved as `assemble(text, { includes })`
 (the CLI keeps the existing file's record, and `assemble --resolve-includes`
-reads file includes from the text's folder; `upgrade` keeps a file's own).
+reads file includes from the text's folder; `upgrade` keeps a file's own). An
+include a file does not hold shows a quiet "Included file not available"
+note.
 
 ## In web apps
 
@@ -222,6 +271,7 @@ format 1; 1.0 does not open them as they are. Upgrade each once:
 ```bash
 npx orz-mdhtml inspect old.md.html          # what it is and what to do
 npx orz-mdhtml upgrade old.md.html          # → old.md.html (format 1) and old.md (its text twin)
+npx orz-mdhtml upgrade old.md.html --text old.browser.md   # when old.md exists (e.g. a 0.x text): then merge
 ```
 
 Once 1.0.0 is published, a 0.9.x file's own banner ("Framework 1.0.0

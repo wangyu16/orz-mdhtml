@@ -139,9 +139,19 @@ export interface EditorOptions {
    * `hooks.save` they also go into the file a save writes.
    */
   includes?: Record<string, string>;
+  /**
+   * FC-19 §3 `fileName` (orz-markdown 2.2.0): the suggested name of this
+   * editor's saves when it has no `hooks.save` (the picker's name and the
+   * download's), e.g. `notes.md.html`. Default `document.md.html`. An editor
+   * mounted on an assembled file saves under the file's own name.
+   */
+  fileName?: string;
 }
 
-/** The Editor of FC-19 §4 (the kit's editor shell, which implements it). */
+/**
+ * The Editor of FC-19 §4 (the kit's editor shell, which implements it) —
+ * among others `ready` (the engine is final) and `refreshPreview({ includes })`
+ * (a new include record for the preview; an app whose includes changed). */
 export type Editor = EditorShell;
 
 /**
@@ -182,7 +192,10 @@ export function mountEditor(element: HTMLElement, options: EditorOptions, standa
     ...(options.nonce ? { nonce: options.nonce } : {}),
     ...(ctx?.adapter ? { adapter: ctx.adapter } : {}),
     hooks,
-    ...(isApp ? (options.includes ? { includes: options.includes } : {}) : ctx ? {
+    ...(isApp ? {
+      ...(options.includes ? { includes: options.includes } : {}),
+      ...(typeof options.fileName === 'string' && options.fileName !== '' ? { fileName: options.fileName } : {}),
+    } : ctx ? {
       assemble: ctx.assemble,
       fileName: ctx.fileName,
       saver: ctx.saver,
@@ -194,6 +207,7 @@ export function mountEditor(element: HTMLElement, options: EditorOptions, standa
       // no hooks.save and no file: an inline file of the text (with the app's includes), through the picker or a download
       assemble: (t: string, o?: { includes?: Record<string, string> }) => assemble(t, { ...(o?.includes ? { includes: o.includes } : {}) }),
       ...(options.includes ? { includes: options.includes } : {}),
+      ...(typeof options.fileName === 'string' && options.fileName !== '' ? { fileName: options.fileName } : {}),
     }),
     preview: present(options.text),
   });

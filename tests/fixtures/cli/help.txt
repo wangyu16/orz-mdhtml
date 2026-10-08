@@ -3,9 +3,9 @@ A document is its text twin (x.md); its self-editing file (x.md.html) is assembl
 
 Usage:
   orz-mdhtml new [file.md] [--title T] [--theme id] [--measure m] [--lang l] [--html] [--cdn]
-  orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn] [--resolve-includes | --no-includes]
+  orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn] [--resolve-includes | --no-includes] [--replaces sha256]
   orz-mdhtml <file.md> [-o out.md.html] [--cdn]          same as assemble
-  orz-mdhtml extract <file.md.html> [-o out.md]
+  orz-mdhtml extract <file.md.html> [-o out.md] [--replaces sha256]
   orz-mdhtml upgrade <old.md.html> [-o out.md.html] [--text out.md | --no-text] [--cdn | --inline]
   orz-mdhtml inspect <file> [--json]
   orz-mdhtml themes
@@ -27,16 +27,21 @@ Options:
   --inline          the default delivery: the engine inside the file (no engine download)
   --force           overwrite even when that could lose work (see below); the replaced
                     file is kept as <file>~
-  --json            print one JSON object (the result, or {"ok": false, "error"}) for agents
+  --replaces <sha>  (assemble, extract) replace an existing, different output only if its
+                    text has this SHA-256 (the "sha256" inspect, extract and assemble print)
+  --json            print one JSON object (the result, or {"ok": false, "error", "reason",
+                    "next"}) for agents
   -h, --help        help (also: orz-mdhtml <command> --help)
   -v, --version     the version
 
 Content (title, theme, measure, lang, metadata) comes only from the text's {{nyml}} header;
 assemble has no content options. Without --force nothing is overwritten that could hold
 other work: an output that is not an orz file, a .md.html that holds a different text
-than the one assembled (unless that text is an earlier state of x.md: its last commit or
-staged version in git, or what orz-mdhtml itself last wrote there), a text twin changed
-after its file, another document (upgrade -o), or (new) any existing file. Before editing
-x.md, `orz-mdhtml inspect x.md` says whether x.md.html holds newer work (saved in the
-browser); `orz-mdhtml extract x.md.html` first brings it in.
+than the one assembled, an x.md that differs from the text extracted (unless the text
+replaced is a known state: what orz-mdhtml itself last wrote or read for the pair, a
+committed or staged version in git, or the text whose SHA-256 --replaces gives), a file
+made by a newer orz-mdhtml, another document (upgrade -o), or (new) any existing file.
+Before editing x.md, `orz-mdhtml inspect x.md` says whether x.md.html holds other work
+(saved in the browser); `orz-mdhtml extract x.md.html -o x.browser.md` brings it out
+for a merge.
 Exit status: 0 done, 1 refused or failed, 2 usage error.

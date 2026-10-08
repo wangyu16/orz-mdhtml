@@ -6,8 +6,9 @@ uid       (none)
 title     orz-mdhtml
 theme     (default)
 header    (none)
+sha256    bb927076d0f1bdd6ebd5117fc4dec85131b1afb1466160aadbaeb753f208a541 (of the text it holds; --replaces takes it)
 writable  no
 lint      clean
 
 advice:
-  - legacy orz-mdhtml 0.7.1 file (experimental, before text format 1; no compatibility shim): run `orz-mdhtml upgrade <file>` for its format-1 text twin and a new file; the source is kept exactly and its metadata, title and theme move into the header. The file's own "Framework 1.0.0 available" banner cannot update it (it ends with "check your connection"); `orz-mdhtml upgrade` is the way
+  - legacy orz-mdhtml 0.7.1 file (experimental, before text format 1; no compatibility shim): run `orz-mdhtml upgrade legacy-fixtures-sample-md-html.md.html` for its format-1 text twin and a new file; the source is kept exactly and its metadata, title and theme move into the header. The file's own "Framework 1.0.0 available" banner cannot update it (it ends with "check your connection"); `orz-mdhtml upgrade` is the way

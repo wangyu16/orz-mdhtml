@@ -572,6 +572,10 @@ chrome('first content, read-view details and editors on a file (real Chrome)', (
     await p2.goto(`file://${path}`);
     expect((await p2.locator('#orz-doc').innerText()).trim()).toBe("If this page stays blank, open it in a recent browser; the document's text is inside this file — see the comment at the top.");
     expect(await p2.evaluate(() => document.getElementById('orz-theme')!.getAttribute('media'))).toBe('not all');
+    // a cdn file (its engine comes from the web): the line names the connection first
+    const cdnPath = files.write('hanging-cdn.md.html', assemble(text, { delivery: 'cdn' }));
+    await p2.goto(`file://${cdnPath}`);
+    expect((await p2.locator('#orz-doc').innerText()).trim()).toBe("If this page stays blank, check your connection (this page loads its engine from the web) or open it in a recent browser; the document's text is inside this file — see the comment at the top.");
     await off.close();
   }, 60_000);
 
@@ -727,7 +731,7 @@ chrome('round 1 of the carrier-app loop: conflicts, app editors, unresolved incl
     await ctx.close();
   }, 120_000);
 
-  it('[X.5] an app\'s editor (no hooks.save, a served page): `includes` and a file include\'s path through fetchInclude reach the preview, an unresolved one is a quiet note; Save goes through the picker (the includes kept in the file), else a download — never the served-page notice', async () => {
+  it('[X.5] an app\'s editor (no hooks.save, a served page): `includes` and a file include\'s path through fetchInclude reach the preview, an unresolved one is a quiet note, refreshPreview({ includes }) brings a new record in; Save goes through the picker under `fileName` (the includes kept in the file), else a download of that name — never the served-page notice', async () => {
     const ctx = await context();
     files.write('app/orz-mdhtml.browser.js', b.iife);
     files.write('app/index.html', '<!doctype html><html><head><meta charset="utf-8"><title>app</title></head><body><div id="ed" style="width:1000px;height:520px"></div><script src="orz-mdhtml.browser.js"></script></body></html>');
@@ -739,7 +743,7 @@ chrome('round 1 of the carrier-app loop: conflicts, app editors, unresolved incl
     const includes = { 'parts/a.md': 'RECORD-A from includes\n' };
     await page.evaluate(`(async () => {
       window.__asked = [];
-      window.__ed = globalThis.OrzCarrier.mountEditor(document.getElementById('ed'), { text: ${JSON.stringify(text)}, mode: 'preview', includes: ${JSON.stringify(includes)}, hooks: {
+      window.__ed = globalThis.OrzCarrier.mountEditor(document.getElementById('ed'), { text: ${JSON.stringify(text)}, mode: 'preview', fileName: 'app-notes.md.html', includes: ${JSON.stringify(includes)}, hooks: {
         fetchInclude: async (t) => { window.__asked.push(t); return t === 'parts/b.md' ? 'PATH-B from fetchInclude\\n' : null; },
       } });
       await window.__ed.ready;
@@ -756,10 +760,18 @@ chrome('round 1 of the carrier-app loop: conflicts, app editors, unresolved incl
     const asked = await page.evaluate(() => (window as unknown as { __asked: string[] }).__asked);
     expect(asked).toContain('parts/b.md');
     expect(asked).not.toContain('parts/a.md'); // includes first
+    // the app resolved parts/c.md: refreshPreview({ includes }) renders with the new record (no note left)
+    await page.evaluate(`window.__ed.refreshPreview({ includes: ${JSON.stringify({ ...includes, 'parts/c.md': 'NOW-C from the new record\n' })} })`);
+    let refreshed = false;
+    for (let i = 0; i < 50 && !refreshed; i++) {
+      refreshed = await frame!.evaluate(() => (document.getElementById('orz-doc')?.textContent ?? '').includes('NOW-C') && !document.querySelector('#orz-doc p.orz-include-missing')).catch(() => false);
+      if (!refreshed) await page.waitForTimeout(200);
+    }
+    expect(refreshed).toBe(true);
     // Save: the picker (an app's page is not a served file), the includes go into the file
     const r1 = await page.evaluate(`window.__ed.save()`);
     expect(r1).toMatchObject({ ok: true, via: 'file' });
-    const saved = (await readOpfs(page, 'document.md.html'))!;
+    const saved = (await readOpfs(page, 'app-notes.md.html'))!; // the fileName option names the save
     expect(saved === assemble(text, { engineSource: b.iife, includes })).toBe(true);
     // no picker: a download, never the served notice
     await page.evaluate(() => { delete (window as unknown as { showSaveFilePicker?: unknown }).showSaveFilePicker; });
@@ -767,6 +779,7 @@ chrome('round 1 of the carrier-app loop: conflicts, app editors, unresolved incl
     const download = page.waitForEvent('download');
     const r2 = await page.evaluate(`window.__ed.save()`);
     expect(r2).toMatchObject({ ok: true, via: 'download' });
+    expect((await download).suggestedFilename()).toBe('app-notes.md.html');
     expect(readFile((await (await download).path())!, 'utf8') === assemble(`${text}more\n`, { engineSource: b.iife, includes })).toBe(true);
     const toasts = await page.evaluate(() => Array.from(document.querySelectorAll('*')).flatMap((h) => (h.shadowRoot ? Array.from(h.shadowRoot.querySelectorAll('.orz-toast, #orz-served-note')).map((t) => t.textContent ?? '') : [])).join(' | '));
     expect(toasts).not.toMatch(/web address/);

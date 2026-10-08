@@ -21,7 +21,8 @@ The CLI is `orz-mdhtml` (Node ≥ 20.16; `npx orz-mdhtml …` needs no install).
 Use `--json` on any command for one machine-readable object on stdout. Exit
 codes: 0 done, 1 refused or failed, 2 usage error. Nothing that could hold
 other work is overwritten unless you pass `--force` — when a command refuses,
-read the error, do not reach for `--force` by reflex.
+read the error (with `--json`: `reason` and `next`, below), do not reach for
+`--force` by reflex.
 
 ## Create a document
 
@@ -41,31 +42,45 @@ notes.md` is short for `assemble`. Theme ids: `orz-mdhtml themes`.
 The `.md.html` can be edited and saved in a browser, so it may hold work the
 text twin lacks — even when `x.md` is the newer file. Always compare first.
 
-1. **Compare before you edit.** If you only have `x.md.html`:
-   `npx orz-mdhtml extract x.md.html` → `x.md` (exact, byte for byte). If you
-   have both: `npx orz-mdhtml inspect x.md --json` and read `twin`:
-   - `holds: "same"` → go on;
-   - `holds: "different"` → `x.md.html` holds other (browser) edits: run
-     `npx orz-mdhtml extract x.md.html -o x.browser.md`, merge its changes
-     into `x.md` (or ask the user which to keep), then go on.
+1. **Compare before you edit.** `npx orz-mdhtml inspect x.md --json`
+   (works with only `x.md.html` too) and read `sha256` and `twin`:
+   - no `x.md` yet → `npx orz-mdhtml extract x.md.html` (exact, byte for byte);
+   - `twin.holds: "same"` → go on;
+   - `twin.holds: "different"` with `twin.earlier` set → the file holds an
+     earlier text of `x.md`; go on (assemble replaces it);
+   - `twin.holds: "different"` otherwise → `x.md.html` holds other (browser)
+     edits: `npx orz-mdhtml extract x.md.html -o x.browser.md`, merge its
+     changes into `x.md` (or ask the user which to keep), and **note
+     `twin.sha256`** (the text the file holds now);
+   - if `x.md` itself has nothing of its own to keep (the file is the newer
+     work), `npx orz-mdhtml extract x.md.html` replaces it when it is a known
+     state (unchanged since the CLI last synced the pair, or committed in
+     git), or `extract x.md.html --replaces <sha256 of x.md>`. A plain
+     `extract` never overwrites an `x.md` that may hold edits.
 2. Edit `x.md`. Document settings go in the header, not in the HTML and not
    as CLI options (`assemble` refuses `--title`, `--theme`…).
 3. `npx orz-mdhtml assemble x.md` → `x.md.html`. No `--force` is needed
    when `x.md.html` holds an earlier state of `x.md` the CLI can prove: what
    `orz-mdhtml` itself last wrote into it or read out of it (after `extract`,
-   `new --html` or a previous `assemble`), or `x.md`'s last commit / staged
-   version in git. So: **`extract` first, then edit, then `assemble`** — it
-   just works. It refuses when the file holds any other text — someone saved
-   in the browser in between: do step 1 (extract to another name, merge),
-   then assemble again. Only when `x.md` has everything,
+   `new --html` or a previous `assemble`), or a committed version of `x.md`
+   in git (HEAD, staged, or one of its 20 most recent commits — so a fresh
+   clone works). **In a fresh sandbox with no cache and no history, use the
+   token:** `npx orz-mdhtml assemble x.md --replaces <twin.sha256>` replaces
+   the file only while it still holds the text you saw (a compare-and-swap);
+   a browser save made since is refused (`replaces-mismatch`). If assemble
+   refuses (`twin-differs`), someone saved in the browser: do step 1 (extract
+   to `x.browser.md`, merge), then assemble again with `--replaces` and the
+   hash the refusal names. Only when `x.md` has everything,
    `npx orz-mdhtml assemble x.md --force` (the replaced file is kept as
    `x.md.html~`). `--json` reports `replaced: "cache" | "git-head" |
-   "git-index" | null`.
+   "git-index" | "git-log" | "token" | null` and the `sha256` of the text
+   the file now holds.
 
 Includes: `assemble` keeps the includes the old file recorded;
 `assemble --resolve-includes` reads `{{md part.md}}` files from the text's
-folder (never outside it). Includes left unresolved are reported as
-`warnings` — the file shows nothing there.
+folder (never outside it). Each include left unresolved is reported once as
+a warning and in `--json` `unresolved: [{ target, kind, reason }]` — the
+file shows an "Included file not available" note there.
 
 Content syntax (math, `{{mermaid}}`, `{{smiles}}`, `{{chart}}`, `::: ` containers,
 `{{md path}}` includes, …) is orz-markdown's: read its skill,
@@ -117,25 +132,58 @@ npx orz-mdhtml inspect x.md.html --json    # also works on a text, a 0.x file, a
 Read `input` (`text`, `assembled`, `legacy`, `html`), `kind`, `format`,
 `writable`, `shell.version` and `shell.relation` (`older` / `same` /
 `newer` than this tool), `uid`, `title`, `header.keys`, `includes`, `lint`,
-`checks` (a file's structure), `twin` (the sibling `x.md` ↔ `x.md.html`:
-same text or not, which is newer), and **follow `advice`** — it names the
-command to run:
+`checks` (a file's structure), `sha256` (of the text it holds: the
+`--replaces` token), `twin` (the sibling `x.md` ↔ `x.md.html`: `holds`
+`same` / `different` / `none`; `newer` — which was modified last: `input`
+the inspected file, `twin` its sibling, `same-time`, `unknown`; `sha256` of
+the sibling's text; `earlier` when known), and **follow `advice`** — it
+names the command to run, with your file names:
 
 - `legacy` (an orz-mdhtml 0.x file) → `upgrade` (its own "Framework 1.0.0
   available" banner cannot update it: that ends with "check your
-  connection" and changes nothing);
+  connection" and changes nothing). **Next to an existing `x.md`** (often a
+  0.x text): `upgrade x.md.html --text x.browser.md`, then compare and merge
+  into `x.md` (keep the new header) — `extract` does not read 0.x files;
 - `twin.holds: "different"` → the text and the file differ: extract and
   merge before assembling (see "Edit an existing document") — unless
-  `twin.earlier` is set (`cache`, `git-head`, `git-index`): the file holds an
-  earlier text of `x.md`, and `assemble` replaces it without `--force`;
+  `twin.earlier` is set (`cache`, `git-head`, `git-index`, `git-log`): the
+  file holds an earlier text of `x.md`, and `assemble` replaces it without
+  `--force`;
 - `checks.island: "unclosed"` → the file was cut off: the text may be
-  incomplete — find a backup; `checks.engine: "different"` / `"missing"` or
+  incomplete — recover what you can (`extract x.md.html -o
+  x.recovered.md`), compare with the twin or a backup; `upgrade` refuses it
+  unless `--force`. `checks.engine: "different"` / `"missing"` or
   `checks.end: "unclosed"` → `upgrade` re-assembles it (the text is intact);
 - an older shell → `upgrade` re-assembles it (text unchanged);
-- a newer shell or a newer text `format` → use `npx orz-mdhtml@latest`; do not
-  re-assemble with an older tool (`upgrade` refuses to downgrade);
+- a newer shell (`shell.relation: "newer"`) or a newer text `format` → use
+  `npx orz-mdhtml@latest`; this tool's `assemble` and `upgrade` refuse to
+  replace a newer shell (`newer-shell`) unless `--force` — do not force it;
 - lint errors → fix the header, then assemble;
 - another kind (`slides`, `paged`) → its own tool (`npx orz-slides`, …).
+
+## When a command refuses (`--json`)
+
+A failure is `{ "ok": false, "error", "reason", "next"?, "exitCode" }`.
+`next` is `{ "command", "args" }`: run `npx orz-mdhtml <command> <args…>`
+(e.g. `extract x.md.html -o x.browser.md`), then merge as above. Stable
+`reason` codes:
+
+- `twin-differs` — the twin holds a different text that is not a known
+  state (assemble: `x.md.html` may hold browser work; extract/upgrade:
+  `x.md` may hold edits) → extract to `x.browser.md`, merge, assemble with
+  `--replaces`;
+- `replaces-mismatch` — the file no longer holds the text whose hash you
+  passed (a save happened since) → extract again and merge;
+- `legacy-file` — a 0.x file → `upgrade` (next to a text: `--text
+  x.browser.md`);
+- `newer-shell` / `newer-format` → `npx orz-mdhtml@latest`;
+- `unclosed-island` — upgrade of a cut-off file → recover with
+  `extract -o x.recovered.md`;
+- `not-orz`, `output-differs`, `exists` — an output you did not expect to
+  replace → choose another `-o` path;
+- `assembled-input`, `other-kind`, `invalid-text`, `no-such-file`,
+  `unreadable`, `not-utf8`, `write-failed`, `engine-unavailable`,
+  `bad-usage` (exit 2), `failed`.
 
 ## Upgrade old files
 
@@ -149,7 +197,11 @@ metadata, saved theme and `<title>` move into the header, and it gets a `uid`.
 The delivery (inline or cdn) is kept unless `--cdn` / `--inline`. A format-1
 file of an older shell is re-assembled with its text and includes unchanged
 (this also repairs a damaged engine). A file of a newer shell is refused (no
-downgrades). Upgrading twice changes nothing more. Once orz-mdhtml 1.0.0 is
+downgrades), and so is a file cut off inside its text (the text may be
+incomplete) — `--force` overrides either and keeps the old file as `x.md.html~`.
+If `x.md` already exists and differs (a 0.x text next to its 0.x file),
+`upgrade` refuses to overwrite it: `upgrade x.md.html --text x.browser.md`,
+then merge. Upgrading twice changes nothing more. Once orz-mdhtml 1.0.0 is
 published, a 0.9.x file's own "Framework 1.0.0 available" banner offers an
 update that fails harmlessly ("check your connection"): use
 `orz-mdhtml upgrade`.
@@ -210,10 +262,11 @@ from CDNs.
   `assemble --resolve-includes` (from the text's folder only); it never
   fetches URL includes (library callers pass `assemble(text, { includes })`;
   `upgrade` keeps a file's own). Unresolved includes are warnings.
-- `--force` keeps what it replaces as `<file>~`; still, compare before you
-  force (see "Edit an existing document"). The pair records live in
-  `$XDG_CACHE_HOME/orz-mdhtml/` (else `~/.cache/orz-mdhtml/`); deleting them
-  only makes `assemble` stricter.
+- `--force` keeps what it replaces as `<file>~` (also `new --force`, for
+  both files); still, compare before you force (see "Edit an existing
+  document"). The pair records live in `$XDG_CACHE_HOME/orz-mdhtml/` (else
+  `~/.cache/orz-mdhtml/`); deleting them only makes `assemble` and `extract`
+  stricter — `--replaces <sha256>` works without them.
 - Keep the `uid` across revisions of a document. A different document needs
   its own: start it with `new` (or the file's *Save as new copy*), never by
   copying another text's header with its `uid`.
