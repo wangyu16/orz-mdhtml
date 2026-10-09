@@ -17,7 +17,8 @@ A document has two forms:
 "fix" the HTML** — everything but the island is regenerated, and a save in the
 browser rewrites the whole file from the text.
 
-The CLI is `orz-mdhtml` (Node ≥ 20.16; `npx orz-mdhtml …` needs no install).
+The CLI is `orz-mdhtml` (Node ≥ 20.16; `npx orz-mdhtml@1 …` needs no install;
+this skill is for 1.x).
 Use `--json` on any command for one machine-readable object on stdout. Exit
 codes: 0 done, 1 refused or failed, 2 usage error. Nothing that could hold
 other work is overwritten unless you pass `--force` — when a command refuses,
@@ -34,10 +35,10 @@ cache, no git, in a shallow clone, in a fresh sandbox.
 ## Create a document
 
 ```bash
-npx orz-mdhtml new notes.md --title "Field notes" [--theme light-academic-1] [--measure wide] [--lang en]
+npx orz-mdhtml@1 new notes.md --title "Field notes" [--theme light-academic-1] [--measure wide] [--lang en]
 # edit notes.md (the body; header keys below)
-npx orz-mdhtml assemble notes.md          # → notes.md.html (inline engine, ~1 MB, works as a file)
-npx orz-mdhtml assemble notes.md --cdn    # → a small file that loads the engine from jsDelivr (for web pages)
+npx orz-mdhtml@1 assemble notes.md          # → notes.md.html (inline engine, ~1 MB, works as a file)
+npx orz-mdhtml@1 assemble notes.md --cdn    # → a small file that loads the engine from jsDelivr (for web pages)
 ```
 
 `new` mints the document's `uid`; keep it (it keys the reader's preferences
@@ -49,24 +50,24 @@ notes.md` is short for `assemble`. Theme ids: `orz-mdhtml themes`.
 The `.md.html` can be edited and saved in a browser, so it may hold work the
 text twin lacks — even when `x.md` is the newer file. Always compare first.
 
-1. **Compare before you edit.** `npx orz-mdhtml inspect x.md --json`
+1. **Compare before you edit.** `npx orz-mdhtml@1 inspect x.md --json`
    (works with only `x.md.html` too) and read `sha256` and `twin`:
-   - no `x.md` yet → `npx orz-mdhtml extract x.md.html` (exact, byte for byte);
+   - no `x.md` yet → `npx orz-mdhtml@1 extract x.md.html` (exact, byte for byte);
    - `twin.holds: "same"` → go on;
    - `twin.holds: "different"` with `twin.earlier` set → the file holds an
      earlier text of `x.md`; go on (assemble replaces it);
    - `twin.holds: "different"` otherwise → `x.md.html` holds other (browser)
-     edits: `npx orz-mdhtml extract x.md.html -o x.browser.md`, merge its
+     edits: `npx orz-mdhtml@1 extract x.md.html -o x.browser.md`, merge its
      changes into `x.md` (or ask the user which to keep), and **note
      `twin.sha256`** (the text the file holds now);
    - if `x.md` itself has nothing of its own to keep (the file is the newer
-     work), `npx orz-mdhtml extract x.md.html` replaces it when it is a known
+     work), `npx orz-mdhtml@1 extract x.md.html` replaces it when it is a known
      state (unchanged since the CLI last synced the pair — and no other
      text was synced with the file since — or committed in git), or `extract x.md.html --replaces <sha256 of x.md>`. A plain
      `extract` never overwrites an `x.md` that may hold edits.
 2. Edit `x.md`. Document settings go in the header, not in the HTML and not
    as CLI options (`assemble` refuses `--title`, `--theme`…).
-3. `npx orz-mdhtml assemble x.md` → `x.md.html`. No `--force` is needed
+3. `npx orz-mdhtml@1 assemble x.md` → `x.md.html`. No `--force` is needed
    when `x.md.html` holds an earlier state of `x.md` the CLI can prove: what
    `orz-mdhtml` itself last wrote into it or read out of it (after `extract`,
    `new --html` or a previous `assemble`, for the same pair — with `-o` too:
@@ -78,7 +79,7 @@ text twin lacks — even when `x.md` is the newer file. Always compare first.
    20 commits counts as a known earlier state, so a deliberate revert of
    the other file to such a text is replaced — commit the revert first.
    **In a fresh sandbox with no cache and no history, use the token:**
-   `npx orz-mdhtml assemble x.md --replaces <twin.sha256>` replaces the file
+   `npx orz-mdhtml@1 assemble x.md --replaces <twin.sha256>` replaces the file
    only while it still holds the text you saw (a compare-and-swap);
    a browser save made since is refused (`replaces-mismatch`). If assemble
    refuses (`twin-differs`), someone saved in the browser: do step 1 (extract
@@ -88,7 +89,7 @@ text twin lacks — even when `x.md` is the newer file. Always compare first.
    plain `extract x.md.html`: run it. A warning "pair not recorded (cache
    not writable)" means the next assemble needs `--replaces` with the hash
    just printed. Only when `x.md` has everything,
-   `npx orz-mdhtml assemble x.md --force` (the replaced file is kept as
+   `npx orz-mdhtml@1 assemble x.md --force` (the replaced file is kept as
    `x.md.html~`, or `x.md.html~1`, `~2`… — a backup is never overwritten).
    `--json` reports `replaced: "cache" | "git-head" | "git-index" |
    "git-log" | "token" | null` and the `sha256` of the text the file now
@@ -149,7 +150,7 @@ license: CC-BY-4.0
 ## Inspect before you act
 
 ```bash
-npx orz-mdhtml inspect x.md.html --json    # also works on a text, a 0.x file, any HTML
+npx orz-mdhtml@1 inspect x.md.html --json    # also works on a text, a 0.x file, any HTML
 ```
 
 Read `input` (`text`, `assembled`, `legacy`, `html`), `kind`, `format`,
@@ -187,7 +188,7 @@ names the command to run, with your file names:
 ## When a command refuses (`--json`)
 
 A failure is `{ "ok": false, "error", "reason", "next"?, "exitCode" }`.
-`next` is `{ "command", "args" }`: run `npx orz-mdhtml <command> <args…>`
+`next` is `{ "command", "args" }`: run `npx orz-mdhtml@1 <command> <args…>`
 (e.g. `extract x.md.html -o x.browser.md`), then merge as above. Stable
 `reason` codes:
 
@@ -224,8 +225,8 @@ A failure is `{ "ok": false, "error", "reason", "next"?, "exitCode" }`.
 ## Upgrade old files
 
 ```bash
-npx orz-mdhtml upgrade old.md.html            # in place, and writes old.md (its text twin)
-npx orz-mdhtml upgrade old.md.html -o new.md.html --text new.md
+npx orz-mdhtml@1 upgrade old.md.html            # in place, and writes old.md (its text twin)
+npx orz-mdhtml@1 upgrade old.md.html -o new.md.html --text new.md
 ```
 
 A 0.x file (orz-mdhtml ≤ 0.9.3) keeps its source exactly; its `#orz-meta`
@@ -237,8 +238,8 @@ downgrades), and so is a file cut off inside its text (the text may be
 incomplete) — `--force` overrides either and keeps the old file as `x.md.html~`.
 If `x.md` already exists and differs (a 0.x text next to its 0.x file),
 `upgrade` refuses to overwrite it: `upgrade x.md.html --text x.browser.md`,
-then merge. Upgrading twice changes nothing more. Once orz-mdhtml 1.0.0 is
-published, a 0.9.x file's own "Framework 1.0.0 available" banner offers an
+then merge. Upgrading twice changes nothing more. With orz-mdhtml 1.0.0 on npm,
+a 0.9.x file's own "Framework 1.0.0 available" banner offers an
 update that fails harmlessly ("check your connection"): use
 `orz-mdhtml upgrade`.
 
@@ -266,13 +267,13 @@ tags) and undo its escaping:
 
 ## In a web app
 
-The same editor is a component: `npm install orz-mdhtml-browser`, then
+The same editor is a component: `npm i orz-mdhtml-browser@1`, then
 `mountEditor(element, { text, hooks: { save, ai, fetchInclude, … }, nonce })`
 (ES module, or `globalThis.OrzCarrier` from the IIFE). Store the text; call
 `assemble(text)` only when a file is needed. Hooks, the AI review flow and the
 CSP recipe: `docs/embedding.md`, shipped in both packages
 (`node_modules/orz-mdhtml-browser/docs/embedding.md`, or
-`https://cdn.jsdelivr.net/npm/orz-mdhtml-browser/docs/embedding.md`).
+`https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@1/docs/embedding.md`).
 Platforms that show assembled files in an iframe use the host protocols
 (orz-markdown `spec/host-protocols.md`).
 
@@ -311,7 +312,7 @@ from CDNs.
 - Keep the `uid` across revisions of a document. A different document needs
   its own: start it with `new` (or the file's *Save as new copy*), never by
   copying another text's header with its `uid`.
-- Package: `orz-mdhtml` depends on `orz-markdown ^2.2.0` (the carrier kit);
+- Package: `orz-mdhtml` 1.x depends on `orz-markdown ^2.2.0` (the carrier kit);
   files record the shell version that wrote them.
 - Security: a `.md.html` runs the code inside it — treat files like programs
   and open only trusted ones.

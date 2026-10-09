@@ -1,6 +1,6 @@
 {
   "name": "orz-mdhtml",
-  "version": "0.9.3",
+  "version": "1.0.0",
   "description": "Markdown that edits itself: text twins (x.md) and their single-file, self-editing x.md.html (orz text format 1) — CLI and Node library.",
   "type": "module",
   "main": "./dist/lib.js",

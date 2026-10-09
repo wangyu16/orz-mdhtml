@@ -4,7 +4,11 @@ The browser engine and editor component of
 [orz-mdhtml](https://github.com/wangyu16/orz-mdhtml) ("Markdown that edits
 itself"): the very bundle every `.md.html` file carries, and the same editor
 for web apps (orz family contract FC-19). Built on the carrier kit of
-[orz-markdown](https://www.npmjs.com/package/orz-markdown).
+[orz-markdown](https://www.npmjs.com/package/orz-markdown) 2.2 (bundled).
+
+```sh
+npm i orz-mdhtml-browser@1
+```
 
 | File | What |
 |---|---|
@@ -19,7 +23,7 @@ const editor = mountEditor(element, { text, nonce, hooks: { async save(text) { /
 ```
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@1/orz-mdhtml.browser.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@1.0.0/orz-mdhtml.browser.js"></script>
 <script>const editor = OrzCarrier.mountEditor(element, { text, hooks: { save } });</script>
 ```
 

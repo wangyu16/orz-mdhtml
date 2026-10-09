@@ -77,12 +77,12 @@ verifies nothing "real". Still **verify generated files in a real browser**
 (Save in place needs Chromium); `build/serve.cjs` is a dependency-free
 static server for that.
 
-**1.0 rebuild in progress** (branch `rebuild/1.0`, plan in
-`../docs/REBUILD.md` §3a). Steps 1–7 done: base, isomorphic assembler, browser
-engine, standalone startup (now orz-markdown 2.2.0 `carrier/app`), CLI and
-Node library (the 0.9 runtime is deleted), conformance harness, docs and
-examples. Next: step 8 (closed loop), step 9 (publish 1.0.0 after orz-markdown
-2.2.0; browser package first).
+**1.0.0** (prepared on branch `rebuild/1.0`; plan in `../docs/REBUILD.md`
+§3a): the rebuild on the orz-markdown 2.2.0 carrier kit (`carrier/app`) —
+base, isomorphic assembler, browser engine, standalone startup, CLI and Node
+library (the 0.9 runtime is deleted), conformance harness, docs and examples,
+closed loop. Depends on the published `orz-markdown ^2.2.0` (a real install,
+no symlink).
 
 ## Architecture
 
@@ -140,9 +140,10 @@ examples. Next: step 8 (closed loop), step 9 (publish 1.0.0 after orz-markdown
   stale engine is refused ("run `npm run bundle`"), never inlined.
 - **The browser bundle embeds orz-markdown.** To pick up parser/runtime changes,
   bump the `orz-markdown` dep, `npm install`, then `npm run build` and
-  `npm run examples`. (Before orz-markdown 2.2.0 is on npm,
-  `node_modules/orz-markdown` is a symlink to `../../orz-markdown`; do not
-  `npm install` until it is published.)
+  `npm run examples`. (To try an unpublished orz-markdown, link
+  `node_modules/orz-markdown` to `../../orz-markdown`; `build/bundle.ts`
+  resolves its dependencies from the real path. Never release from a link.)
+  npm 10 fails to install vitest here: use `npx npm@11 install`.
 - **`dist/`, `browser/orz-mdhtml.browser.js`, `browser/esm/` and
   `browser/release.json` are gitignored** build artifacts; `browser/package.json`,
   `browser/index.d.ts` and `browser/README.md` are tracked.
@@ -173,8 +174,9 @@ examples. Next: step 8 (closed loop), step 9 (publish 1.0.0 after orz-markdown
 2. `npm run build` (stages `browser/orz-mdhtml.browser.js`, `browser/esm/`,
    `browser/release.json`, and the same engine into `dist/`), then
    `npm run examples` and `npm test`.
-3. `npm publish ./browser` (orz-mdhtml-browser) **first**, then `npm publish`
-   (the CLI) — so `--cdn` URLs resolve.
+3. `cd browser && npm publish` (orz-mdhtml-browser; its `prepublishOnly`
+   runs `scripts/check-release.mjs`) **first**, then `npm publish` in the root
+   (the CLI; `prepublishOnly` builds and tests) — so `--cdn` URLs resolve.
 4. Token: granular with **bypass-2FA** (and "create new packages" for a new
    name) in a temp `.npmrc`, **deleted after**; never commit.
 5. **Network note**: IPv6 is unreliable on this machine — prefix npm/git network

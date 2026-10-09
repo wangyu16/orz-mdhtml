@@ -16,7 +16,7 @@ runs both in real Chrome (`tests/webapp.test.ts`).
 ## Install and load
 
 ```sh
-npm install orz-mdhtml-browser
+npm install orz-mdhtml-browser@1   # or: npm i orz-mdhtml-browser@1
 ```
 
 | You want | Use | Resolves to |
@@ -24,7 +24,7 @@ npm install orz-mdhtml-browser
 | a bundler (Vite, esbuild, webpack) | `import { mountEditor } from 'orz-mdhtml-browser'` | `esm/orz-mdhtml.browser.mjs` (`exports` → `import`) |
 | a plain `<script>` | `<script src=".../orz-mdhtml.browser.js">` → `globalThis.OrzCarrier` | `orz-mdhtml.browser.js` (`exports` → `default`) |
 | `require()` | not supported: it throws, pointing to `import` or `<script>` | `require.cjs` (`exports` → `require`) |
-| the CDN | `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js` | the same IIFE |
+| the CDN | `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js` (e.g. `@1.0.0`; pin an exact version) | the same IIFE |
 
 Types: `orz-mdhtml-browser/index.d.ts` (`Editor`, `EditorOptions`,
 `EditorHooks`, …). The ES module sets no global and boots nothing; the IIFE

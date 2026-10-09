@@ -52,7 +52,9 @@ const touch = (path: string, t: number): void => utimesSync(path, t, t);
 const noTemp = (dir: string): void => { expect(readdirSync(dir).filter((f) => f.includes('.orz-') && f.endsWith('.tmp'))).toEqual([]); };
 
 /** The golden files hold the two versions as placeholders, so a version bump does not rewrite them. */
-const golden = (s: string): string => s.split(VERSION).join('{{VERSION}}').split(ORZ_MARKDOWN_VERSION).join('{{ORZ_MARKDOWN}}');
+// The 0.9 banner's own words ("Framework 1.0.0 available") are a constant, not this tool's version: kept as they are.
+const BANNER = 'Framework 1.0.0 available';
+const golden = (s: string): string => s.split(BANNER).map((part) => part.split(VERSION).join('{{VERSION}}').split(ORZ_MARKDOWN_VERSION).join('{{ORZ_MARKDOWN}}')).join(BANNER);
 const GOLDEN = 'tests/fixtures/cli';
 
 describe.concurrent('the CLI', () => {

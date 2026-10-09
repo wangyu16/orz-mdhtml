@@ -8,7 +8,7 @@ reads like a themed website, edits itself in the browser and saves back in
 place. The file is always `assemble(text)`: the text inside it is the
 document; everything else is a shell that can be regenerated. Built on the
 carrier kit of [orz-markdown](https://www.npmjs.com/package/orz-markdown)
-(orz text format 1).
+(`^2.2.0`; orz text format 1).
 
 ## What a 1.0 `.md.html` is
 
@@ -79,10 +79,13 @@ Node 20.16 or newer. Run the CLI with `npx` (nothing to install) or install
 it:
 
 ```bash
-npx orz-mdhtml new notes.md --title "Field notes"   # a new text twin
-npx orz-mdhtml notes.md                             # → notes.md.html
-npm i -g orz-mdhtml                                 # or: the orz-mdhtml command
+npx orz-mdhtml@1 new notes.md --title "Field notes"   # a new text twin
+npx orz-mdhtml@1 notes.md                             # → notes.md.html
+npm i -g orz-mdhtml@1                                 # or: the orz-mdhtml command
 ```
+
+For a web app, the browser engine and editor component:
+`npm i orz-mdhtml-browser@1` (see [In web apps](#in-web-apps)).
 
 ## The CLI
 
@@ -108,7 +111,8 @@ orz-mdhtml themes
 file (about 1 MB), so it opens without fetching the engine. `--cdn` writes a
 small file that loads the engine from
 `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js`
-— for pages you publish on the web. Either way the theme stylesheets, KaTeX's
+(the file's own version, e.g. `orz-mdhtml-browser@1.0.0`) — for pages you
+publish on the web. Either way the theme stylesheets, KaTeX's
 and highlight.js's styles, the content libraries (Mermaid, SMILES, Chart.js)
 and the editor (CodeMirror) load from CDNs: reading styled content and editing
 need a network connection the first time. A slow or unreachable CDN never
@@ -264,7 +268,7 @@ note.
 ## In web apps
 
 The editor every `.md.html` carries is also a component for web apps:
-[`orz-mdhtml-browser`](browser/README.md) (`npm install orz-mdhtml-browser`;
+[`orz-mdhtml-browser`](browser/README.md) (`npm i orz-mdhtml-browser@1`;
 ES module or a plain `<script>` that sets `globalThis.OrzCarrier`). An app
 mounts any number of editors, keeps the text wherever it likes through its own
 hooks (save, AI with a review step, includes, assets, links, ids), works under
@@ -286,7 +290,7 @@ host's include resolution.
   agent skill.
 - **The skill.** [`orz-mdhtml-skills/SKILL.md`](orz-mdhtml-skills/SKILL.md)
   (shipped in the package; also at
-  `https://cdn.jsdelivr.net/npm/orz-mdhtml/orz-mdhtml-skills/SKILL.md`) tells an
+  `https://cdn.jsdelivr.net/npm/orz-mdhtml@1/orz-mdhtml-skills/SKILL.md`) tells an
   agent how to create, edit, extract, inspect and upgrade documents. For Claude
   Code, copy `orz-mdhtml-skills/` into `~/.claude/skills/orz-mdhtml/`.
 - **The loop.** Edit the text twin, never the HTML; `orz-mdhtml assemble`
@@ -317,12 +321,12 @@ The 0.x files (orz-mdhtml up to 0.9.3) were experimental and predate text
 format 1; 1.0 does not open them as they are. Upgrade each once:
 
 ```bash
-npx orz-mdhtml inspect old.md.html          # what it is and what to do
-npx orz-mdhtml upgrade old.md.html          # → old.md.html (format 1) and old.md (its text twin)
-npx orz-mdhtml upgrade old.md.html --text old.browser.md   # when old.md exists (e.g. a 0.x text): then merge
+npx orz-mdhtml@1 inspect old.md.html        # what it is and what to do
+npx orz-mdhtml@1 upgrade old.md.html        # → old.md.html (format 1) and old.md (its text twin)
+npx orz-mdhtml@1 upgrade old.md.html --text old.browser.md   # when old.md exists (e.g. a 0.x text): then merge
 ```
 
-Once 1.0.0 is published, a 0.9.x file's own banner ("Framework 1.0.0
+With 1.0.0 on npm, a 0.9.x file's own banner ("Framework 1.0.0
 available") offers to update it; that update cannot read a 1.0 release and
 ends harmlessly with "check your connection" — the file is not changed. Use
 `orz-mdhtml upgrade` instead.

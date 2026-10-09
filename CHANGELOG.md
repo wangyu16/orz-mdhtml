@@ -3,188 +3,144 @@
 All notable changes to **orz-mdhtml** are recorded here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — 1.0.0
+## [Unreleased]
 
-A rebuild on the orz-markdown carrier kit (orz text format 1; family plan
-REBUILD §3a). **Breaking**: the 0.9 files, API and CLI shape are replaced.
-Requires `orz-markdown ^2.2.0`.
+<a id="100"></a>
+
+## [1.0.0] — 2026-10-09
+
+A rebuild on the orz-markdown carrier kit (orz text format 1). Requires
+`orz-markdown ^2.2.0`; released together with `orz-mdhtml-browser` 1.0.0.
+
+### Breaking
+
+- The 0.9 files, Node API and CLI shape are replaced. 0.x files are not
+  opened as they are: `orz-mdhtml upgrade old.md.html` writes a format-1 file
+  and its text twin (the source kept exactly; `#orz-meta`, the saved theme
+  and the `<title>` move into the header). `orz-mdhtml inspect` says what any
+  file is and what to do.
+- Removed: `buildMdHtml`, `composeInlineMdHtml`, `findRendererBundle`,
+  `findAsset`, `orzVersionOf`, `selfVersionOf`; the 0.x runtime
+  (`assets/app.js`, `orzmd.browser.js`); `--theme` and `--title` on
+  generation (content comes only from the text's header); `--cdn` as the
+  default (files are inline by default).
+- Theme and width (`measure`) are document data in the header: changing them
+  in the page changes the document (unsaved until Save, undoable).
 
 ### The new file
 
-- A document is its **text twin** (`x.md`: Markdown with a `{{nyml kind:
-  document}}` header — `carrier`, `uid`, `title`, `theme`, `measure`, `lang`,
-  DocMeta keys) and its **self-editing file** `x.md.html` =
-  `assemble(text)`. The file holds the exact text in its `#orz-src` island
-  (BOM and line endings recorded), an agent banner, `#orz-shell`
-  (`{ kind: "md", format: 1, shell, delivery }`), `#orz-meta` and the head
-  metadata from the header, `#orz-includes` (includes resolved at assembly),
+- A document is its **text twin** `x.md` (Markdown with a `{{nyml kind:
+  document}}` header: `carrier`, `uid`, `title`, `theme`, `measure`, `lang`
+  and the DocMeta keys) and its **self-editing file** `x.md.html` =
+  `assemble(text)`: the exact text (BOM and line endings kept) in the
+  `#orz-src` island, an agent banner, `#orz-shell`, `#orz-meta` and head
+  metadata from the header, `#orz-includes` (includes resolved at assembly)
   and a regenerable shell. Node and the browser write the same bytes.
-- **Read view in the page** (no iframe) with the header's theme and measure;
-  content libraries load only when the document needs them.
-- **Chrome** (orz-markdown `carrier/app`): reading is undisturbed — one
-  pencil at the bottom-left (click: Edit; hover, tap or ArrowUp: the list of
-  Edit, Save, Download a copy, New document, Save as new copy, Theme, Width,
-  Text size and the quiet update); theme and width (`measure`) write the
-  header (undoable); a reader-only **Text size** (80–160 %, per `uid`, never
-  in the file; the article zooms by `--orz-font-scale`); edit mode ends its
-  bar with the orz seal (https://markdown.orz.how) and the orz-mdhtml GitHub
-  link (`MD_KIND.repo`); Cmd/Ctrl+S / E / Z; a warning before closing with unsaved
-  changes. Saves always write `assemble(text)`, never the live DOM; a file
-  handle is reused only when the file's content proves it is the opened file.
-- **Editor**: the kit's editor shell (CodeMirror, live preview, view modes,
-  reader preferences stored per document `uid`, never in the file).
-- **Quiet update**: a local file checks once a day for a newer
+- **Read view** in the page (no iframe) with the header's theme and measure;
+  content libraries load only when the document needs them; a hanging CDN
+  never holds the page blank. Reading is undisturbed: one **pencil** at the
+  bottom-left (click: Edit; hover, tap or ArrowUp: Edit, Save, Download a
+  copy, New document, Save as new copy, Theme, Width, Text size and the
+  update). *Text size* (80–160 %) is the reader's, kept per `uid`, never in
+  the file.
+- **Editor** (the kit's editor shell): CodeMirror beside a live preview
+  (split, editor, preview), header pickers, undo; its bar ends with the orz
+  seal (markdown.orz.how) and the GitHub link. Cmd/Ctrl+S / E / Z; a warning
+  before closing with unsaved changes.
+- **Save, New document, Save as new copy**, Download a copy: every save
+  writes `assemble(text)`, never the live DOM. Save in place in Chromium;
+  elsewhere a download.
+- **The save-conflict question**: a save never silently overwrites a file
+  that changed on disk since the page opened it (another program, an agent,
+  an `assemble`); the reader chooses *Replace it* or *Download a copy
+  instead*.
+- **Quiet update**: a local file checks at most once a day for a newer
   `orz-mdhtml-browser` (`release.json`, SHA-384-verified bundle) and offers
-  *Update now*, which re-assembles the same text with the new release.
+  *Update now*, which re-assembles the same text; nothing changes until the
+  reader asks.
 - **Hosts**: `orz-host-save@1`, `orz-host-ai@1` (an AI menu with a review
-  panel; nothing changes until the reader applies) and `orz-host-include@1`;
-  canonical spec in orz-markdown `spec/host-protocols.md` (PROTOCOL.md is now a
-  pointer).
-- **Inline by default**: the engine is inside the file; `--cdn` for small web
-  files.
+  panel) and `orz-host-include@1`; canonical spec in orz-markdown
+  `spec/host-protocols.md` (PROTOCOL.md is now a pointer).
 
-### CLI (breaking)
+### CLI
 
-- New commands: `new`, `assemble` (also `orz-mdhtml x.md`), `extract`,
-  `upgrade`, `inspect`, `themes`; `--json` on every command, exit codes 0/1/2,
-  no overwriting of work without `--force`.
-- Known states instead of `--force`: an output holding the text the CLI last
-  wrote or read for the pair (`x.md` and `x.md.html` or any `-o` path), a
-  committed version of the twin in git, or the caller's `--replaces <sha256>`
-  (the `sha256` every command prints) is replaced without `--force`; refusals
-  carry a stable `reason` and a `next` command built from the caller's own
-  arguments. `assemble` keeps an existing file's delivery and includes (stale
-  includes are reported). `--force` keeps `<file>~`, never overwriting an
-  earlier backup (`<file>~1`, `~2`, …).
-- Removed: `--theme` and `--title` on generation (content comes only from the
-  header), and `--cdn` as the default.
+- Commands `new`, `assemble` (also `orz-mdhtml x.md`), `extract`, `upgrade`,
+  `inspect`, `themes`. Inline by default (the engine inside the file, about
+  1 MB); `--cdn` writes a small file that loads
+  `orz-mdhtml-browser@<version>` from jsDelivr.
+- `--json` on every command (one object on stdout); exit 0 done, 1 refused
+  or failed, 2 usage. Every failure carries a stable `reason` code
+  (`twin-differs`, `output-differs`, `replaces-mismatch`, `legacy-file`,
+  `newer-shell`, `unclosed-island`, `not-orz`, `exists`, `bad-usage`, …) and,
+  where one command resolves it, `next: { command, args }` built from the
+  caller's own arguments and safe to run verbatim.
+- Nothing that could hold other work is overwritten without `--force`:
+  `assemble` refuses a `.md.html` holding a different text (browser work),
+  `extract` an `x.md` holding edits, whichever file is newer; another
+  document (another `uid`) is never replaced. **Known earlier states** are
+  replaced without `--force`: what the CLI last wrote or read for the pair
+  (recorded by hash in `$XDG_CACHE_HOME/orz-mdhtml/`), the twin's git HEAD,
+  staged version or one of its 20 most recent commits. **`--replaces
+  <sha256>`** (every command prints the `sha256` of the text) is a portable
+  compare-and-swap for agents in fresh sandboxes.
+- **Backups**: `--force` keeps the replaced file as `<file>~` (`~1`, `~2`, …;
+  a backup is never overwritten). Files are written through a temporary file
+  and a rename, keeping their mode and symbolic links.
+- `assemble` keeps the existing file's delivery and includes;
+  `--resolve-includes` reads file includes from the text's folder; unresolved
+  and stale includes are reported. `upgrade` and `assemble` never downgrade a
+  newer shell without `--force`. `inspect` reports kind, format, shell
+  version, delivery, uid, header, lint, the file's structure, the sibling
+  twin and advice naming your files.
 
-### Library (breaking)
+### Library
 
-- New: `assemble`, `extract`, `readDocument`, `newDocument`, `inspect`,
-  `upgrade`, `readLegacy`, `THEMES`, `DEFAULT_THEME`, `isThemeId`, `MEASURES`,
+- `assemble`, `extract`, `readDocument`, `newDocument`, `inspect`, `upgrade`,
+  `readLegacy`, `THEMES`, `DEFAULT_THEME`, `isThemeId`, `MEASURES`,
   `DEFAULT_MEASURE`, `VERSION`, `ORZ_MARKDOWN_VERSION`, `FORMATS`,
-  `BUNDLE_FILE`, `cdnBundleUrl`, `engineSource`, `engineFiles`.
-- Removed: the 0.9 API (`buildMdHtml`, `composeInlineMdHtml`,
-  `findRendererBundle`, `findAsset`, `orzVersionOf`, `selfVersionOf`) and the
-  0.x runtime (`assets/app.js`, `orzmd.browser.js`).
+  `BUNDLE_FILE`, `cdnBundleUrl`, `engineSource`, `engineFiles`; types
+  included. `assemble(text, { includes, delivery })`.
 
 ### orz-mdhtml-browser
 
-- The IIFE `orz-mdhtml.browser.js` sets `globalThis.OrzCarrier` (FC-19:
-  `assemble`, `extract`, `readDocument`, `mountEditor`, `renderPreview`) and
-  boots an assembled file; a new ES module build (`esm/orz-mdhtml.browser.mjs`)
-  for web apps; `release.json`; types in `index.d.ts`. Embedding guide:
-  `docs/embedding.md` (hooks, AI review flow, nonce CSP recipe).
+- `orz-mdhtml.browser.js` (IIFE): sets `globalThis.OrzCarrier` (FC-19:
+  `assemble`, `extract`, `readDocument`, `mountEditor`, `renderPreview`,
+  `standalone`) and boots an assembled file. `esm/orz-mdhtml.browser.mjs`: the
+  same API as ES module exports, no global, no boot. `release.json` (version,
+  formats, notes, SHA-384 of the bundle), `index.d.ts`, a `require` shim that
+  throws a clear error. Pure-ASCII bundles obeying the bundle rule; a
+  `prepublishOnly` check of `release.json` against the files.
 
-### Safety (closed loop, round 1)
+### Web apps
 
-- `assemble` refuses whenever the existing `.md.html` holds a different text
-  than the one assembled — also when the text twin is the newer file (a
-  browser save followed by an agent's edit was silently lost) — with advice
-  naming `extract` and `--force`; mixed line endings no longer count as a
-  difference. `--force` keeps every replaced file as `<file>~`.
-- `inspect` reports the sibling twin (same text or not, which is newer) and a
-  file's structure (a cut island, a missing `</html>`, an inline engine that
-  is not its release's); `extract` warns on a cut-off file.
-- `assemble` keeps the includes the existing file holds (`--no-includes`
-  drops them), `--resolve-includes` reads file includes from the text's
-  folder only, and unresolved includes are warnings.
-- `upgrade` never downgrades a newer shell (unless `--force`) and never
-  writes over another document at `-o` without `--force`.
-- Files are written through a temporary file and a rename keeping their
-  mode; a symbolic link stays a link.
-- A 0.x island wrapped in `\r\n…\r\n` (a converted file) is read.
-- The page shows its document at once when a CDN hangs (the stylesheets no
-  longer block the engine) and holds a one-line fallback until the engine
-  runs.
-- `orz-mdhtml-browser`: pure-ASCII bundles, a `prepublishOnly` check of
-  `release.json` against the files, a `require` shim that throws a clear
-  error, `standalone` in the types, `docs/embedding.md` shipped (also in
-  `orz-mdhtml`); an app's own `hooks.ai` gets the AI menu in an editor
-  mounted on a file without host AI.
+- `mountEditor(element, { text, hooks, nonce, includes, fileName })`: any
+  number of editors per page, the app's own hooks (save, AI with a review
+  step, includes, assets, links, ids), a nonce Content-Security-Policy.
+  Guide: `docs/embedding.md` (shipped in both packages); working example:
+  `examples/webapp/`.
 
-### The kit's round-1 fixes (orz-markdown 2.2.0 carrier kit, `c271284`)
+### Agents
 
-- **A save never silently overwrites a file changed on disk**: when the
-  picked file is this document's (same `uid`) and its text changed since the
-  page opened it (another program, an agent, `assemble --force`), nothing is
-  written and the reader is asked — *Replace it* / *Download a copy instead*
-  (`save()` → `{ ok: false, via: 'file', error: 'conflict', conflict: true }`).
-- **Smoother `assemble`**: no `--force` needed when the existing `.md.html`
-  holds a known earlier state of the twin — its last commit or staged
-  version in git, or the text the CLI itself last wrote into the file or
-  read out of it (`new --html`, `assemble`, `extract`, `upgrade` keep a
-  SHA-256 per pair in `$XDG_CACHE_HOME/orz-mdhtml/`, else
-  `~/.cache/orz-mdhtml/`). Any other text (a browser save in between) is
-  refused as before. `--json` adds `replaced`; `inspect` adds `twin.earlier`.
-- `mountEditor` takes FC-19 §3 `includes` (the preview reads them first;
-  without `hooks.save` they go into the saved file); `fetchInclude` also gets
-  a file include's path when `includes` lacks it; an include nothing resolves
-  is a quiet "Included file not available" note (read view and preview).
-- An app's editor without `hooks.save` saves through the picker or a
-  download, never the served-page notice; in edit mode Cmd/Ctrl+S with the
-  focus on the chrome saves the editor; the chrome is first in the page
-  order; editor syntax colours follow the chrome's scheme.
-- The read view swaps stylesheets with the kit's `swapStylesheet` and
-  releases charts with `disposeEnhancement`; the IIFE captures only its own
-  bundle as the engine (`captureEngineSource(undefined, { bundle })`).
+- Every file carries an agent banner (where the text is, how to unescape
+  it, the skill link). The skill `orz-mdhtml-skills/SKILL.md` gives the
+  create / compare / edit-the-twin / assemble / extract / inspect / upgrade /
+  recover-by-hand procedures and the `reason` codes.
 
-### Safety and agents (closed loop, round 2)
+### Accepted limits
 
-- **`extract` no longer loses edits of `x.md`**: it replaces a different
-  `x.md` only when it is a known state (unchanged since the CLI last wrote or
-  read the pair, or a committed/staged/recent version in git) — whichever
-  file is newer; otherwise it refuses with `extract x.md.html -o
-  x.browser.md` (merge). `--force` keeps `x.md~`.
-- **One file, one line of work**: the CLI records which text last synced each
-  file (its last writer); a pair's record (and, for the twin, git) says "only
-  the file changed" only while that pair is the file's last writer — so when
-  two texts publish to one `-o` path, neither is told to bring the other's
-  text into itself. An output holding another document (another uid) is
-  never advised into the input, and `extract`/`upgrade` never replace a text
-  with another document's text without `--force`. Every `next` is safe to
-  follow verbatim (no text is lost).
-- **Identity before "only the file changed"**: a known state proves only that
-  `x.md` is unchanged, not that the file beside it holds the same document
-  (another document's file may have been copied over it). `extract` and
-  `upgrade` replace a text as a known state, and `assemble` suggests plain
-  `extract x.md.html`, only when both texts carry the same uid; otherwise
-  `next` is `extract x.md.html -o x.browser.md` (compare, merge). A cache the
-  CLI cannot write is not read (its records may be stale).
-- **Compare-and-swap**: `inspect` (`sha256`, `twin.sha256`), `extract` and
-  `assemble` (`sha256`) report the SHA-256 of the text a file holds;
-  `assemble --replaces <sha256>` / `extract --replaces <sha256>` replace only
-  that exact text — for agents in fresh sandboxes without a cache. Known
-  states also include the twin's 20 most recent commits (`git log`, bounded
-  in time): a fresh clone works.
-- `assemble` refuses to replace a file of a newer shell (as `upgrade` does)
-  unless `--force`; `upgrade` refuses a file cut off inside its text unless
-  `--force`; `new --force` keeps both replaced files as `<file>~`.
-- **Machine-readable refusals**: every `--json` failure has a stable
-  `reason` (`twin-differs`, `replaces-mismatch`, `legacy-file`,
-  `newer-shell`, `unclosed-island`, `not-orz`, `exists`, `bad-usage`, …) and,
-  where useful, `next: { command, args }`; `assemble --json` lists
-  `unresolved` includes (`{ target, kind, reason }`), each warned once.
-- A 0.x file next to a text: `assemble`, `upgrade` and `inspect` advise
-  `upgrade x.md.html --text x.browser.md` and a merge (never `extract`).
-  `inspect` advice names the files as given (no `<file>` placeholders).
-- A cdn file's fallback line names the connection first.
-- `mountEditor` takes FC-19 §3 `fileName`; the types add `Editor.ready` and
-  `refreshPreview({ includes })`.
-
-### Migration
-
-- 0.x files are not opened as they are: `orz-mdhtml upgrade old.md.html`
-  writes a format-1 file and its text twin, keeping the source exactly and
-  moving `#orz-meta`, the saved theme and the `<title>` into the header;
-  `orz-mdhtml inspect` says what any file is and what to do.
-- Once 1.0.0 is published, a 0.9.x file's own "Framework 1.0.0 available"
-  banner offers an update that cannot read a 1.0 release: it ends with
-  "check your connection" and changes nothing. Use `orz-mdhtml upgrade`.
-- Changing the theme or the measure (in the editor or the read view) now
-  changes the document — they are header data — so the file is unsaved
-  until Save.
+- A `.md.html` is a program: open files only from trusted sources; content
+  that is deliberately hostile is out of scope, and a file cannot prove its
+  own integrity.
+- Save in place needs Chromium (File System Access); elsewhere Save
+  downloads. A served (http) page is never saved in place.
+- Theme, KaTeX and highlight.js styles, content libraries and the editor load
+  from CDNs, also in an inline file.
+- The CLI fetches no URL includes; a file shows only the includes it records.
+- A shallow clone knows only the twin's last commit (use `--replaces`); a
+  text equal to one of the twin's last 20 commits counts as a known state.
+- A 0.9.x file's own "Framework 1.0.0 available" banner cannot read a 1.0
+  release: it ends with "check your connection" and changes nothing. Use
+  `orz-mdhtml upgrade`.
 
 ## [0.9.3] — 2026-07-17
 
