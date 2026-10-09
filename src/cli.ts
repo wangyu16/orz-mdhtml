@@ -125,9 +125,10 @@ other work: an output that is not an orz file, a .md.html (or -o output) that ho
 different text than the one assembled, an x.md that differs from the text extracted
 (unless the text replaced is a known state: what orz-mdhtml itself last wrote or read for
 the pair, a committed, staged or recent version of the twin in git, or the text whose
-SHA-256 --replaces gives), a file made by a newer orz-mdhtml, another document (upgrade
--o), or (new) any existing file. The robust way: pass the sha256 the last command printed
-as --replaces.
+SHA-256 --replaces gives; an x.md is replaced as a known state only when it and the
+file's text carry the same uid), a file made by a newer orz-mdhtml, another document
+(upgrade -o), or (new) any existing file. The robust way: pass the sha256 the last
+command printed as --replaces.
 Before editing x.md, \`orz-mdhtml inspect x.md\` says whether x.md.html holds other work
 (saved in the browser); \`orz-mdhtml extract x.md.html -o x.browser.md\` brings it out
 for a merge.
@@ -182,9 +183,11 @@ orz-mdhtml (use \`npx orz-mdhtml@latest\`); or an output holding any other text 
 may hold work saved in the browser (twin-differs; for -o: output-differs, another text or
 another document): \`orz-mdhtml extract x.md.html -o x.browser.md\`, merge that into
 x.md, then the assemble command the refusal names (your arguments and --replaces). When
-only the file changed (x.md is what orz-mdhtml last synced), the refusal names plain
-\`orz-mdhtml extract x.md.html\` — only while x.md's pair is the last orz-mdhtml synced
-the file with (after \`assemble b.md -o x.md.html\` it is not). An output holding another
+only the file changed (x.md is what orz-mdhtml last synced) and both texts carry the same
+uid, the refusal names plain \`orz-mdhtml extract x.md.html\` — only while x.md's pair is
+the last orz-mdhtml synced the file with (after \`assemble b.md -o x.md.html\` it is not).
+Without a shared uid the file may hold another document's text (copied over it), so the
+refusal names \`extract x.md.html -o x.browser.md\` instead (compare, merge). An output holding another
 document (another uid) is refused with no next: choose another -o path. When x.md has
 everything, --force replaces it and keeps the old file as x.md.html~ (or ~1, ~2, ...).`,
   extract: `orz-mdhtml extract <file.md.html> [-o out.md] [--replaces <sha256>] [--force] [--json]
@@ -195,15 +198,15 @@ refused: use \`orz-mdhtml upgrade <file>\`, which writes its format-1 text twin.
 when the file was cut off (the text may be incomplete).
 
 Replaces an existing x.md (or -o output) that holds a different text (no --force
-needed) only when it is a known state — so no edit made to it is lost, whichever file
-is newer:
+needed) only when it is a known state AND x.md and the file's text carry the same uid
+(the same document: without one, the file may be another document's, copied over it) —
+so no edit made to it is lost, whichever file is newer:
   - exactly the text orz-mdhtml last wrote or read for this pair (unchanged since, line
     endings included), while this pair is the last orz-mdhtml synced the file with, or
   - (x.md, the file's own twin, only) its last commit, its staged version or one of its
     20 most recent commits in git (a full clone; in a shallow checkout use --replaces).
     A text equal to one of them counts as known, so a deliberate revert of x.md to such
-    a text is replaced —
-    commit the revert first, or
+    a text is replaced — commit the revert first, or
   - with --replaces <sha256>: exactly the x.md with that SHA-256 (\`sha256sum x.md\`,
     the "sha256" the last command printed, or of \`orz-mdhtml inspect x.md --json\`);
     with --replaces, nothing else counts.
@@ -551,14 +554,31 @@ function assembledOutputCheck(t: AssembleTarget, existing: string | null): { ris
     };
   }
   // only the file changed: the text is the very one the CLI last synced with this file (this pair is the file's last
-  // writer), or, for the twin, committed — bring the file's work in, nothing to merge
-  if (twinStateOf(input, out, text, { git: names.twin }) !== null) {
+  // writer), or, for the twin, committed — bring the file's work in, nothing to merge. Only for the SAME document
+  // (both texts carry the same uid): neither the record nor git proves that the file was not replaced by another
+  // document's file (copied over it, or written by another input while the record could not be updated), and
+  // following `extract` would then replace the input with that other text (G1, G2)
+  const sameDocument = heldUid !== null && heldUid === ownUid;
+  const unchanged = twinStateOf(input, out, text, { git: names.twin }) !== null;
+  if (sameDocument && unchanged) {
     const bring: Next = { command: 'extract', args: [names.out, ...(twinName(out) === input ? [] : ['-o', names.input])] };
     return {
       risk: {
         message: `${names.out} holds a different text than ${names.input}, and ${names.input} is unchanged since orz-mdhtml last synced the pair (or is committed): the file holds newer work (saved in the browser?); not replaced. \`${commandLine(bring)}\` brings it into ${names.input} (no --force needed). To put ${names.input}'s text in the file anyway: \`${again(['--replaces', heldHash])}\``,
         reason: names.twin ? 'twin-differs' : 'output-differs',
         next: bring,
+      },
+      earlier: null,
+    };
+  }
+  if (unchanged) {
+    // the input is unchanged, but nothing proves the file holds the same document (no shared uid): bring the file's
+    // text out to another name and compare — never into the input automatically
+    return {
+      risk: {
+        message: `${names.out} holds a different text than ${names.input}. ${names.input} is unchanged since orz-mdhtml last synced the pair (or is committed), so the file may hold newer work (saved in the browser?) — or another document's text (copied over it): the two texts do not carry the same uid, so it cannot be told; not replaced. Bring its text out and compare: \`${commandLine(pull)}\`; merge what belongs into ${names.input}, then \`${again(['--replaces', heldHash])}\` (it replaces ${names.out} only while it still holds that text)`,
+        reason: names.twin ? 'twin-differs' : 'output-differs',
+        next: pull,
       },
       earlier: null,
     };
@@ -596,8 +616,12 @@ function assembledOutputCheck(t: AssembleTarget, existing: string | null): { ris
  * (and nothing else counts); or it is a known state (src/known-states.ts
  * `twinStateOf`: exactly the text the CLI last wrote or read for the pair
  * while that pair is the file's last writer, or — when `out` is the file's
- * own twin — a committed/staged/recent version in git). Anything else may
- * hold edits the file lacks — whichever is newer.
+ * own twin — a committed/staged/recent version in git) AND `out` and `text`
+ * carry the same uid (`uid` non-null and equal to `out`'s): a known state of
+ * `out` says nothing about what `file` holds — another document's file may
+ * have been copied over it — so without a shared uid it is never replaced
+ * automatically. Anything else may hold edits the file lacks — whichever is
+ * newer.
  */
 function textOutputCheck(out: string, text: string, file: string, names: { out: string; file: string }, token: string | null, uid: string | null, advice: (h: string) => { message: string; next?: Next }): { risk: Risk | null; earlier: EarlierState | null } {
   if (!existsSync(out)) return { risk: null, earlier: null };
@@ -613,12 +637,15 @@ function textOutputCheck(out: string, text: string, file: string, names: { out: 
     const a = advice(h ?? '');
     return { risk: { message: `${names.out} no longer holds the text you named (--replaces ${token})${h ? `: it holds another one (sha256 ${h})` : ''}; not overwritten. ${a.message}`, reason: 'replaces-mismatch', ...(a.next ? { next: a.next } : {}) }, earlier: null };
   }
-  if (existing !== null) {
-    const known = twinStateOf(out, file, existing, { git: twinName(file) === out });
-    if (known !== null) return { risk: null, earlier: known };
-  }
+  // a known state of the pair is replaced only for the SAME document (both texts carry the same uid): the record and
+  // git vouch for `out`'s text, not for what `file` holds — another document's file may have been copied over it (G1)
+  const known = existing === null ? null : twinStateOf(out, file, existing, { git: twinName(file) === out });
+  if (known !== null && uid !== null && existingUid === uid) return { risk: null, earlier: known };
   const later = changedAfter(out, file, (n) => `, changed after ${n}`, names.file);
   const a = advice(h ?? '');
+  if (known !== null) {
+    return { risk: { message: `${names.out} exists and holds a different text; it is unchanged since orz-mdhtml last synced it (or is committed), but ${names.file} and ${names.out} do not carry the same uid, so ${names.file} may hold another document's text (copied over it); not overwritten. ${a.message}`, reason: 'twin-differs', ...(a.next ? { next: a.next } : {}) }, earlier: null };
+  }
   return { risk: { message: `${names.out} exists and holds a different text${later} — not the text orz-mdhtml last wrote or read for this pair, nor a committed version; not overwritten (it may hold edits ${names.file} lacks). ${a.message}`, reason: 'twin-differs', ...(a.next ? { next: a.next } : {}) }, earlier: null };
 }
 

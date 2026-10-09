@@ -140,6 +140,13 @@ Requires `orz-markdown ^2.2.0`.
   never advised into the input, and `extract`/`upgrade` never replace a text
   with another document's text without `--force`. Every `next` is safe to
   follow verbatim (no text is lost).
+- **Identity before "only the file changed"**: a known state proves only that
+  `x.md` is unchanged, not that the file beside it holds the same document
+  (another document's file may have been copied over it). `extract` and
+  `upgrade` replace a text as a known state, and `assemble` suggests plain
+  `extract x.md.html`, only when both texts carry the same uid; otherwise
+  `next` is `extract x.md.html -o x.browser.md` (compare, merge). A cache the
+  CLI cannot write is not read (its records may be stale).
 - **Compare-and-swap**: `inspect` (`sha256`, `twin.sha256`), `extract` and
   `assemble` (`sha256`) report the SHA-256 of the text a file holds;
   `assemble --replaces <sha256>` / `extract --replaces <sha256>` replace only

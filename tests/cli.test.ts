@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, afterAll } from 'vitest';
 import { execFile } from 'node:child_process';
-import { chmodSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { lintHeader, readHeader, UID_PATTERN } from 'orz-markdown/carrier';
@@ -396,7 +396,8 @@ describe.concurrent('the CLI', () => {
     touch(join(w, 'doc.md.html'), 1_700_000_900);
     expect((await cli(['assemble', 'doc.md'], w)).code).toBe(0);
     // the browser-newer case is refused as before; doc.md is the CLI's own unchanged state, so the way out is a plain extract (round 3, L2)
-    write(join(w, 'doc.md.html'), assemble('# edited in the browser\n'));
+    const B1 = `${made}\n# edited in the browser\n`; // a browser save keeps the document's uid
+    write(join(w, 'doc.md.html'), assemble(B1));
     touch(join(w, 'doc.md'), 1_700_001_000);
     touch(join(w, 'doc.md.html'), 1_700_001_100);
     const r2 = await cli(['assemble', 'doc.md', '--json'], w);
@@ -404,10 +405,10 @@ describe.concurrent('the CLI', () => {
     expect(json(r2)).toMatchObject({ reason: 'twin-differs', next: { command: 'extract', args: ['doc.md.html'] } });
     expect(String(json(r2).error)).toMatch(/holds a different text than doc\.md, and doc\.md is unchanged since orz-mdhtml last synced the pair.*`orz-mdhtml extract doc\.md\.html` brings it into doc\.md/);
     expect((await cli(['extract', 'doc.md.html', '--json'], w)).code).toBe(0); // following next verbatim
-    expect(text(join(w, 'doc.md'))).toBe('# edited in the browser\n');
+    expect(text(join(w, 'doc.md'))).toBe(B1);
     // an edited doc.md and a newer browser save: the mtime hint (the files are not clean in git)
-    write(join(w, 'doc.md.html'), assemble('# edited in the browser again\n'));
-    write(join(w, 'doc.md'), '# edited in the browser\n\nagent\n');
+    write(join(w, 'doc.md.html'), assemble(`${B1}again\n`));
+    write(join(w, 'doc.md'), `${B1}\nagent\n`);
     touch(join(w, 'doc.md'), 1_700_002_000);
     touch(join(w, 'doc.md.html'), 1_700_002_100);
     const r2b = await cli(['assemble', 'doc.md', '--json'], w);
@@ -559,43 +560,45 @@ describe.concurrent('the CLI', () => {
     if ((await git('init', '-q')).code !== 0) return; // no git on this machine: nothing more to show
     let caches = 0;
     const noCache = (): NodeJS.ProcessEnv => ({ XDG_CACHE_HOME: join(tmp, `.empty-cache-${++caches}`) }); // a fresh, empty cache each run: only git can know
-    write(join(g, 'doc.md'), '# Committed\r\n\nline\n'); // mixed line endings: compared as a file stores them
+    // uid'd: the twin is replaced as a known state only when both texts carry the same uid (G1: a uid-less one is refused, T.21)
+    const HG = '{{nyml\nkind: document\ncarrier: md\nuid: doc-t11git000001\ntitle: Committed\n}}\n\n';
+    write(join(g, 'doc.md'), HG + '# Committed\r\n\nline\n'); // mixed line endings: compared as a file stores them
     expect((await git('add', 'doc.md')).code).toBe(0);
     expect((await git('commit', '-q', '-m', 'doc')).code).toBe(0);
-    write(join(g, 'doc.md.html'), assemble('# Committed\r\n\nline\n')); // assembled by anyone (no record)
-    write(join(g, 'doc.md'), '# Committed\r\n\nline\nedited after the commit\n');
+    write(join(g, 'doc.md.html'), assemble(HG + '# Committed\r\n\nline\n')); // assembled by anyone (no record)
+    write(join(g, 'doc.md'), HG + '# Committed\r\n\nline\nedited after the commit\n');
     const c1 = await cli(['assemble', 'doc.md', '--json'], g, noCache());
     expect(c1.code, c1.stdout).toBe(0);
     expect(json(c1)).toMatchObject({ backup: null, replaced: 'git-head' });
     // the staged version counts too
     expect((await git('add', 'doc.md')).code).toBe(0);
-    write(join(g, 'doc.md'), '# Committed\r\n\nline\nedited after the commit\nand after staging\n');
+    write(join(g, 'doc.md'), HG + '# Committed\r\n\nline\nedited after the commit\nand after staging\n');
     const c2 = await cli(['assemble', 'doc.md', '--json'], g, noCache());
     expect(c2.code, c2.stdout).toBe(0);
     expect(json(c2)).toMatchObject({ replaced: 'git-index' });
     // a browser save on top of the committed state: neither commit, index nor record → refused
-    write(join(g, 'doc.md.html'), assemble('# Committed\r\n\nline\nBROWSER WORK\n'));
-    write(join(g, 'doc.md'), '# Committed\r\n\nline\nagent work\n');
+    write(join(g, 'doc.md.html'), assemble(HG + '# Committed\r\n\nline\nBROWSER WORK\n'));
+    write(join(g, 'doc.md'), HG + '# Committed\r\n\nline\nagent work\n');
     expect((await cli(['assemble', 'doc.md'], g, noCache())).code).toBe(1);
     expect(extract(text(join(g, 'doc.md.html')))!.text).toContain('BROWSER WORK');
     // a fresh clone (no cache): the file holds an OLDER commit's text of doc.md (round 2, F4: git log -n 20 -- doc.md)
     expect((await git('commit', '-q', '-m', 'second')).code).toBe(0); // the staged version becomes a commit
-    write(join(g, 'doc.md'), '# Committed\r\n\nline\nthird version\n');
+    write(join(g, 'doc.md'), HG + '# Committed\r\n\nline\nthird version\n');
     expect((await git('commit', '-q', '-am', 'third')).code).toBe(0);
-    write(join(g, 'doc.md.html'), assemble('# Committed\r\n\nline\n')); // the first commit's text
-    write(join(g, 'doc.md'), '# Committed\r\n\nline\nthird version\nand an edit\n');
+    write(join(g, 'doc.md.html'), assemble(HG + '# Committed\r\n\nline\n')); // the first commit's text
+    write(join(g, 'doc.md'), HG + '# Committed\r\n\nline\nthird version\nand an edit\n');
     const c3 = await cli(['assemble', 'doc.md', '--json'], g, noCache());
     expect(c3.code, c3.stdout).toBe(0);
     expect(json(c3)).toMatchObject({ backup: null, replaced: 'git-log' });
     // extract: a twin whose text is a committed version is replaced without --force (its content is in the history)
-    write(join(g, 'doc.md.html'), assemble('# Committed\r\n\nline\nthird version\nBROWSER\n'));
-    write(join(g, 'doc.md'), '# Committed\r\n\nline\nthird version\n'); // = HEAD
+    write(join(g, 'doc.md.html'), assemble(HG + '# Committed\r\n\nline\nthird version\nBROWSER\n'));
+    write(join(g, 'doc.md'), HG + '# Committed\r\n\nline\nthird version\n'); // = HEAD
     const e1 = await cli(['extract', 'doc.md.html', '--json'], g, noCache());
     expect(e1.code, e1.stdout).toBe(0);
     expect(json(e1)).toMatchObject({ replaced: 'git-head', backup: null });
-    write(join(g, 'doc.md'), '# Committed\r\n\nline\n'); // = an older commit
+    write(join(g, 'doc.md'), HG + '# Committed\r\n\nline\n'); // = an older commit
     expect(json(await cli(['extract', 'doc.md.html', '--json'], g, noCache()))).toMatchObject({ ok: true, replaced: 'git-log' });
-    write(join(g, 'doc.md'), '# Committed\r\n\nline\nnever committed\n');
+    write(join(g, 'doc.md'), HG + '# Committed\r\n\nline\nnever committed\n');
     expect((await cli(['extract', 'doc.md.html'], g, noCache())).code).toBe(1);
     noTemp(g);
   }, 240_000);
@@ -945,6 +948,22 @@ describe.concurrent('the CLI', () => {
     }
     noTemp(d);
     noTemp(join(d, 'public'));
+    // M11, M13: git is the twin's history only — an -o output is never vouched for by the input's commits, even when
+    // both texts carry the same uid (no record: a fresh cache)
+    const go = folder();
+    const gitO = await gitIn(go);
+    if (gitO) {
+      const X = '{{nyml\nkind: document\ncarrier: md\nuid: doc-t14gitout0001\n}}\n\n# X\n';
+      write(join(go, 'x.md'), X);
+      expect((await gitO('add', 'x.md')).code).toBe(0);
+      expect((await gitO('commit', '-q', '-m', 'x')).code).toBe(0);
+      write(join(go, 'site.md.html'), assemble(`${X}\nsaved in the browser\n`));
+      // assemble x.md -o site.md.html: x.md is committed, but that says nothing about site.md.html — no "bring it into x.md"
+      expect(json(await cli(['assemble', 'x.md', '-o', 'site.md.html', '--json'], go, noCache()))).toMatchObject({ ok: false, reason: 'output-differs', next: { command: 'extract', args: ['site.md.html', '-o', 'x.browser.md'] } });
+      // extract site.md.html -o x.md: x.md = HEAD, but git vouches only for x.md.html's twin — refused, x.md kept
+      expect(json(await cli(['extract', 'site.md.html', '-o', 'x.md', '--json'], go, noCache()))).toMatchObject({ ok: false, reason: 'twin-differs' });
+      expect(text(join(go, 'x.md'))).toBe(X);
+    }
   }, 240_000);
 
   it('[T.15] assemble keeps the existing file\'s delivery unless --cdn or --inline is given', async () => {
@@ -1075,6 +1094,46 @@ describe.concurrent('the CLI', () => {
       expect(doc).toMatch(/commit the revert first/);
     }
     expect(read('orz-mdhtml-skills/SKILL.md').replace(/\s+/g, ' ')).toMatch(/pass the `sha256` the last command printed as `--replaces`/);
+    // M08: a corrupt last-writer record (files/) is "unknown", never "no writer": git does not then vouch for x.md
+    const cw = folder();
+    const gitW = await gitIn(cw);
+    if (gitW) {
+      const X = '{{nyml\nkind: document\ncarrier: md\nuid: doc-t17corrupt001\n}}\n\n# X\n';
+      write(join(cw, 'x.md'), X);
+      expect((await gitW('add', 'x.md')).code).toBe(0);
+      expect((await gitW('commit', '-q', '-m', 'x')).code).toBe(0);
+      write(join(cw, 'x.md.html'), assemble(`${X}\nsaved in the browser\n`));
+      for (const corrupt of ['{"file":', '[]', '{"file":"elsewhere","twin":"x"}', '']) {
+        const env = noCache();
+        mkdirSync(join(env.XDG_CACHE_HOME!, 'orz-mdhtml', 'files'), { recursive: true });
+        write(join(env.XDG_CACHE_HOME!, 'orz-mdhtml', 'files', `${sha256(join(cw, 'x.md.html'))}.json`), corrupt);
+        expect(json(await cli(['extract', 'x.md.html', '--json'], cw, env)), JSON.stringify(corrupt)).toMatchObject({ ok: false, reason: 'twin-differs' });
+        expect(text(join(cw, 'x.md'))).toBe(X);
+        expect(json(await cli(['assemble', 'x.md', '--json'], cw, env))).toMatchObject({ ok: false, next: { command: 'extract', args: ['x.md.html', '-o', 'x.browser.md'] } });
+      }
+      // with no record at all, git vouches for the committed x.md (the same document): replaced
+      expect(json(await cli(['extract', 'x.md.html', '--json'], cw, noCache()))).toMatchObject({ ok: true, replaced: 'git-head' });
+    }
+    // G2: a cache this CLI cannot write is read as no cache (its records may be stale): nothing is relaxed by it
+    if (process.getuid?.() !== 0) {
+      const r = folder();
+      const env = { XDG_CACHE_HOME: join(r, 'cache') };
+      const R = '{{nyml\nkind: document\ncarrier: md\nuid: doc-t17readonly01\n}}\n\n# R\n';
+      write(join(r, 'r.md'), R);
+      expect((await cli(['assemble', 'r.md'], r, env)).code).toBe(0);
+      write(join(r, 'r.md.html'), assemble(`${R}\nsaved in the browser\n`));
+      const dirs = [join(r, 'cache'), join(r, 'cache', 'orz-mdhtml'), join(r, 'cache', 'orz-mdhtml', 'pairs'), join(r, 'cache', 'orz-mdhtml', 'files')];
+      try {
+        for (const dir of dirs) chmodSync(dir, 0o555);
+        expect(json(await cli(['assemble', 'r.md', '--json'], r, env))).toMatchObject({ ok: false, next: { command: 'extract', args: ['r.md.html', '-o', 'r.browser.md'] } });
+        expect(json(await cli(['extract', 'r.md.html', '--json'], r, env))).toMatchObject({ ok: false, reason: 'twin-differs' });
+        expect(text(join(r, 'r.md'))).toBe(R);
+      } finally {
+        for (const dir of dirs) chmodSync(dir, 0o755);
+      }
+      // writable again: the record counts (the same document, r.md unchanged) — plain extract
+      expect(json(await cli(['assemble', 'r.md', '--json'], r, env))).toMatchObject({ ok: false, next: { command: 'extract', args: ['r.md.html'] } });
+    }
   }, 240_000);
 
   it('[T.18] advice shortcuts: only the file changed → plain extract; legacy → upgrade --text, merge, assemble --replaces with the sha256 upgrade printed (never --force); extract of a 0.x file next to x.md → upgrade --text', async () => {
@@ -1127,17 +1186,18 @@ describe.concurrent('the CLI', () => {
     expect(json(await cli(['inspect', 'e.md.html', '--json'], d))).toMatchObject({ input: 'html' });
     // F6: x.md with mixed line endings, assembled; the browser saves; x.md only changes its line endings → refused
     const m = folder();
-    writeFileSync(join(m, 'm.md'), 'a\r\nb\nc\n');
+    const MH = '{{nyml\r\nkind: document\r\ncarrier: md\r\nuid: doc-t19mixed00001\r\n}}\r\n\r\n'; // the same document on both sides (G1)
+    writeFileSync(join(m, 'm.md'), `${MH}a\r\nb\nc\n`);
     expect((await cli(['assemble', 'm.md'], m)).code).toBe(0);
-    write(join(m, 'm.md.html'), assemble('a\r\nb\r\nc\r\nbrowser\r\n'));
-    writeFileSync(join(m, 'm.md'), 'a\r\nb\r\nc\r\n');
+    write(join(m, 'm.md.html'), assemble(`${MH}a\r\nb\r\nc\r\nbrowser\r\n`));
+    writeFileSync(join(m, 'm.md'), `${MH}a\r\nb\r\nc\r\n`);
     const eol = await cli(['extract', 'm.md.html', '--json'], m);
     expect(json(eol)).toMatchObject({ ok: false, reason: 'twin-differs' });
-    expect(text(join(m, 'm.md'))).toBe('a\r\nb\r\nc\r\n');
+    expect(text(join(m, 'm.md'))).toBe(`${MH}a\r\nb\r\nc\r\n`);
     // the exact text it last synced is replaced (C07)
-    writeFileSync(join(m, 'm.md'), 'a\r\nb\nc\n');
+    writeFileSync(join(m, 'm.md'), `${MH}a\r\nb\nc\n`);
     expect(json(await cli(['extract', 'm.md.html', '--json'], m))).toMatchObject({ ok: true, replaced: 'cache' });
-    expect(text(join(m, 'm.md'))).toBe('a\r\nb\r\nc\r\nbrowser\r\n');
+    expect(text(join(m, 'm.md'))).toBe(`${MH}a\r\nb\r\nc\r\nbrowser\r\n`);
   }, 240_000);
 
   it('[T.20] the comparisons are exact: an anchored, full-length token for the right file; no fallback after a token mismatch; exact git and white-space comparisons; records keyed by real paths', async () => {
@@ -1182,13 +1242,18 @@ describe.concurrent('the CLI', () => {
     const g = folder();
     const git = await gitIn(g);
     if (git) {
-      writeFileSync(join(g, 'g.md'), 'a\r\nb\nc\n');
+      const GH = '{{nyml\nkind: document\ncarrier: md\nuid: doc-t20git000001\n}}\n\n'; // the same document on both sides (G1)
+      writeFileSync(join(g, 'g.md'), `${GH}a\r\nb\nc\n`);
       expect((await git('add', 'g.md')).code).toBe(0);
       expect((await git('commit', '-q', '-m', 'g')).code).toBe(0);
-      write(join(g, 'g.md.html'), assemble('a\nbrowser\n'));
-      writeFileSync(join(g, 'g.md'), 'a\r\nb\r\nc\r\n'); // only the line endings changed: not the committed text
-      expect(json(await cli(['extract', 'g.md.html', '--json'], g, noCache()))).toMatchObject({ ok: false, reason: 'twin-differs' });
-      writeFileSync(join(g, 'g.md'), 'a\r\nb\nc\n'); // exactly HEAD
+      write(join(g, 'g.md.html'), assemble(`${GH}a\nbrowser\n`));
+      // M28: only the line endings changed, or only trailing white space was added — not the committed text: refused, kept
+      for (const edit of [`${GH}a\r\nb\r\nc\r\n`, `${GH}a\r\nb\nc\r\n`, `${GH}a\r\nb\nc\n  \n`, `${GH}a\r\nb\nc\n\n`]) {
+        writeFileSync(join(g, 'g.md'), edit);
+        expect(json(await cli(['extract', 'g.md.html', '--json'], g, noCache())), JSON.stringify(edit)).toMatchObject({ ok: false, reason: 'twin-differs' });
+        expect(text(join(g, 'g.md'))).toBe(edit);
+      }
+      writeFileSync(join(g, 'g.md'), `${GH}a\r\nb\nc\n`); // exactly HEAD
       expect(json(await cli(['extract', 'g.md.html', '--json'], g, noCache()))).toMatchObject({ ok: true, replaced: 'git-head' });
       write(join(g, 'h.md'), '# H\n');
       expect((await git('add', 'h.md')).code).toBe(0);
@@ -1196,7 +1261,30 @@ describe.concurrent('the CLI', () => {
       write(join(g, 'h.md.html'), assemble('# H\n\n  \n')); // HEAD's text plus white space (a browser save)
       write(join(g, 'h.md'), '# H\n\nedited\n');
       expect(json(await cli(['assemble', 'h.md', '--json'], g, noCache()))).toMatchObject({ ok: false, reason: 'twin-differs' });
+      // M23: h.md is HEAD exactly and the file differs only by trailing white space — not "the same text": refused, kept
+      write(join(g, 'h.md'), '# H\n');
+      expect(json(await cli(['assemble', 'h.md', '--json'], g, noCache()))).toMatchObject({ ok: false, reason: 'twin-differs' });
+      expect(extract(text(join(g, 'h.md.html')))!.text).toBe('# H\n\n  \n');
     }
+    // M26: the same text but CR LF in x.md: a difference extract does not replace (no cache, no git)
+    const c = folder();
+    write(join(c, 'c.md.html'), assemble('# C\n\nbody\n'));
+    write(join(c, 'c.md'), '# C\r\n\r\nbody\r\n');
+    expect(json(await cli(['extract', 'c.md.html', '--json'], c, noCache()))).toMatchObject({ ok: false, reason: 'twin-differs' });
+    expect(text(join(c, 'c.md'))).toBe('# C\r\n\r\nbody\r\n');
+    // and the file trimmed of x.md's trailing white space is not "the same text" for assemble (M23, no cache, no git)
+    write(join(c, 'd.md.html'), assemble('# D\n'));
+    write(join(c, 'd.md'), '# D\n\n\n');
+    expect(json(await cli(['assemble', 'd.md', '--json'], c, noCache()))).toMatchObject({ ok: false, reason: 'twin-differs' });
+    expect(extract(text(join(c, 'd.md.html')))!.text).toBe('# D\n');
+    // M21: the uid upgrade mints for a 0.x file without one says nothing about identity — an existing old.md with a
+    // uid is a different text to merge (twin-differs, with the upgrade --text next), not "another document"
+    const mu = folder();
+    write(join(mu, 'old.md.html'), read(LEGACY_FILES['fixtures/sample.md.html']!));
+    const own = '{{nyml\nkind: document\ncarrier: md\nuid: doc-t20minted0001\n}}\n\n# my text\n';
+    write(join(mu, 'old.md'), own);
+    expect(json(await cli(['upgrade', 'old.md.html', '--json'], mu, noCache()))).toMatchObject({ ok: false, reason: 'twin-differs', next: { command: 'upgrade', args: ['old.md.html', '--text', 'old.browser.md'] } });
+    expect(text(join(mu, 'old.md'))).toBe(own);
   }, 240_000);
 
   it('[T.21] following every refusal\'s next verbatim never loses a text: two inputs to one -o, an input against another\'s twin, browser saves on the twin and on -o, both sides changed, a copied file — with and without uids, with and without git', async () => {
@@ -1312,12 +1400,16 @@ describe.concurrent('the CLI', () => {
           await commit('x.md');
           expect((await step(s, ['assemble', 'x.md', '--cdn'])).code).toBe(0);
           put(s, 'x.md.html', `${X}browser\n`, X);
-          expect((await step(s, ['assemble', 'x.md'])).code).toBe(0); // next: extract x.md.html, then nothing left to do
-          expect(text(join(s.d, 'x.md'))).toBe(`${X}browser\n`);
+          // uid'd: next is extract x.md.html, then nothing left to do; uid-less: nothing proves the file is x.md's
+          // document (G1), so next is extract x.md.html -o x.browser.md — x.md is never replaced automatically
+          expect((await step(s, ['assemble', 'x.md'])).code).toBe(0);
+          expect(text(join(s.d, 'x.md'))).toBe(uid ? `${X}browser\n` : X);
+          if (!uid) expect(text(join(s.d, 'x.browser.md'))).toBe(`${X}browser\n`);
           expect((await step(s, ['assemble', 'x.md', '-o', 'pub/x.md.html', '--cdn'])).code).toBe(0);
-          put(s, 'pub/x.md.html', `${X}browser\npub\n`, `${X}browser\n`);
+          const P = uid ? `${X}browser\npub\n` : `${X}pub\n`;
+          put(s, 'pub/x.md.html', P, uid ? `${X}browser\n` : X);
           expect((await step(s, ['assemble', 'x.md', '-o', 'pub/x.md.html'])).code).toBe(0);
-          expect(text(join(s.d, 'x.md'))).toBe(`${X}browser\npub\n`);
+          expect(text(join(s.d, 'x.md'))).toBe(uid ? P : X);
         }
         // 4. both sides changed: the browser's and the agent's work both survive
         const four = (await scenario(uid, withGit))!;
@@ -1334,19 +1426,57 @@ describe.concurrent('the CLI', () => {
           await step(s, ['upgrade', 'x.md.html']);
           expect(text(join(s.d, 'x.md'))).toBe(`${X}agent\n`);
         }
-        // 5. another document's file copied over the twin (no record of it): uid'd, or with no history to vouch for x.md
-        // (a uid-less text whose committed twin vouches for it reads as "only the file changed": its text stays in git — the limit)
-        if (uid || !withGit) {
+        // 5. another document's file copied over the twin (round 5, G1): y.md.html (assembled from y.md) copied onto
+        // x.md.html — with and without a record of x.md's pair (c1, c3), y's text with or without a uid (c3, c4: a
+        // uid'd x.md against a uid-less file), x.md committed or not (c4: git vouches for x.md). x.md keeps its text
+        for (const yUid of [false, true]) {
+          for (const record of [false, true]) {
+            const s = (await scenario(uid, withGit))!;
+            s.s.log.push(`copied file: y uid ${yUid}, record ${record}`);
+            const X = docText('X', uid);
+            const Y = docText('Y', yUid);
+            put(s.s, 'x.md', X);
+            put(s.s, 'y.md', Y);
+            await s.commit('x.md', 'y.md');
+            if (record) expect((await step(s.s, ['assemble', 'x.md', '--cdn'])).code).toBe(0);
+            expect((await step(s.s, ['assemble', 'y.md', '--cdn'])).code).toBe(0);
+            copyFileSync(join(s.s.d, 'y.md.html'), join(s.s.d, 'x.md.html'));
+            // assemble never calls this "only the file changed" (no plain extract x.md.html: it would bring Y into x.md)
+            const asked = await run(s.s, ['assemble', 'x.md']);
+            expect(JSON.parse(asked.stdout).next?.args, s.s.log.join('\n')).not.toEqual(['x.md.html']);
+            // extract and upgrade, run directly (before any next re-anchors the file's last writer), keep x.md
+            await step(s.s, ['extract', 'x.md.html']);
+            await step(s.s, ['upgrade', 'x.md.html']);
+            await step(s.s, ['assemble', 'x.md']);
+            expect(text(join(s.s.d, 'x.md')), s.s.log.join('\n')).toBe(X);
+          }
+        }
+        // 6. two inputs to one -o with a record that could not follow (round 5, G2): a read-only cache (c5), or two
+        // caches (c6: two users or machines) — the stale last writer never makes a.md take b.md's text
+        for (const split of [false, true]) {
+          if (!split && process.getuid?.() === 0) continue; // root writes a read-only cache anyway
           const s = (await scenario(uid, withGit))!;
-          const X = docText('X', uid);
-          const Y = docText('Y', uid);
-          put(s.s, 'x.md', X);
-          await s.commit('x.md');
-          put(s.s, 'x.md.html', Y);
-          await step(s.s, ['assemble', 'x.md']);
-          await step(s.s, ['extract', 'x.md.html']);
-          await step(s.s, ['upgrade', 'x.md.html']);
-          expect(text(join(s.s.d, 'x.md')), s.s.log.join('\n')).toBe(X);
+          s.s.log.push(split ? 'two caches' : 'read-only cache');
+          const A = docText('A', uid);
+          const B = docText('B', uid);
+          put(s.s, 'a.md', A);
+          put(s.s, 'b.md', B);
+          await s.commit('a.md', 'b.md');
+          const own = s.s.env;
+          const cacheRoot = join(s.s.d, '.cache');
+          try {
+            expect((await step(s.s, ['assemble', 'a.md', '-o', 'site.md.html', '--cdn'])).code).toBe(0);
+            if (split) s.s.env = { XDG_CACHE_HOME: join(s.s.d, '.cache', 'm2') };
+            else for (const dir of [cacheRoot, join(cacheRoot, 'orz-mdhtml'), join(cacheRoot, 'orz-mdhtml', 'pairs'), join(cacheRoot, 'orz-mdhtml', 'files')]) chmodSync(dir, 0o555);
+            expect((await step(s.s, ['assemble', 'b.md', '-o', 'site.md.html', '--replaces', sha256(A)])).code).toBe(0);
+            s.s.env = own;
+            await step(s.s, ['assemble', 'a.md', '-o', 'site.md.html']);
+            await step(s.s, ['extract', 'site.md.html', '-o', 'a.md']);
+            await step(s.s, ['upgrade', 'site.md.html', '--text', 'a.md']);
+            expect(text(join(s.s.d, 'a.md')), s.s.log.join('\n')).toBe(A);
+          } finally {
+            for (const dir of [cacheRoot, join(cacheRoot, 'orz-mdhtml'), join(cacheRoot, 'orz-mdhtml', 'pairs'), join(cacheRoot, 'orz-mdhtml', 'files')]) if (existsSync(dir)) chmodSync(dir, 0o755);
+          }
         }
       }
     }

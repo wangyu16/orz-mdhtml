@@ -210,7 +210,11 @@ A failure is `{ "ok": false, "error", "reason", "next"?, "exitCode" }`.
   **another document** (another uid; no `next`) → choose another `-o` path
   (`extract`/`upgrade` refuse the same way to write another document's text
   over a text). Every `next` is safe to run verbatim: it never replaces a
-  text with another line of work;
+  text with another line of work. A plain `extract x.md.html` (the file
+  replaces `x.md`) is suggested only when `x.md` is unchanged since the CLI
+  last synced it (or committed) AND both texts carry the same `uid`; without
+  a shared uid the file may be another document's (copied over it), so
+  `next` is `extract x.md.html -o x.browser.md` — keep the `uid` `new` wrote;
 - `not-orz`, `exists` — an output you did not expect to replace (an empty
   file is reported as empty: damaged) → choose another path;
 - `assembled-input`, `other-kind`, `invalid-text`, `no-such-file`,

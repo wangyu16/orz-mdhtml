@@ -143,7 +143,8 @@ replaces `x.md` when `x.md` itself is a known state:
   site.md.html`, `a.md`'s record no longer vouches for `site.md.html`.
   Another document (another uid) is never replaced this way. When the
   record cannot be written (a read-only cache), the command warns: the next
-  assemble needs `--replaces` with the hash it printed;
+  assemble needs `--replaces` with the hash it printed; a cache the CLI
+  cannot write is not read either (its records may be stale);
 - **`--replaces <sha256>`** — a portable compare-and-swap for agents in a
   fresh sandbox (no cache, no history): `inspect --json` prints `sha256` (the
   text the inspected file holds; for `x.md`, the SHA-256 of its bytes, as
@@ -158,7 +159,17 @@ So the normal loop — edit `x.md`, assemble, edit, assemble — needs no
 again and again). The one robust idiom, with no cache, no git, in a shallow
 clone: pass the `sha256` the last command printed as `--replaces`. Anything else is refused: notably a save in the browser made in
 between (the file then holds work `x.md` lacks), or an `x.md` edited since
-the CLI last synced the pair. `--json` says which rule applied (`replaced`:
+the CLI last synced the pair.
+
+**Identity.** A known state says that `x.md` (or an `-o` output) is
+unchanged — never that the file beside it holds the same document: another
+document's file may have been copied over it. So `extract` and `upgrade`
+replace a text as a known state, and `assemble` says "only the file
+changed" (`next`: plain `extract x.md.html`), only when both texts carry the
+same `uid` (`new` writes one; keep it). Without a shared uid the refusal's
+`next` is `extract x.md.html -o x.browser.md`: compare, merge, then assemble
+with `--replaces`. A text file is never replaced automatically by another
+document's text. `--json` says which rule applied (`replaced`:
 `git-head`, `git-index`, `git-log`, `cache`, `token`, or `null`).
 
 **Refusals, for machines.** A `--json` failure is
@@ -175,8 +186,8 @@ arguments (`-o`, `--cdn`, `--resolve-includes`, `--text`…) and names a copy
 | `no-such-file`, `unreadable`, `not-utf8` | the input cannot be read as UTF-8 text | — |
 | `exists` | `new`: the file exists | — |
 | `not-orz` | the output exists and is not an orz file; or the input holds no orz document | `inspect <file>` |
-| `twin-differs` | the twin holds a different text that is not a known state (`assemble`: `x.md.html`; `extract`, `upgrade`: `x.md`) | `extract x.md.html -o x.browser.md` (when only `x.md.html` changed: `extract x.md.html`; a 0.x file: `upgrade x.md.html --text x.browser.md`) |
-| `output-differs` | an `-o` output holds another text than the one this pair last had there (saved in the browser, or written from another text), or any output (`extract`/`upgrade`: the text) holds another document (another uid: choose another path) | `extract <out> -o x.browser.md` (another text; when only the output changed: `extract <out> -o x.md`); none for another document |
+| `twin-differs` | the twin holds a different text that is not a known state (`assemble`: `x.md.html`; `extract`, `upgrade`: `x.md`), or `x.md` is a known state but the two texts do not carry the same uid | `extract x.md.html -o x.browser.md` (when only `x.md.html` changed and both carry the same uid: `extract x.md.html`; a 0.x file: `upgrade x.md.html --text x.browser.md`) |
+| `output-differs` | an `-o` output holds another text than the one this pair last had there (saved in the browser, or written from another text), or any output (`extract`/`upgrade`: the text) holds another document (another uid: choose another path) | `extract <out> -o x.browser.md` (another text; when only the output changed and both carry the same uid: `extract <out> -o x.md`); none for another document |
 | `replaces-mismatch` | `--replaces`: the file no longer holds the text with that hash | `extract x.md.html -o x.browser.md` |
 | `legacy-file` | a 0.x file: `extract` cannot read it; `assemble` will not replace it | `upgrade x.md.html` (next to a text: `--text x.browser.md`) |
 | `newer-shell` | the file was made by a newer orz-mdhtml (use `npx orz-mdhtml@latest`) | — |

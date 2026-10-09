@@ -505,7 +505,7 @@ chrome('leaving with unsaved changes, editors mounted on the file (real Chrome)'
     await uctx.close();
   }, 120_000);
 
-  it('[R.10] an editor mounted on the file (OrzCarrier.mountEditor, no hooks.save) is the document being edited: Cmd/Ctrl+S on the page or in it saves it (a newer-format one is read-only — it may take the focus — and writes nothing), never the page\'s other copy; its unsaved changes ask before leaving; destroyed, the page\'s text and keys are its own again', async () => {
+  it('[R.10] an editor mounted on the file (OrzCarrier.mountEditor, no hooks.save) is the document being edited: Cmd/Ctrl+S on the page or in it saves it (a newer-format one is read-only — it may take the focus — and writes nothing), never the page\'s other copy; its unsaved changes ask before leaving; destroyed after saving, the page keeps the text it saved (kit round 5, B3) and the keys are the page\'s again', async () => {
     const ctx = await context();
     const text = CORPUS.find((c) => c.path === 'md/minimal.md')!.text;
     const page = await openFile(ctx, 'attached.md.html', await assembleReal(text));
@@ -538,9 +538,11 @@ chrome('leaving with unsaved changes, editors mounted on the file (real Chrome)'
     await page.waitForFunction('!window.__attached.isDirty()');
     expect(await readOpfs(page, 'attached.md.html') === assemble(`${text}Attached edit.\n`, { engineSource: b.iife })).toBe(true);
     expect(await page.evaluate(`${APP}.getText()`)).toBe(`${text}Attached edit.\n`); // while attached, the editor's text is the document
-    // destroyed: the page's own copy of the text (never saved over the editor's) and Cmd/Ctrl+E are the page's again
+    // destroyed after saving: the page keeps the text the editor saved (never its older copy, which a later page save would
+    // write over the editor's work — kit round 5, B3), and Cmd/Ctrl+E is the page's again
     await page.evaluate('window.__attached.destroy()');
-    expect(await page.evaluate(`${APP}.getText()`)).toBe(text);
+    expect(await page.evaluate(`${APP}.getText()`)).toBe(`${text}Attached edit.\n`);
+    expect(await page.evaluate(`${APP}.isDirty()`)).toBe(false);
     await page.keyboard.press(`${MOD}+e`);
     expect(await page.evaluate(`!!${APP}.editor()`)).toBe(true);
     await ctx.close();

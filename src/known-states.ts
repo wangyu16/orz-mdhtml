@@ -42,11 +42,17 @@
  *   the caller saw (`inspect`, `extract`, `assemble` print it).
  *
  * The record is a convenience, never a source of truth: a missing,
- * unreadable or unwritable cache only means "unknown" (refuse as before).
+ * unreadable or unwritable cache only means "unknown" (refuse as before) —
+ * an unwritable one is not even read (its records may be stale).
+ *
+ * Neither git nor the record proves that a file holds the SAME DOCUMENT as
+ * the twin — another document's file may have been copied over it. So the
+ * CLI uses `twinStateOf` (replace the twin, "only the file changed") only
+ * when the two texts carry the same well-formed uid (src/cli.ts).
  */
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { decodeText } from 'orz-markdown/carrier';
@@ -79,14 +85,29 @@ export function cacheDir(env: NodeJS.ProcessEnv = process.env): string | null {
   return home ? join(home, '.cache', 'orz-mdhtml') : null;
 }
 
-function recordPath(twin: string, file: string): string | null {
+/**
+ * The cache folder to READ records from: the cache folder, or null when it
+ * (or its `pairs/` or `files/` folder) exists but is not writable. A cache
+ * this CLI cannot write may hold records that later commands could not
+ * update (a stale last writer, a pair record from before another input
+ * wrote the file), so it is read as no cache at all: nothing is relaxed.
+ */
+function readableCacheDir(): string | null {
   const dir = cacheDir();
+  if (!dir) return null;
+  for (const d of [dir, join(dir, 'pairs'), join(dir, 'files')]) {
+    if (!existsSync(d)) continue;
+    try { accessSync(d, constants.W_OK); } catch { return null; }
+  }
+  return dir;
+}
+
+function recordPath(twin: string, file: string, dir: string | null = cacheDir()): string | null {
   return dir ? join(dir, 'pairs', `${sha256(`${canonical(twin)}\0${canonical(file)}`)}.json`) : null;
 }
 
 /** Where the last writer of `file` is recorded (one record per file). */
-function writerPath(file: string): string | null {
-  const dir = cacheDir();
+function writerPath(file: string, dir: string | null = cacheDir()): string | null {
   return dir ? join(dir, 'files', `${sha256(canonical(file))}.json`) : null;
 }
 
@@ -132,7 +153,7 @@ export function rememberPair(twin: string, file: string, held: string, twinText:
  * this CLI with this cache), or `undefined` when the record is unreadable.
  */
 function lastWriterOf(file: string): string | null | undefined {
-  const path = writerPath(file);
+  const path = writerPath(file, readableCacheDir());
   if (!path) return null;
   let raw: string;
   try { raw = readFileSync(path, 'utf8'); } catch (e) { return (e as NodeJS.ErrnoException).code === 'ENOENT' ? null : undefined; }
@@ -158,7 +179,7 @@ interface PairRecord { twin?: unknown; file?: unknown; text?: unknown; twinText?
 
 /** The record of the pair, or null (none, unreadable, or another pair's). */
 function recordOf(twin: string, file: string): PairRecord | null {
-  const path = recordPath(twin, file);
+  const path = recordPath(twin, file, readableCacheDir());
   if (!path) return null;
   try {
     const r = JSON.parse(readFileSync(path, 'utf8')) as PairRecord;
@@ -248,7 +269,9 @@ export function earlierStateOf(twin: string, file: string, held: string, stored:
  * writer — or, with `git` (the twin's own file only), a committed, staged or
  * recent version of it in git, compared exactly — only while no other twin
  * is the file's last writer. Null: unknown — it may hold edits made since, or the
- * file holds another input's line of work.
+ * file holds another input's line of work. A known state says only that the
+ * TWIN is unchanged, never that the file holds the same document: callers
+ * act on it only when both texts carry the same uid (src/cli.ts).
  */
 export function twinStateOf(twin: string, file: string, current: string, options: { git?: boolean } = {}): EarlierState | null {
   const writer = lastWriterOf(file);

@@ -41,9 +41,10 @@ other work: an output that is not an orz file, a .md.html (or -o output) that ho
 different text than the one assembled, an x.md that differs from the text extracted
 (unless the text replaced is a known state: what orz-mdhtml itself last wrote or read for
 the pair, a committed, staged or recent version of the twin in git, or the text whose
-SHA-256 --replaces gives), a file made by a newer orz-mdhtml, another document (upgrade
--o), or (new) any existing file. The robust way: pass the sha256 the last command printed
-as --replaces.
+SHA-256 --replaces gives; an x.md is replaced as a known state only when it and the
+file's text carry the same uid), a file made by a newer orz-mdhtml, another document
+(upgrade -o), or (new) any existing file. The robust way: pass the sha256 the last
+command printed as --replaces.
 Before editing x.md, `orz-mdhtml inspect x.md` says whether x.md.html holds other work
 (saved in the browser); `orz-mdhtml extract x.md.html -o x.browser.md` brings it out
 for a merge.
