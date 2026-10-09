@@ -41,6 +41,12 @@ type Editor = {
   focus(): void; ready: Promise<unknown>; readonly root: ShadowRoot;
 };
 const APP = '(globalThis.OrzCarrier.standalone)';
+
+/** Open the handle's list as a pointer does (hover the pencil, orz-markdown A.20) and choose its items in order (a submenu's parent, then its item). */
+async function chooseInHandle(page: Page, ...names: string[]): Promise<void> {
+  await page.getByRole('button', { name: 'Edit and more', exact: true }).hover();
+  for (const name of names) await page.getByRole('menuitem', { name, exact: true }).click();
+}
 const isMac = process.platform === 'darwin';
 const MOD = isMac ? 'Meta' : 'Control';
 
@@ -148,7 +154,8 @@ chrome('the read view (real Chrome)', () => {
     expect(r.sheets).toEqual(['orz-theme', 'orz-katex', 'orz-hljs']);
     expect(r.lightButtons).toBe(0);
     expect(r.shadow).toBe(true);
-    expect(r.buttons).toEqual(['Edit', 'Theme', 'Measure', 'Save', 'Done', 'More']); // Done shows in edit mode only
+    // the read view's one control, the pencil (its list holds every operation); Done and More belong to edit mode's bar
+    expect(r.buttons).toEqual(['Edit and more', 'Done', 'More']);
     await ctx.close();
   });
 });
@@ -159,7 +166,7 @@ chrome('edit, settings and saves (real Chrome)', () => {
     const text = CORPUS.find((c) => c.path === 'md/minimal.md')!.text;
     const html = await assembleReal(text);
     const page = await openFile(ctx, 'typed.md.html', html);
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit and more', exact: true }).click();
     await page.evaluate(`${APP}.editor().ready`);
     await page.evaluate(`${APP}.editor().focus()`);
     await page.keyboard.press(isMac ? 'Meta+ArrowDown' : 'Control+End');
@@ -239,14 +246,14 @@ chrome('edit, settings and saves (real Chrome)', () => {
     const text = CORPUS.find((c) => c.path === 'md/minimal.md')!.text;
     const page = await openFile(ctx, 'settings.md.html', await assembleReal(text));
     const nocturne = THEMES.find((t) => t.id === 'dark-elegant-3')!;
-    await page.getByRole('button', { name: 'Theme', exact: true }).click();
+    await chooseInHandle(page, 'Theme');
     await page.getByRole('menuitemradio', { name: nocturne.name, exact: true }).click();
     let t = await page.evaluate(`${APP}.getText()`) as string;
     expect(t).toBe(editHeader(text, { theme: 'dark-elegant-3' }));
     expect(await page.evaluate(`${APP}.isDirty()`)).toBe(true);
     // the kit's swapStylesheet moves the id to the new sheet once it has loaded (no unstyled moment)
     await expect.poll(() => page.locator('#orz-theme').getAttribute('href')).toBe(themeHref('dark-elegant-3'));
-    await page.getByRole('button', { name: 'Measure', exact: true }).click();
+    await chooseInHandle(page, 'Width');
     await page.getByRole('menuitemradio', { name: 'Full width', exact: true }).click();
     t = await page.evaluate(`${APP}.getText()`) as string;
     expect(t).toBe(editHeader(text, { theme: 'dark-elegant-3', measure: 'full' }));
@@ -258,7 +265,7 @@ chrome('edit, settings and saves (real Chrome)', () => {
     expect(await page.evaluate(`${APP}.getText()`)).toBe(text);
     expect(await page.evaluate(`${APP}.isDirty()`)).toBe(false);
     // edit mode: the editor's toolbar picker, one undoable edit, the preview follows
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit and more', exact: true }).click();
     await page.evaluate(`${APP}.editor().ready`);
     await page.getByRole('button', { name: 'Theme', exact: true }).click();
     await page.getByRole('menuitemradio', { name: 'Academic', exact: true }).click();
@@ -406,18 +413,17 @@ chrome('host frame and quiet update (real Chrome)', () => {
     await ctx.close();
   }, 120_000);
 
-  it('[R.8] the quiet update: a newer release shows the indicator next to the brand; Update now writes the new release\'s assembly of the exact text into the opened file and reloads', async () => {
+  it('[R.8] the quiet update: a newer release marks the pencil and offers "Update to x.y.z" in its list; Update now writes the new release\'s assembly of the exact text into the opened file and reloads', async () => {
     const next = await bundle('9.9.9');
     const log: string[] = [];
     const ctx = await context({ latest: { release: next.release, bundle: next.iife, version: '9.9.9' }, log });
     const text = CORPUS.find((c) => c.path === 'md/crlf.md')!.text;
     const html = await assembleReal(text);
     const page = await openFile(ctx, 'update-me.md.html', html);
-    const indicator = page.getByRole('button', { name: 'Update available: 9.9.9' });
-    await indicator.waitFor();
-    await indicator.click();
+    // the offer in the read view: a dot on the pencil, "Update to 9.9.9" in its list
+    await page.locator('#orz-chrome .orz-handle__pencil[data-update="true"]').waitFor();
     const reloaded = page.waitForEvent('load');
-    await page.getByRole('button', { name: 'Update now' }).click();
+    await chooseInHandle(page, 'Update to 9.9.9', 'Update now');
     await reloaded;
     const written = (await readOpfs(page, 'update-me.md.html'))!;
     const ex = extract(written)!;
@@ -457,7 +463,7 @@ chrome('leaving with unsaved changes, editors mounted on the file (real Chrome)'
     // typed in the editor: asked, and dismissing keeps the page and the text; after a save: not asked
     const typed = await openFile(ctx, 'leave-typed.md.html', html);
     const typedDialogs = dialogsOf(typed);
-    await typed.getByRole('button', { name: 'Edit', exact: true }).click();
+    await typed.getByRole('button', { name: 'Edit and more', exact: true }).click();
     await typed.evaluate(`${APP}.editor().ready`);
     await typed.evaluate(`${APP}.editor().focus()`);
     await typed.keyboard.type('Unsaved words.');
@@ -492,11 +498,10 @@ chrome('leaving with unsaved changes, editors mounted on the file (real Chrome)'
     await page.mouse.click(400, 300);
     await page.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
     const current = await page.evaluate(`${APP}.getText()`) as string;
-    const indicator = page.getByRole('button', { name: 'Update available: 9.9.9' });
-    await indicator.waitFor();
-    await indicator.click();
+    // the offer in the read view: a dot on the pencil, "Update to 9.9.9" in its list
+    await page.locator('#orz-chrome .orz-handle__pencil[data-update="true"]').waitFor();
     const reloaded = page.waitForEvent('load');
-    await page.getByRole('button', { name: 'Update now' }).click();
+    await chooseInHandle(page, 'Update to 9.9.9', 'Update now');
     await reloaded;
     expect(updateDialogs).toEqual([]);
     const written = extract((await readOpfs(page, 'leave-update.md.html'))!)!;
@@ -598,8 +603,8 @@ chrome('first content, read-view details and editors on a file (real Chrome)', (
     expect(shown).toContain('NEW render');
     expect(shown).not.toContain('OLD render');
     await page.evaluate(`${APP}.view.render(${JSON.stringify(text)})`);
-    // the measure picker shows the header's measure as the current choice
-    await page.getByRole('button', { name: 'Measure', exact: true }).click();
+    // the width submenu shows the header's measure as the current choice
+    await chooseInHandle(page, 'Width');
     expect(await page.getByRole('menuitemradio', { name: 'Wide', exact: true }).getAttribute('aria-checked')).toBe('true');
     expect(await page.getByRole('menuitemradio', { name: 'Normal', exact: true }).getAttribute('aria-checked')).toBe('false');
     await page.keyboard.press('Escape');
@@ -683,7 +688,7 @@ chrome('round 1 of the carrier-app loop: conflicts, app editors, unresolved incl
     };
 
     // the first browser save: written (the picker, once)
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit and more', exact: true }).click();
     await page.evaluate(`${APP}.editor().ready`);
     await typeAtEnd('\nBrowser one.');
     await page.keyboard.press(`${MOD}+s`);
@@ -807,4 +812,77 @@ chrome('round 1 of the carrier-app loop: conflicts, app editors, unresolved incl
     expect(found).toBe(true);
     await ctx.close();
   }, 60_000);
+});
+
+chrome('the handle, the text size and the brand (real Chrome; orz-markdown A.20–A.22)', () => {
+  it('[R.15] reading shows one control — the pencil at the bottom-left; hovering lists every operation (Edit, Save, Download a copy, New document, Save as new copy, Theme, Width, Text size); a click edits; the keyboard reaches it first, ArrowUp opens the list, Escape closes it with the focus back, Enter edits; the text size (80–160 %) zooms the article, survives a reload (per uid), leaves the document clean and stays out of the saved file; edit mode shows the orz seal (https://markdown.orz.how) and the orz-mdhtml GitHub link in a new tab, the read view neither', async () => {
+    const ctx = await context();
+    const text = CORPUS.find((c) => c.path === 'md/minimal.md')!.text;
+    const html = await assembleReal(text);
+    const page = await openFile(ctx, 'handle.md.html', html);
+    const visible = () => page.evaluate(() => {
+      const out: string[] = [];
+      const walk = (root: Document | ShadowRoot) => {
+        for (const el of Array.from(root.querySelectorAll<HTMLElement>('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))) if (el.checkVisibility() && el.getBoundingClientRect().width > 0) out.push(el.getAttribute('aria-label') ?? el.textContent ?? '');
+        for (const el of Array.from(root.querySelectorAll('*'))) if (el.shadowRoot) walk(el.shadowRoot);
+      };
+      walk(document);
+      return out;
+    });
+    const pencil = page.getByRole('button', { name: 'Edit and more', exact: true });
+    expect(await visible()).toEqual(['Edit and more']);
+    const vp = page.viewportSize()!;
+    const box = (await pencil.boundingBox())!;
+    expect([box.x < 40, vp.height - (box.y + box.height) < 40]).toEqual([true, true]);
+    await pencil.hover();
+    const list = page.getByRole('menu', { name: 'Edit and more' });
+    await list.waitFor();
+    const items = await list.evaluate((m) => Array.from(m.children).filter((c) => c.getAttribute('role') !== 'separator').map((c) => (c.querySelector('.orz-handle__label') ?? c.querySelector('.orz-handle__row-label'))?.textContent));
+    expect(items).toEqual(['Edit', 'Save', 'Download a copy', 'New document', 'Save as new copy', 'Theme', 'Width', 'Text size']);
+    // the text size: the article zooms, the document stays clean
+    const h1 = () => page.locator('#orz-doc > :first-child').evaluate((e) => e.getBoundingClientRect().height);
+    const before = await h1();
+    await page.getByRole('menuitem', { name: 'Larger text' }).click();
+    await page.getByRole('menuitem', { name: 'Larger text' }).click();
+    expect(await page.getByRole('menuitem', { name: 'Reset text size, now 120%' }).isVisible()).toBe(true);
+    expect((await h1()) / before).toBeCloseTo(1.2, 1);
+    expect(await page.locator('#orz-doc').evaluate((a) => getComputedStyle(a).zoom)).toBe('1.2');
+    expect(await page.evaluate(`${APP}.isDirty()`)).toBe(false);
+    await page.mouse.move(vp.width / 2, 200);
+    await page.waitForTimeout(600);
+    expect(await list.count()).toBe(0);
+    // per uid, across a reload; never in the saved file
+    await page.reload();
+    await bootDone(page);
+    expect([await page.evaluate(`${APP}.fontScale()`), await page.locator('#orz-doc').evaluate((a) => getComputedStyle(a).zoom)]).toEqual([120, '1.2']);
+    await page.evaluate(`${APP}.setSetting({ theme: 'dark-elegant-1' })`);
+    expect(await page.evaluate(`${APP}.save()`)).toMatchObject({ ok: true });
+    expect((await readOpfs(page, 'handle.md.html')) === assemble(editHeader(text, { theme: 'dark-elegant-1' }), { engineSource: b.iife })).toBe(true);
+    await page.evaluate(`${APP}.setFontScale(null)`);
+    // the keyboard: Tab reaches the pencil first; ArrowUp opens the list, Escape closes it with the focus back; Enter edits
+    const focused = () => page.evaluate(() => { let a: Element | null = document.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; return a?.getAttribute('aria-label') ?? a?.textContent?.trim() ?? null; });
+    await page.locator('body').click({ position: { x: vp.width - 5, y: 5 } });
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press('Tab');
+    expect(await focused()).toBe('Edit and more');
+    await page.keyboard.press('ArrowUp');
+    await list.waitFor();
+    expect(await focused()).toBe('Larger text');
+    await page.keyboard.press('Escape');
+    expect([await list.count(), await focused()]).toEqual([0, 'Edit and more']);
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(`!!${APP}.editor()`);
+    // edit mode: the brand, quiet, at the far end of the bar
+    const seal = page.getByRole('link', { name: 'orz-markdown website' });
+    const gh = page.getByRole('link', { name: 'orz-mdhtml on GitHub' });
+    expect([await seal.isVisible(), await seal.getAttribute('href'), await seal.getAttribute('target'), await seal.getAttribute('rel')]).toEqual([true, 'https://markdown.orz.how', '_blank', 'noopener noreferrer']);
+    expect([await gh.isVisible(), await gh.getAttribute('href'), await gh.getAttribute('target'), await gh.getAttribute('rel')]).toEqual([true, 'https://github.com/wangyu16/orz-mdhtml', '_blank', 'noopener noreferrer']);
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await page.waitForFunction(`!${APP}.editor()`);
+    expect([await seal.isVisible(), await gh.isVisible()]).toEqual([false, false]);
+    // a pointer's click on the pencil edits
+    await pencil.click();
+    await page.waitForFunction(`!!${APP}.editor()`);
+    await ctx.close();
+  }, 120_000);
 });

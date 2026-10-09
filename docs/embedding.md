@@ -63,7 +63,7 @@ root (your CSS cannot break it; it cannot restyle your page); the preview runs
 in a sandboxed `srcdoc` frame (`sandbox="allow-scripts"`, an opaque origin:
 document scripts cannot reach your page, storage or cookies).
 
-The toolbar has the view modes, the theme and measure pickers (they edit the
+The toolbar has the view modes, the Theme and Width pickers (they edit the
 header: `theme`, `measure`), an **AI** menu when `hooks.ai` offers operations,
 the save state and Save. `chrome: 'compact'` shows the same tools as icons. Keyboard: Cmd/Ctrl+S saves, Cmd/Ctrl+\ cycles the modes,
 Esc leaves the text for the toolbar.

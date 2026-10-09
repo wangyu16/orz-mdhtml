@@ -16,26 +16,40 @@ carrier kit of [orz-markdown](https://www.npmjs.com/package/orz-markdown)
   in the file's `<script type="text/markdown" id="orz-src">` island.
   `orz-mdhtml extract` gives it back byte for byte; an agent banner at the top
   of `<body>` tells tools how to read it.
-- **A read view.** The document is rendered in the page with the theme and
-  line length its header names (`theme`, `measure`); math, code highlighting,
-  diagrams, chemistry and charts are drawn once their libraries arrive, and
-  copying rendered content copies Markdown.
-- **Edit.** The **Edit** button (or Cmd/Ctrl+E) opens the editor: CodeMirror
-  beside a live preview (split, editor or preview mode), theme and measure
-  pickers that edit the header, undo per document. **Done** goes back to the
-  read view. The theme and the measure are document data (they live in the
-  header), so choosing one — in the editor or from the read view — changes
-  the document: it is unsaved until you Save, and Cmd/Ctrl+Z undoes it.
+- **A read view, undisturbed.** The document is rendered in the page with the
+  theme and line length its header names (`theme`, `measure`); math, code
+  highlighting, diagrams, chemistry and charts are drawn once their libraries
+  arrive, and copying rendered content copies Markdown. The page shows one
+  control: a small pencil at the bottom-left. Click it to edit; hover it (tap
+  it on a touch screen, or Tab to it and press ArrowUp) for the list of
+  everything else — Edit, Save, Download a copy, New document, Save as new
+  copy, Theme, Width, Text size and, when there is one, the update. A dot on
+  the pencil means unsaved changes.
+- **Text size.** *Text size* (A− 100% A+) makes the reading text smaller or
+  larger, 80–160 %. It is your preference, not the document's: kept in this
+  browser for this document (by its `uid`), never saved into the file, and it
+  does not mark the document unsaved. The editor's preview keeps the
+  document's own size.
+- **Edit.** The pencil (or Cmd/Ctrl+E) opens the editor: CodeMirror beside a
+  live preview (split, editor or preview mode), theme and width pickers that
+  edit the header, undo per document. **Done** goes back to the read view;
+  **More** has *Download a copy*, *New document* and *Save as new copy*. The
+  editor's bar ends, quietly, with the orz seal (the orz-markdown website,
+  https://markdown.orz.how) and a link to this tool's GitHub repository. The
+  theme and the width are document data (they live in the header), so
+  choosing one — in the editor or from the read view — changes the document:
+  it is unsaved until you Save, and Cmd/Ctrl+Z undoes it.
 - **Save, New, Copy.** **Save** (Cmd/Ctrl+S) writes `assemble(text)` — never
-  the live page — back to the file. The **More** menu has *Download a copy*,
-  *New document* and *Save as new copy* (the same text with a new `uid`). The
-  page asks before it closes with unsaved changes.
+  the live page — back to the file. *Download a copy*, *New document* and
+  *Save as new copy* (the same text with a new `uid`) are in the pencil's list
+  and in the editor's More menu. The page asks before it closes with unsaved
+  changes.
 - **A quiet update.** A local file checks, at most once a day, whether a newer
-  release of its engine exists; if so, a small "Update available" indicator
-  appears next to the brand. *Update now* re-assembles the same text with the
-  new release (its bundle verified by SHA-384) and saves it; nothing changes
-  until the reader asks. Served pages, framed pages and pages with a host never
-  check.
+  release of its engine exists; if so, the pencil gets a small dot and its
+  list offers *Update to x.y.z* (in the editor, an "Update available" chip).
+  *Update now* re-assembles the same text with the new release (its bundle
+  verified by SHA-384) and saves it; nothing changes until the reader asks.
+  Served pages, framed pages and pages with a host never check.
 
 Content (title, theme, measure, language, author, licence…) comes only from the
 text's header:

@@ -21,9 +21,14 @@ Requires `orz-markdown ^2.2.0`.
   and a regenerable shell. Node and the browser write the same bytes.
 - **Read view in the page** (no iframe) with the header's theme and measure;
   content libraries load only when the document needs them.
-- **Chrome** (orz-markdown `carrier/app`): Edit, theme and measure pickers
-  (they write the header; undoable), Save, Download a copy, New document, Save
-  as new copy; Cmd/Ctrl+S / E / Z; a warning before closing with unsaved
+- **Chrome** (orz-markdown `carrier/app`): reading is undisturbed — one
+  pencil at the bottom-left (click: Edit; hover, tap or ArrowUp: the list of
+  Edit, Save, Download a copy, New document, Save as new copy, Theme, Width,
+  Text size and the quiet update); theme and width (`measure`) write the
+  header (undoable); a reader-only **Text size** (80–160 %, per `uid`, never
+  in the file; the article zooms by `--orz-font-scale`); edit mode ends its
+  bar with the orz seal (https://markdown.orz.how) and the orz-mdhtml GitHub
+  link (`MD_KIND.repo`); Cmd/Ctrl+S / E / Z; a warning before closing with unsaved
   changes. Saves always write `assemble(text)`, never the live DOM; a file
   handle is reused only when the file's content proves it is the opened file.
 - **Editor**: the kit's editor shell (CodeMirror, live preview, view modes,

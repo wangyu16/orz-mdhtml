@@ -6,7 +6,8 @@
  * the orz browser runtime (QR overlay, copy-as-Markdown, tabs) and — only
  * when the document needs them — highlight.js, Mermaid, SMILES and Chart.js
  * from their pinned CDN URLs. The kit's app (`carrier/app`) drives it
- * through `CarrierReadView` (spec/carrier-app.md §3.3).
+ * through `CarrierReadView` (spec/carrier-app.md §3.3); the reader's text
+ * size (`--orz-font-scale`, §4.10) zooms the article.
  */
 import { readDocument } from 'orz-markdown/carrier';
 import type { CarrierReadView, ReadViewContext } from 'orz-markdown/carrier/app';
@@ -38,6 +39,11 @@ export function createReadView(doc: Document): MdReadView {
     article.id = 'orz-doc';
     main.append(article);
   }
+  // the reader's text size (the kit's reader control, a preference by uid — never the document): the kit sets
+  // `--orz-font-scale` on the view; the article zooms by it — every theme sizes text its own way (px, rem, em,
+  // clamp with vw), so one zoom scales all of them evenly and keeps the line length in characters. Set at run
+  // time (CSSOM), so the assembled file's bytes do not change; the editor's preview does not follow it.
+  article.style.setProperty('zoom', 'var(--orz-font-scale, 1)');
   let generation = 0;
   let destroyed = false;
 

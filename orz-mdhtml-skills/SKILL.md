@@ -278,14 +278,18 @@ Platforms that show assembled files in an iframe use the host protocols
 
 ## What the file does for its reader
 
-Read view with the header's theme; **Edit** (Cmd/Ctrl+E): editor + live
-preview, theme and measure pickers that write the header; **Save**
+Read view with the header's theme and ONE control, a pencil at the
+bottom-left (click: Edit; hover or tap: the list of every operation,
+including a reader-only *Text size* 80–160 % that is never saved into the
+file); **Edit** (Cmd/Ctrl+E): editor + live preview, theme and width
+pickers that write the header, the orz seal and the GitHub link at the far
+end of its bar; **Save**
 (Cmd/Ctrl+S) writes `assemble(text)` back in place in Chromium (File System
 Access) and downloads elsewhere; a served (http) page offers *Download a
 copy*; whenever the file changed on disk since the page opened it (any
 `assemble` you ran while it was open, not only `--force`), the save asks
 the reader — *Replace it* or *Download a copy instead* — instead of
-overwriting your work; *New document* and *Save as new copy* (new `uid`) under More; a quiet,
+overwriting your work; *New document* and *Save as new copy* (new `uid`) in the pencil's list and under More; a quiet,
 once-a-day update offer on local files. Reading and editing work in every
 modern browser; themes, math styles, diagram libraries and the editor load
 from CDNs.
