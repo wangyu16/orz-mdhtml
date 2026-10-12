@@ -5,6 +5,38 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
 
 ## [Unreleased]
 
+<a id="101"></a>
+
+## [1.0.1] — 2026-10-12
+
+A rebuild on the published `orz-markdown` 2.3.0 (`^2.3.0`); released together
+with `orz-mdhtml-browser` 1.0.1. No API, CLI or file-format change.
+
+### Security
+
+- **The editor's preview bridge** (orz-markdown 2.3.0, FC-19 §8.4): a script
+  in the previewed document can no longer take the bridge's private port
+  (overridden built-ins, `fn.caller`, `window.event`) to forge the reader's
+  keys or links; `__orzPreview` is frozen. Apps with a hash-based CSP use the
+  kit's new `PREVIEW_BRIDGE_HASH` (this package hard-codes none).
+
+### Changed
+
+- **`light-playful-1` is a ruled notebook on screen**, in the read view and in
+  the editor's preview: the kit's baseline grid runs by default
+  (`enhanceDocument`, the preview frame); other themes are untouched; print is
+  unchanged (claim R.16, real Chrome).
+- From the kit: Cmd/Ctrl+P in the editor's preview prints the page, not the
+  preview frame (md has no Print action: in the read view the key stays the
+  browser's); tab panes print under their labels and a `{{youtube}}` embed
+  prints its address; the editor toolbar wraps in a narrow column; read-view
+  list labels line up.
+
+### Fixed
+
+- A heading named "Mermaid" (`id="mermaid"`) no longer stops Mermaid diagrams
+  from loading (the kit detects each content library by its API).
+
 <a id="100"></a>
 
 ## [1.0.0] — 2026-10-09

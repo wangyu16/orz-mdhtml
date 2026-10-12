@@ -10,7 +10,7 @@ Guidance for AI agents working in this repository.
 (`x.md`, orz text format 1, FC-18) and its **self-editing file** (`x.md.html`)
 is `assemble(text)` — a single page that reads like a themed website and can
 be edited and saved in the browser. Built on the orz-markdown carrier kit
-([orz-markdown](../orz-markdown) `carrier/*`, **`^2.2.0`**): the standalone
+([orz-markdown](../orz-markdown) `carrier/*`, **`^2.3.0`**): the standalone
 file's whole runtime is the kit's `orz-markdown/carrier/app`; this repo
 supplies the md kind behind its `StandaloneKind` seam.
 
@@ -71,7 +71,11 @@ Tests live in `tests/` and are bound to the claims in `notes/CLAIMS.md`
 engine into `dist/` first (the CLI tests spawn `dist/cli.js`). The
 `conformance` project (`tests/conformance.test.ts`, ~2 min of Chrome) runs
 orz-markdown's carrier harness against the real carrier after the others; it
-must stay conformant (46 checks, no `allowSkips`). Real-Chrome tests skip
+must stay conformant (46 checks, no `allowSkips`), and files of the
+published previous release (devDependency `orz-mdhtml-browser-previous`,
+pinned exactly; bump it to the last published version after each release)
+must update to this one (`C.update.from-previous` in a run of its own: claim
+H.3, a KIT GAP). Real-Chrome tests skip
 without an installed Chrome (playwright-core, channel `chrome`) — such a run
 verifies nothing "real". Still **verify generated files in a real browser**
 (Save in place needs Chromium); `build/serve.cjs` is a dependency-free
@@ -81,8 +85,10 @@ static server for that.
 §3a): the rebuild on the orz-markdown 2.2.0 carrier kit (`carrier/app`) —
 base, isomorphic assembler, browser engine, standalone startup, CLI and Node
 library (the 0.9 runtime is deleted), conformance harness, docs and examples,
-closed loop. Depends on the published `orz-markdown ^2.2.0` (a real install,
-no symlink).
+closed loop. **1.0.1**: rebuilt on the published `orz-markdown ^2.3.0` (a
+real install, no symlink) for the kit's preview-bridge security fix and the
+screen `light-playful-1` notebook (the kit's baseline grid, run by
+`enhanceDocument`'s default `grid` and the preview frame; claim R.16).
 
 ## Architecture
 

@@ -1,6 +1,6 @@
 /**
  * The orz-markdown themes an `md` document may name in its header `theme` key
- * (FC-18 §5.1): the kit's one theme list (`orz-markdown/themes`, 2.2.0 —
+ * (FC-18 §5.1): the kit's one theme list (`orz-markdown/themes`, 2.3.0 —
  * ids, picker names and colour schemes), re-exported. This repository keeps
  * no list of its own.
  *

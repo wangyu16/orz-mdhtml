@@ -886,3 +886,83 @@ chrome('the handle, the text size and the brand (real Chrome; orz-markdown A.20â
     await ctx.close();
   }, 120_000);
 });
+
+/** Where the article's paragraphs sit against its ruling: the grid pitch, the attribute, and each paragraph's first-line offset from its nearest rule (orz-markdown M.31). */
+async function ruling(target: Page | import('playwright-core').Frame): Promise<{ attribute: string | null; grid: number; offsets: number[] }> {
+  return target.evaluate(async () => {
+    const frame = (): Promise<void> => new Promise((r) => requestAnimationFrame(() => r()));
+    await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 5000))]);
+    for (let i = 0; i < 6; i++) await frame();
+    await new Promise((r) => setTimeout(r, 150));
+    for (let i = 0; i < 4; i++) await frame();
+    const root = document.getElementById('orz-doc')!;
+    const rs = getComputedStyle(root);
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:absolute;height:var(--orz-grid, 0px);width:0';
+    root.appendChild(probe);
+    const grid = probe.getBoundingClientRect().height;
+    const zoom = grid / (parseFloat(getComputedStyle(probe).height) || 1);
+    probe.remove();
+    const ruleAt = parseFloat(rs.getPropertyValue('--orz-rule-at')) * zoom;
+    const top0 = root.getBoundingClientRect().top + (parseFloat(rs.borderTopWidth) + parseFloat(rs.paddingTop)) * zoom;
+    const offsets: number[] = [];
+    if (grid > 0) {
+      for (const p of Array.from(root.children).filter((e) => e.tagName === 'P' && !e.classList.contains('orz-off-grid') && !e.classList.contains('orz-picture') && !e.querySelector('.katex-display'))) {
+        const m = document.createElement('span');
+        m.style.cssText = 'display:inline-block;width:0;height:0;vertical-align:baseline';
+        p.insertBefore(m, p.firstChild);
+        const baseline = m.getBoundingClientRect().bottom - top0;
+        m.remove();
+        offsets.push(ruleAt + Math.round((baseline - ruleAt) / grid) * grid - baseline);
+      }
+    }
+    return { attribute: root.getAttribute('data-orz-grid'), grid, offsets };
+  });
+}
+
+chrome('the light-playful-1 notebook (real Chrome)', () => {
+  it('[R.16] (orz-markdown 2.3.0 M.31) a light-playful-1 file is a ruled notebook in the page and in the editor\'s preview: the kit\'s baseline grid runs (the article carries `data-orz-grid`) and every paragraph\'s first line sits on a rule (0â€“3 px above it), also at a reader text size; another theme gets no grid, and switching the theme away takes it back', async () => {
+    const ctx = await context();
+    const page = await ctx.newPage();
+    const errors = recordErrors(page);
+    const para = (n: number, w: string): string => Array.from({ length: n }, (_, i) => `${w} (${i + 1})`).join(' ');
+    const body = `# A notebook page\n\n${para(4, 'Running text sits on the ruled lines with **bold** and `code` and $x^2$.')}\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n${para(3, 'After the table the writing is back on the rules.')}\n\n::: info\nA callout, a sheet on top.\n:::\n\n${para(3, 'And after the callout too.')}\n\n## A second heading\n\n${para(2, 'The last paragraph.')}\n`;
+    const text = editHeader(body, { theme: 'light-playful-1' });
+    await page.goto(`file://${files.write('notebook.md.html', await assembleReal(text))}`);
+    await bootDone(page);
+    await page.waitForFunction(() => document.getElementById('orz-doc')?.hasAttribute('data-orz-grid'), undefined, { timeout: 15_000 });
+    const onPage = await ruling(page);
+    expect(onPage.grid).toBeGreaterThan(10);
+    expect(onPage.attribute).not.toBeNull();
+    expect(onPage.offsets.length).toBeGreaterThanOrEqual(4);
+    for (const d of onPage.offsets) { expect(d).toBeGreaterThanOrEqual(-0.5); expect(d).toBeLessThanOrEqual(3.5); }
+    // a reader text size (the read view zooms the article): still on the rules
+    await page.evaluate(() => document.getElementById('orz-view')!.style.setProperty('--orz-font-scale', '1.2'));
+    const zoomed = await ruling(page);
+    for (const d of zoomed.offsets) { expect(d).toBeGreaterThanOrEqual(-0.5); expect(d).toBeLessThanOrEqual(3.5); }
+    await page.evaluate(() => document.getElementById('orz-view')!.style.removeProperty('--orz-font-scale'));
+    // the editor's preview frame runs the same pass
+    await page.evaluate(`${APP}.edit().setMode('preview')`);
+    let frame = null as null | import('playwright-core').Frame;
+    for (let i = 0; i < 75 && !frame; i++) {
+      for (const f of page.frames()) if (f !== page.mainFrame() && await f.evaluate(() => !!document.getElementById('orz-doc')?.hasAttribute('data-orz-grid')).catch(() => false)) frame = f;
+      if (!frame) await page.waitForTimeout(200);
+    }
+    expect(frame, 'the preview frame aligns to the grid').not.toBeNull();
+    const inPreview = await ruling(frame!);
+    expect(inPreview.offsets.length).toBeGreaterThanOrEqual(4);
+    for (const d of inPreview.offsets) { expect(d).toBeGreaterThanOrEqual(-0.5); expect(d).toBeLessThanOrEqual(3.5); }
+    await page.evaluate(`${APP}.leave()`);
+    // switching the theme away takes the grid back
+    await page.evaluate(`${APP}.setSetting({ theme: 'light-neat-3' })`);
+    await page.waitForFunction(() => !document.getElementById('orz-doc')!.hasAttribute('data-orz-grid'), undefined, { timeout: 15_000 });
+    // another theme: no grid at all
+    await page.goto(`file://${files.write('not-a-notebook.md.html', await assembleReal(editHeader(body, { theme: 'light-neat-3' })))}`);
+    await bootDone(page);
+    await page.waitForTimeout(500);
+    const other = await ruling(page);
+    expect(other.attribute).toBeNull();
+    expect(errors).toEqual([]);
+    await ctx.close();
+  }, 120_000);
+});

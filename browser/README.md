@@ -23,7 +23,7 @@ const editor = mountEditor(element, { text, nonce, hooks: { async save(text) { /
 ```
 
 ```html
-<script src="https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@1.0.0/orz-mdhtml.browser.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@1.0.1/orz-mdhtml.browser.js"></script>
 <script>const editor = OrzCarrier.mountEditor(element, { text, hooks: { save } });</script>
 ```
 

@@ -17,8 +17,16 @@
  *   `release.json`. The published 0.x `orz-mdhtml-browser` releases are the
  *   experimental pre-format files (no `#orz-shell`, no manifest, a different
  *   bundle file); owner decision 1 (REBUILD §3a) gives them `upgrade`, not an
- *   in-file update — so no `previous` release exists whose files must update
- *   to this one, and `C.update.from-previous` is not applicable.
+ *   in-file update — so in this run `C.update.from-previous` is not applicable.
+ *
+ * KIT GAP (orz-markdown 2.3.0; claim H.3): from 1.0.1 a previous format-1
+ * release exists — the published orz-mdhtml-browser 1.0.0 (the devDependency
+ * `orz-mdhtml-browser-previous`, pinned exactly). Given as `previous`, the
+ * harness's `C.law.content-independence` also requires `renderPreview` to equal
+ * the previous release's, which fails whenever the kit's parser output changes
+ * (2.3.0 adds `data-url` to `{{youtube}}`) although the text-derived parts are
+ * equal. So the 46-check run keeps `firstRelease`, and `C.update.from-previous`
+ * runs against 1.0.0 in a registration of its own (`only` that check).
  *
  * No `allowSkips`: the final `[conformant]` test fails unless all 46 checks ran
  * in real Chrome and passed. Runs as its own vitest project after the others
@@ -34,6 +42,10 @@ import { buildBrowser, BUNDLE_FILE } from '../build/bundle.js';
 import { assemble, engineFiles, newDocument, VERSION } from '../src/lib.js';
 
 type Browser = import('playwright-core').Browser;
+
+/** The previous release (the published orz-mdhtml-browser, a devDependency alias pinned to it). */
+const PREVIOUS = join(process.cwd(), 'node_modules', 'orz-mdhtml-browser-previous');
+const PREVIOUS_VERSION = '1.0.0';
 
 /** The next patch version (`0.9.3` → `0.9.4`, `1.0.0-rc.1` → `1.0.0`). */
 export const bumpPatch = (v: string): string => {
@@ -144,5 +156,24 @@ if (!browser) {
     // two playwright-core type copies while orz-markdown is linked from a checkout; one object at run time
     browser: browser as never,
     log: (line) => log.push(line),
+  });
+  // KIT GAP (see the top): the update from the published previous release, alone
+  const fromPrevious = async (): Promise<CarrierTarget> => {
+    const { firstRelease: _first, ...t } = await makeTarget();
+    return { ...t, previous: { bundle: join(PREVIOUS, BUNDLE_FILE), release: join(PREVIOUS, 'release.json') } };
+  };
+  describe('[H.3] the previous release', () => {
+    it('[H.3] is the published orz-mdhtml-browser 1.0.0 (pinned devDependency; its manifest and package say so)', () => {
+      expect(parseManifest(JSON.parse(readFileSync(join(PREVIOUS, 'release.json'), 'utf8')), 'md')?.version).toBe(PREVIOUS_VERSION);
+      expect(JSON.parse(readFileSync(join(PREVIOUS, 'package.json'), 'utf8'))).toMatchObject({ name: 'orz-mdhtml-browser', version: PREVIOUS_VERSION });
+      expect(JSON.parse(readFileSync('package.json', 'utf8')).devDependencies['orz-mdhtml-browser-previous']).toBe(`npm:orz-mdhtml-browser@${PREVIOUS_VERSION}`);
+    });
+  });
+  registerConformance({ describe, it, beforeAll, afterAll }, fromPrevious, {
+    title: '[H.3] orz-mdhtml: files of the published previous release update to this one (C.update.from-previous, real Chrome)',
+    browser: browser as never,
+    only: ['C.update.from-previous'],
+    allowSkips: true,
+    log: (line) => log.push(`H.3 ${line}`),
   });
 }

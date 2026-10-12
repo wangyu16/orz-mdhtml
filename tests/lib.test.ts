@@ -64,7 +64,7 @@ describe('the Node library', () => {
     m.bundle.integrity = `sha384-${createHash('sha384').update(bad, 'utf8').digest('base64')}`;
     writeFileSync(join(unsafe, 'release.json'), JSON.stringify(m), 'utf8');
     expect(() => readEngine([unsafe])).toThrow(/script-safe/);
-  });
+  }, 120_000); // CPU-bound (~1 MB assemblies, SHA-384s): about 5 s alone, past 30 s beside the real-Chrome suites
 
   it('[P.2] the package is the 1.0 surface: the library exports the format-1 API only; the 0.9 API and runtime are gone; bin, exports and files', () => {
     expect(Object.keys(lib).sort()).toEqual([

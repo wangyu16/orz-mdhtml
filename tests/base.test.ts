@@ -1,5 +1,5 @@
 /**
- * Rebuild step 1 — the base: orz-markdown ^2.2.0 without shims, one theme
+ * Rebuild step 1 — the base: orz-markdown ^2.3.0 without shims, one theme
  * list, the version constant (claims B.1–B.3).
  */
 import { describe, it, expect } from 'vitest';
@@ -11,8 +11,8 @@ const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: strin
 const sources = (dir: string): string[] => readdirSync(dir).filter((f) => /\.(ts|js|cjs|mjs)$/.test(f)).map((f) => `${dir}/${f}`);
 
 describe('base', () => {
-  it('[B.1] depends on orz-markdown ^2.2.0 with no shims, aliases or package.json walk', () => {
-    expect(pkg.dependencies['orz-markdown']).toBe('^2.2.0');
+  it('[B.1] depends on orz-markdown ^2.3.0 with no shims, aliases or package.json walk', () => {
+    expect(pkg.dependencies['orz-markdown']).toBe('^2.3.0');
     expect(existsSync('build/shims')).toBe(false);
     expect({ ...pkg.dependencies, ...pkg.devDependencies }).not.toHaveProperty('path-browserify');
     for (const file of [...sources('src'), ...sources('build')]) {

@@ -312,7 +312,7 @@ from CDNs.
 - Keep the `uid` across revisions of a document. A different document needs
   its own: start it with `new` (or the file's *Save as new copy*), never by
   copying another text's header with its `uid`.
-- Package: `orz-mdhtml` 1.x depends on `orz-markdown ^2.2.0` (the carrier kit);
+- Package: `orz-mdhtml` 1.x depends on `orz-markdown ^2.3.0` (the carrier kit);
   files record the shell version that wrote them.
 - Security: a `.md.html` runs the code inside it — treat files like programs
   and open only trusted ones.
