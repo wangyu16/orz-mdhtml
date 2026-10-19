@@ -48,7 +48,7 @@
     "type": "git",
     "url": "git+https://github.com/wangyu16/orz-mdhtml.git"
   },
-  "homepage": "https://markdown.orz.how/family.html#mdhtml",
+  "homepage": "https://markdown.orz.how/mdhtml.html",
   "bugs": "https://github.com/wangyu16/orz-mdhtml/issues",
   "dependencies": {
     "orz-markdown": "^2.3.0"
