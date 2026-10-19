@@ -44,6 +44,15 @@ A fix release; released together with `orz-mdhtml-browser` 1.0.2. Still on
   `docs/embedding.md`: the CSP recipe is one copy-pasteable policy (tested
   in Chrome), the Mermaid `style-src-elem` note corrected (no nonce), hash
   policies explained.
+- Surface round 2: `assemble` of an `x.md` whose header says `carrier:
+  slides` prints no warning (only `inspect` shows `carrier-mismatch`); the
+  0.x `<title>` moves into the header only when the text has no heading;
+  which commands print the `sha256`; the embedding guide's policy gains
+  `frame-src https://www.youtube.com` (as orz-slides' and orz-paged's), says
+  how it differs from the example's, that the bridge hash differs between
+  kit versions, and that Mermaid is unreadable (not unstyled) without
+  `style-src-elem`. `homepage` in both package.json files is
+  markdown.orz.how/mdhtml.html.
 
 <a id="101"></a>
 

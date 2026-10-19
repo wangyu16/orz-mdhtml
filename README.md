@@ -166,8 +166,10 @@ existing file. With `--force` the replaced file is kept as `<file>~` — or,
 when that name is taken by something else, `<file>~1`, `<file>~2`, … (a
 backup is never overwritten, and a symbolic link at a backup name is never
 followed). Files are replaced through a temporary file and a rename, keeping
-their mode; a symbolic link stays a link. Every command prints the `sha256`
-of the text it wrote or read (`--json`: `sha256`).
+their mode; a symbolic link stays a link. `assemble`, `extract` (to a file),
+`inspect` and `upgrade` print the `sha256` of the text they wrote or read,
+and every `--json` result that wrote a text carries it (`new` prints it only
+with `--json`; `themes` never).
 
 **Known states.** `orz-mdhtml assemble x.md` replaces `x.md.html` (or the
 `-o` output) without `--force` when the file holds the same text, or **an
@@ -244,7 +246,7 @@ arguments (`-o`, `--cdn`, `--resolve-includes`, `--text`…) and names a copy
 | `newer-shell` | the file was made by a newer orz-mdhtml (use `npx orz-mdhtml@latest`) | — |
 | `newer-format` | the text's format is newer than this tool writes | — |
 | `unclosed-island` | `upgrade`: the file was cut off inside its text | `extract x.md.html -o x.recovered.md` |
-| `other-kind` | an orz slides/paged document, known by its file name (`x.slides.md`, `x.paged.html`, …): use its own tool. (An `x.md` whose header says `carrier: slides` is assembled as md, with the lint warning `carrier-mismatch`.) | — |
+| `other-kind` | an orz slides/paged document, known by its file name (`x.slides.md`, `x.paged.html`, …): use its own tool. (An `x.md` whose header says `carrier: slides` is assembled as md without a warning; `inspect` shows the lint warning `carrier-mismatch`.) | — |
 | `assembled-input` | `assemble` was given a `.md.html` | `extract x.md.html` |
 | `invalid-text` | the text cannot be assembled (NUL, a lone surrogate…) | — |
 | `engine-unavailable` | the inline engine is missing or stale (source checkout: `npm run bundle`) | — |
@@ -378,8 +380,9 @@ available") offers to update it; that update cannot read a 1.0 release and
 ends harmlessly with "check your connection" — the file is not changed. Use
 `orz-mdhtml upgrade` instead.
 
-`upgrade` keeps the source exactly, moves the `#orz-meta` metadata, the
-saved theme and the `<title>` into the header, keeps the file's delivery, and
+`upgrade` keeps the source exactly, moves the `#orz-meta` metadata and the
+saved theme into the header (the 0.x `<title>` too, but only when the text has
+no heading to give the title; otherwise it is left out, with a warning), keeps the file's delivery, and
 mints a `uid` (0.x ids are not valid uids). The 0.9 API (`buildMdHtml` and
 friends) and CLI options (`--theme`, `--title` on generation) are gone: content
 lives in the text's header now. **The default delivery changed**: 0.x wrote

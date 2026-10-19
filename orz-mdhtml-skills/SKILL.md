@@ -252,8 +252,8 @@ names the command to run, with your file names:
   kind comes from the **file name**: `x.slides.md` / `x.slides.html` and
   `x.paged.md` / `x.paged.html` are refused (`other-kind`). A plain `x.md`
   whose header says `carrier: slides` is still assembled as an md document,
-  with the lint warning `carrier-mismatch` — rename it `x.slides.md` if it is
-  a deck.
+  without a warning (`assemble` prints none; `inspect` shows the lint warning
+  `carrier-mismatch`) — rename it `x.slides.md` if it is a deck.
 
 ## When a command refuses (`--json`)
 
@@ -300,7 +300,9 @@ npx orz-mdhtml@1 upgrade old.md.html -o new.md.html --text new.md
 ```
 
 A 0.x file (orz-mdhtml ≤ 0.9.3) keeps its source exactly; its `#orz-meta`
-metadata, saved theme and `<title>` move into the header, and it gets a `uid`.
+metadata and saved theme move into the header (its `<title>` too, only when
+the text has no heading to give the title — otherwise it is left out, with a
+warning), and it gets a `uid`.
 The delivery (inline or cdn) is kept unless `--cdn` / `--inline`. A format-1
 file of an older shell is re-assembled with its text and includes unchanged
 (this also repairs a damaged engine). A file of a newer shell is refused (no
