@@ -5,6 +5,46 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
 
 ## [Unreleased]
 
+<a id="102"></a>
+
+## [1.0.2] — 2026-10-19
+
+A fix release; released together with `orz-mdhtml-browser` 1.0.2. Still on
+`orz-markdown ^2.3.0` (it bundles 2.3.0). No API, CLI or file-format change.
+
+### Fixed
+
+- **A file made by the Node CLI or library now passes
+  [verify](https://markdown.orz.how/verify.html) when a newer orz-markdown is
+  installed.** 1.0.1 wrote the theme stylesheet URL with the version of the
+  orz-markdown the installation resolved (`^2.3.0` now resolves to 2.4.0:
+  `orz-markdown@2.4.0/themes/…`), while its browser engine, built on 2.3.0,
+  writes `@2.3.0` — so `npx orz-mdhtml` files differed from
+  `OrzCarrier.assemble`'s by those bytes. The kit version is now fixed at
+  build time (`src/version.ts`, `ORZ_MARKDOWN_VERSION`): Node and the
+  browser write the same bytes whatever orz-markdown is installed (claim
+  A.9; a new test runs the packaged library with a newer kit and compares
+  with the bundle in Chrome). `ORZ_MARKDOWN_VERSION` and `--version` name
+  the bundled kit.
+
+### Documentation
+
+- README: the header keys and the themes table (id and name), `--measure
+  normal|wide|full`, a "Keys" section, inline is not offline, the 0.x
+  migration notes that the default delivery became inline, `inspect`'s
+  `twin: null`, what `other-kind` means, twin-link rewriting.
+- The skill: a "Common mistakes" box (`{{mermaid}}` and friends are
+  directives, not ```` ``` ```` fences; header-less Markdown), what to do
+  with Markdown that has no header (`new` without a file prints one),
+  readability advice (measure, long equations, Mermaid direction),
+  `--no-includes`, `--no-text`, the include reasons, keys, corrected
+  `inspect` wording.
+- `orz-mdhtml-browser` README: the bundled kit version (2.3.0), the full ES
+  module export list, a "Browsers, delivery and limits" section.
+  `docs/embedding.md`: the CSP recipe is one copy-pasteable policy (tested
+  in Chrome), the Mermaid `style-src-elem` note corrected (no nonce), hash
+  policies explained.
+
 <a id="101"></a>
 
 ## [1.0.1] — 2026-10-12

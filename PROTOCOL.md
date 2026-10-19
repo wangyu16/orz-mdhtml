@@ -4,7 +4,7 @@ The host protocols `orz-host-save@1`, `orz-host-ai@1` and
 `orz-host-include@1` are specified once for the whole orz family in
 orz-markdown:
 **[`spec/host-protocols.md`](https://github.com/wangyu16/orz-markdown/blob/main/spec/host-protocols.md)**
-(also in the installed package: `node_modules/orz-markdown/spec/host-protocols.md`).
+(also in the installed package from orz-markdown 2.4.0: `node_modules/orz-markdown/spec/host-protocols.md`).
 That document is canonical — messages, handshake, security rules on both
 sides, format-1 saves, versioning. This file used to hold the spec; it now
 lists only what is particular to orz-mdhtml. A host implements the protocols

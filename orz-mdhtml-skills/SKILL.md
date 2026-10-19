@@ -17,6 +17,31 @@ A document has two forms:
 "fix" the HTML** — everything but the island is regenerated, and a save in the
 browser rewrites the whole file from the text.
 
+> **Common mistakes** (check these before you assemble):
+>
+> - **Diagrams, charts, chemistry and QR codes are directives, not code
+>   fences.** Write `{{mermaid` … `}}`, `{{chart` … `}}`, `{{smiles C1=CC=CC=C1}}`,
+>   `{{qr https://…}}`. A ```` ```mermaid ```` (or ```` ```chart ````,
+>   ```` ```smiles ````) fence is shown as a code block, with no warning:
+>
+>   ````markdown
+>   Wrong:              Right:
+>   ```mermaid          {{mermaid
+>   graph TD            graph TD
+>     A --> B             A --> B
+>   ```                 }}
+>   ````
+> - **Header-less Markdown.** A plain `notes.md` with no `{{nyml` header
+>   assembles, but has no `uid` (preferences and save handles are not tied to
+>   the document) and no title but its first heading. Give it a header first:
+>   `npx orz-mdhtml@1 new` (no file name) prints a fresh header and starter
+>   body on stdout — paste its `{{nyml` … `}}` block (with its new `uid`) at
+>   the top of the file, then assemble. Never copy another document's header.
+> - **Settings as CLI options.** `assemble --title/--theme` is refused: title,
+>   theme, width (`measure`) and language live in the header.
+> - **Editing the `.md.html`.** Change `x.md` and assemble again; check
+>   `inspect` first, since the file may hold browser saves.
+
 The CLI is `orz-mdhtml` (Node ≥ 20.16; `npx orz-mdhtml@1 …` needs no install;
 this skill is for 1.x).
 Use `--json` on any command for one machine-readable object on stdout. Exit
@@ -42,17 +67,45 @@ npx orz-mdhtml@1 assemble notes.md --cdn    # → a small file that loads the en
 ```
 
 `new` mints the document's `uid`; keep it (it keys the reader's preferences
-and the save handle). `new --html` writes both files at once. `orz-mdhtml
-notes.md` is short for `assemble`. Theme ids: `orz-mdhtml themes`.
+and the save handle). `new --html` writes both files at once; `new` with no
+file name writes the text to stdout (`npx orz-mdhtml@1 new --title "Notes"`
+→ a header and a starter body to paste or redirect). `new --inline` is
+accepted and changes nothing (inline is the default). `orz-mdhtml notes.md`
+is short for `assemble`. Theme ids: `orz-mdhtml themes` (`--json` lists each
+`id`, `name`, `scheme` and the default).
+
+**Already have Markdown?** Turn `notes.md` (no header) into a document by
+putting a header on it — `npx orz-mdhtml@1 new --title "Notes" > header.md`,
+copy its `{{nyml` … `}}` block to the top of `notes.md` (keep the minted
+`uid`; drop the starter body), then `assemble notes.md`. Without a header it
+still assembles, with `uid: null` and the first heading as title.
+
+**Readable documents.**
+
+- `measure` sets the line length: `normal` (default) for prose, `wide` for
+  documents with wide tables, code or long equations, `full` for dashboards
+  and image grids. The reader can also change the width (it then edits the
+  header).
+- A long display equation does not wrap: break it with `\begin{aligned} …
+  \end{aligned}` (one `\\` per line, `&` before the `=`), or use
+  `measure: wide`.
+- A Mermaid diagram scales down to the column: with many nodes prefer
+  `graph TD` (top-down) over `graph LR`, which gets wide and its labels tiny;
+  split a big diagram into two.
+- Use headings (`##`) for structure; a `{{toc}}` near the top helps long
+  documents.
 
 ## Edit an existing document
 
 The `.md.html` can be edited and saved in a browser, so it may hold work the
 text twin lacks — even when `x.md` is the newer file. Always compare first.
 
-1. **Compare before you edit.** `npx orz-mdhtml@1 inspect x.md --json`
-   (works with only `x.md.html` too) and read `sha256` and `twin`:
+1. **Compare before you edit.** `npx orz-mdhtml@1 inspect x.md --json` and
+   read `sha256` and `twin` (inspect the file that exists: `inspect x.md`
+   fails with `no-such-file` when there is only `x.md.html`; then `inspect
+   x.md.html --json` reports `twin: null`):
    - no `x.md` yet → `npx orz-mdhtml@1 extract x.md.html` (exact, byte for byte);
+   - `twin: null` → the sibling does not exist;
    - `twin.holds: "same"` → go on;
    - `twin.holds: "different"` with `twin.earlier` set → the file holds an
      earlier text of `x.md`; go on (assemble replaces it);
@@ -100,18 +153,29 @@ unless you pass `--cdn` or `--inline`; a new file is inline.
 
 Includes: `assemble` keeps the includes the old file recorded;
 `assemble --resolve-includes` reads `{{md part.md}}` files from the text's
-folder (never outside it). Each include left unresolved is reported once as
-a warning, with why, and in `--json` `unresolved: [{ target, kind, reason }]`
-— the file shows an "Included file not available" note there. A recorded
-include whose file has changed since is a `stale-record` warning (`--json`
-`stale`): run `assemble --resolve-includes` to record the current text.
+folder (never outside it); `assemble --no-includes` stores none (the file
+then shows the note for each). Each include left unresolved is reported once
+as a warning, with why, and in `--json` `unresolved: [{ target, kind, reason
+}]` — `not-recorded` (pass `--resolve-includes`), `url` (the CLI fetches no
+URLs), `no-such-file`, `outside-folder` (never read, flag or not),
+`unreadable`, `not-utf8`, `folder-unreadable` — and the file shows an
+"Included file not available" note there. A recorded include whose file has
+changed since is a `stale-record` warning (`--json` `stale`): run `assemble
+--resolve-includes` to record the current text.
+
+`upgrade --no-text` re-assembles the file without writing its text twin.
 
 Content syntax (math, `{{mermaid}}`, `{{smiles}}`, `{{chart}}`, `::: ` containers,
 `{{md path}}` includes, …) is orz-markdown's: read its skill,
 `node_modules/orz-markdown/orz-markdown-skills/SKILL.md` or
 `https://cdn.jsdelivr.net/npm/orz-markdown/orz-markdown-skills/SKILL.md`.
 A relative link to another text twin (`[next](week2.md)`) becomes a link to
-its `.md.html` in the file.
+its `.md.html` in the file (in the read view and the preview; the text keeps
+`week2.md`, so links also work on GitHub); `deck.slides.md` →
+`deck.slides.html` and `x.paged.md` → `x.paged.html` likewise, `?query` and
+`#fragment` kept. Absolute URLs, `#anchors` and other files are left as
+written. (In a web app, `renderPreview(text, { twinLinks: false })` turns
+the rewrite off.)
 
 ## The document header (FC-18)
 
@@ -157,8 +221,9 @@ Read `input` (`text`, `assembled`, `legacy`, `html`), `kind`, `format`,
 `writable`, `shell.version` and `shell.relation` (`older` / `same` /
 `newer` than this tool), `uid`, `title`, `header.keys`, `includes`, `lint`,
 `checks` (a file's structure), `sha256` (of the text it holds: the
-`--replaces` token), `twin` (the sibling `x.md` ↔ `x.md.html`: `holds`
-`same` / `different` / `none`; `newer` — which was modified last: `input`
+`--replaces` token), `twin` (the sibling `x.md` ↔ `x.md.html`; `null` when
+it does not exist: `holds` `same` / `different` / `none` — `none`: it exists
+but holds no orz text; `newer` — which was modified last: `input`
 the inspected file, `twin` its sibling, `same-time`, `unknown`; `sha256` of
 the sibling's text; `earlier` when known), and **follow `advice`** — it
 names the command to run, with your file names:
@@ -183,7 +248,12 @@ names the command to run, with your file names:
   `npx orz-mdhtml@latest`; this tool's `assemble` and `upgrade` refuse to
   replace a newer shell (`newer-shell`) unless `--force` — do not force it;
 - lint errors → fix the header, then assemble;
-- another kind (`slides`, `paged`) → its own tool (`npx orz-slides`, …).
+- another kind → its own tool (`npx orz-slides@1`, `npx orz-paged@1`). The
+  kind comes from the **file name**: `x.slides.md` / `x.slides.html` and
+  `x.paged.md` / `x.paged.html` are refused (`other-kind`). A plain `x.md`
+  whose header says `carrier: slides` is still assembled as an md document,
+  with the lint warning `carrier-mismatch` — rename it `x.slides.md` if it is
+  a deck.
 
 ## When a command refuses (`--json`)
 
@@ -280,7 +350,8 @@ Platforms that show assembled files in an iframe use the host protocols
 ## What the file does for its reader
 
 Read view with the header's theme and ONE control, a pencil at the
-bottom-left (click: Edit; hover or tap: the list of every operation,
+bottom-left (click: Edit; hover, tap, or Tab to it and press ArrowUp: the
+list of every operation,
 including a reader-only *Text size* 80–160 % that is never saved into the
 file); **Edit** (Cmd/Ctrl+E): editor + live preview, theme and width
 pickers that write the header, the orz seal and the GitHub link at the far
@@ -293,7 +364,15 @@ the reader — *Replace it* or *Download a copy instead* — instead of
 overwriting your work; *New document* and *Save as new copy* (new `uid`) in the pencil's list and under More; a quiet,
 once-a-day update offer on local files. Reading and editing work in every
 modern browser; themes, math styles, diagram libraries and the editor load
-from CDNs.
+from CDNs. **Inline is not offline**: with no network a file shows its text
+unstyled (math unstyled, diagrams and charts not drawn) and edits in a plain
+text area. The first Save in Chromium asks for the file (a picker); later
+saves write it directly.
+
+Keys: `Cmd/Ctrl+E` edit · `Cmd/Ctrl+S` save · in the editor `Cmd/Ctrl+\`
+cycles split / editor / preview, `Cmd/Ctrl+Z` and `Shift+Cmd/Ctrl+Z` undo and
+redo, `Esc` leaves the text for the toolbar, `Cmd/Ctrl+P` (in the preview)
+prints the page, not the frame. The split view scrolls the preview with the text.
 
 ## Gotchas
 
@@ -312,7 +391,8 @@ from CDNs.
 - Keep the `uid` across revisions of a document. A different document needs
   its own: start it with `new` (or the file's *Save as new copy*), never by
   copying another text's header with its `uid`.
-- Package: `orz-mdhtml` 1.x depends on `orz-markdown ^2.3.0` (the carrier kit);
-  files record the shell version that wrote them.
+- Package: `orz-mdhtml` 1.x depends on `orz-markdown ^2.3.0` (the carrier kit;
+  1.0.2 bundles 2.3.0 and its files name that version, whatever kit is
+  installed); files record the shell version that wrote them.
 - Security: a `.md.html` runs the code inside it — treat files like programs
   and open only trusted ones.

@@ -8,7 +8,7 @@ reads like a themed website, edits itself in the browser and saves back in
 place. The file is always `assemble(text)`: the text inside it is the
 document; everything else is a shell that can be regenerated. Built on the
 carrier kit of [orz-markdown](https://www.npmjs.com/package/orz-markdown)
-(`^2.3.0`; orz text format 1).
+(`^2.3.0`; this release bundles 2.3.0; orz text format 1).
 
 ## What a 1.0 `.md.html` is
 
@@ -38,7 +38,8 @@ carrier kit of [orz-markdown](https://www.npmjs.com/package/orz-markdown)
   https://markdown.orz.how) and a link to this tool's GitHub repository. The
   theme and the width are document data (they live in the header), so
   choosing one — in the editor or from the read view — changes the document:
-  it is unsaved until you Save, and Cmd/Ctrl+Z undoes it.
+  it is unsaved until you Save, and Cmd/Ctrl+Z undoes it. The split view
+  scrolls the preview along with the text.
 - **Save, New, Copy.** **Save** (Cmd/Ctrl+S) writes `assemble(text)` — never
   the live page — back to the file. *Download a copy*, *New document* and
   *Save as new copy* (the same text with a new `uid`) are in the pencil's list
@@ -52,7 +53,7 @@ carrier kit of [orz-markdown](https://www.npmjs.com/package/orz-markdown)
   Served pages, framed pages and pages with a host never check.
 
 Content (title, theme, measure, language, author, licence…) comes only from the
-text's header:
+text's header (`{{nyml` on the first line, `kind: document` on the next):
 
 ```markdown
 {{nyml
@@ -68,10 +69,40 @@ measure: wide
 # Cell Biology — Week 3
 ```
 
-Examples: [`examples/metadata.md`](examples/metadata.md) and its inline
-[`metadata.md.html`](examples/metadata.md.html) (metadata in the header),
-[`examples/web-page.md`](examples/web-page.md) and its cdn
-[`web-page.md.html`](examples/web-page.md.html) (a small file for the web).
+| Key | Value |
+|---|---|
+| `carrier` | `md` (written by `new`) |
+| `uid` | the document's id, `doc-` + 10–32 of `[0-9a-z]`; `new` mints it — keep it, never invent or copy one |
+| `title`, `author`, `description`, `date`, `keywords`, `source` | document metadata (`keywords` comma-separated); no `title`: the first heading |
+| `license`, `license_name`, `license_url` | an SPDX id, or a name and a URL |
+| `lang` | BCP 47 language of the content (default `en`) |
+| `theme` | a theme id (below; default `light-neat-3`) |
+| `measure` | line length: `normal` (default), `wide`, `full` |
+| `format` | the text format, only `1` (omit it) |
+
+Your own tool's keys take the prefix `x_<tool>_`; unknown keys are kept and
+reported by `inspect` (lint). A Markdown file without a header still
+assembles (title from its first heading, no `uid`); to give it one, run
+`orz-mdhtml new --title "…"` with no file name — it prints a fresh header
+and a starter body on stdout — and paste the `{{nyml` … `}}` block at the
+top.
+
+Themes (`orz-mdhtml themes`; the reader can switch theme, which edits the
+header):
+
+| id | Name | | id | Name |
+|---|---|---|---|---|
+| `light-neat-3` | Orchard (default) | | `light-playful-1` | Playful (a ruled notebook on screen) |
+| `light-neat-1` | Neat | | `light-playful-2` | Playful 2 |
+| `light-neat-2` | Neat 2 | | `dark-elegant-1` | Dark Elegant |
+| `light-academic-1` | Academic | | `dark-elegant-2` | Dark Elegant 2 |
+| `light-academic-2` | Academic 2 | | `dark-elegant-3` | Nocturne |
+| `beige-decent-1` | Beige | | `beige-decent-2` | Beige 2 |
+
+Examples: [`examples/metadata.md`](https://github.com/wangyu16/orz-mdhtml/blob/main/examples/metadata.md) and its inline
+[`metadata.md.html`](https://github.com/wangyu16/orz-mdhtml/blob/main/examples/metadata.md.html) (metadata in the header),
+[`examples/web-page.md`](https://github.com/wangyu16/orz-mdhtml/blob/main/examples/web-page.md) and its cdn
+[`web-page.md.html`](https://github.com/wangyu16/orz-mdhtml/blob/main/examples/web-page.md.html) (a small file for the web).
 
 ## Install
 
@@ -90,7 +121,7 @@ For a web app, the browser engine and editor component:
 ## The CLI
 
 ```
-orz-mdhtml new [file.md] [--title T] [--theme id] [--measure m] [--lang l] [--html] [--cdn]
+orz-mdhtml new [file.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn]
 orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn] [--resolve-includes | --no-includes] [--replaces sha256]   (also: orz-mdhtml <file.md>)
 orz-mdhtml extract <file.md.html> [-o out.md] [--replaces sha256]
 orz-mdhtml upgrade <old.md.html> [-o out.md.html] [--text out.md | --no-text] [--cdn | --inline]
@@ -100,24 +131,26 @@ orz-mdhtml themes
 
 | Command | What it does |
 |---|---|
-| `new` | writes a new text twin: a header with `carrier: md`, a fresh `uid` and the given keys, then a starter body. `--html` also assembles it; without a file name the text goes to stdout. |
+| `new` | writes a new text twin: a header with `carrier: md`, a fresh `uid` and the given keys (`--measure normal\|wide\|full`), then a starter body. `--html` also assembles it; without a file name the text goes to stdout (a header to paste onto existing Markdown). |
 | `assemble` | writes `x.md.html` (or the `-o` path; missing folders are created) from `x.md` (exact text in, the same bytes every time). Keeps the delivery and the includes the existing file holds (`--cdn` / `--inline` choose the delivery); `--resolve-includes` reads file includes from the text's folder. An include left unresolved shows an "Included file not available" note in the file and is reported once with why (a warning, and `unresolved` in `--json`); a recorded include whose file has changed since is a warning too (`stale` in `--json`). |
 | `extract` | writes the exact text twin of an assembled file (`x.md.html` → `x.md`) and reports its includes. Replaces an existing, different `x.md` only when it is a known state (below). A 0.x file is refused with the advice to run `upgrade`; a cut-off file gives a warning. |
 | `upgrade` | turns a 0.x file (or a file of an older 1.x shell) into a file of this version, in place by default, and writes its text twin (`x.md`) unless `--no-text`. Keeps the file's delivery unless `--cdn` / `--inline`. Repairs a damaged engine; refuses (unless `--force`) to downgrade a newer shell or to upgrade a file cut off inside its text. |
 | `inspect` | diagnoses a text or a file of any version: kind, text format, shell version and how it compares to this tool, delivery, uid, header keys, lint, the file's structure (cut off? engine intact?), the SHA-256 of the text it holds, whether the sibling twin (`x.md` ↔ `x.md.html`) holds the same text (and that text's SHA-256) and which is newer, and advice in plain sentences naming the files. |
-| `themes` | lists the theme ids a header may name. |
+| `themes` | lists the theme ids a header may name, with their names (`--json`: `id`, `name`, `scheme`, `default`). |
 
 **Delivery.** Files are **inline** by default: the browser engine is inside the
 file (about 1 MB), so it opens without fetching the engine. `--cdn` writes a
 small file that loads the engine from
 `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js`
-(the file's own version, e.g. `orz-mdhtml-browser@1.0.1`) — for pages you
+(the file's own version, e.g. `orz-mdhtml-browser@1.0.2`) — for pages you
 publish on the web. Either way the theme stylesheets, KaTeX's
 and highlight.js's styles, the content libraries (Mermaid, SMILES, Chart.js)
 and the editor (CodeMirror) load from CDNs: reading styled content and editing
-need a network connection the first time. A slow or unreachable CDN never
-holds the page blank: the document shows at once, unstyled, and takes its
-theme when the stylesheets arrive.
+need a network connection the first time. **Inline is not offline**: a file
+opened with no network shows its text unstyled (no theme, math unstyled, diagrams and
+charts not drawn), and Edit falls back to a plain text area. A slow or
+unreachable CDN never holds the page blank: the document shows at once,
+unstyled, and takes its theme when the stylesheets arrive.
 
 **For scripts and agents.** Every command takes `--json` (one JSON object on
 stdout), `--help` and `--force`. Exit status: 0 done, 1 refused or failed, 2
@@ -211,7 +244,7 @@ arguments (`-o`, `--cdn`, `--resolve-includes`, `--text`…) and names a copy
 | `newer-shell` | the file was made by a newer orz-mdhtml (use `npx orz-mdhtml@latest`) | — |
 | `newer-format` | the text's format is newer than this tool writes | — |
 | `unclosed-island` | `upgrade`: the file was cut off inside its text | `extract x.md.html -o x.recovered.md` |
-| `other-kind` | an orz slides/paged document: use its own tool | — |
+| `other-kind` | an orz slides/paged document, known by its file name (`x.slides.md`, `x.paged.html`, …): use its own tool. (An `x.md` whose header says `carrier: slides` is assembled as md, with the lint warning `carrier-mismatch`.) | — |
 | `assembled-input` | `assemble` was given a `.md.html` | `extract x.md.html` |
 | `invalid-text` | the text cannot be assembled (NUL, a lone surrogate…) | — |
 | `engine-unavailable` | the inline engine is missing or stale (source checkout: `npm run bundle`) | — |
@@ -225,9 +258,11 @@ target, kind: "file" | "url", reason }]` (`not-recorded` — pass
 has changed since as `stale: [{ target, kind: "file", reason:
 "stale-record" }]` (`--resolve-includes` records the current text).
 `inspect --json`'s `twin` is `{ name, holds: "same" | "different" | "none",
-newer: "input" | "twin" | "same-time" | "unknown", sha256, earlier? }` —
-`newer` says which file was modified last: `input` the inspected one, `twin`
-its sibling.
+newer: "input" | "twin" | "same-time" | "unknown", sha256, earlier? }`, or
+`null` when the sibling does not exist — `holds: "none"`: it exists but holds
+no orz text; `newer` says which file was modified last: `input` the inspected
+one, `twin` its sibling. Inspect the file that exists: `inspect x.md` fails
+with `no-such-file` when there is only `x.md.html`.
 
 **Editing an existing document (the safe loop).** Before you edit `x.md`,
 run `orz-mdhtml inspect x.md`: if it says `x.md.html` holds a different text
@@ -257,7 +292,11 @@ Exports: `assemble`, `extract`, `readDocument`, `newDocument`, `inspect`,
 `DEFAULT_MEASURE`, `VERSION`, `ORZ_MARKDOWN_VERSION`, `FORMATS`,
 `BUNDLE_FILE`, `cdnBundleUrl`, `engineSource`, `engineFiles` (types included).
 The Node library writes the same bytes as the browser engine's
-`OrzCarrier.assemble` for the same text and options. Includes
+`OrzCarrier.assemble` for the same text and options, whichever orz-markdown
+2.x your installation resolves (since 1.0.2 a file names the kit version this
+release bundles, `ORZ_MARKDOWN_VERSION`). A relative link to a text twin
+(`[next](week2.md)`) points at its assembled file (`week2.md.html`) in the
+read view and the preview; the text keeps `week2.md`. Includes
 (`{{md part.md}}`, `{{md https://…}}`) are shown by a file only from its
 `#orz-includes` record: pass them resolved as `assemble(text, { includes })`
 (the CLI keeps the existing file's record, and `assemble --resolve-includes`
@@ -268,14 +307,14 @@ note.
 ## In web apps
 
 The editor every `.md.html` carries is also a component for web apps:
-[`orz-mdhtml-browser`](browser/README.md) (`npm i orz-mdhtml-browser@1`;
+[`orz-mdhtml-browser`](https://github.com/wangyu16/orz-mdhtml/blob/main/browser/README.md) (`npm i orz-mdhtml-browser@1`;
 ES module or a plain `<script>` that sets `globalThis.OrzCarrier`). An app
 mounts any number of editors, keeps the text wherever it likes through its own
 hooks (save, AI with a review step, includes, assets, links, ids), works under
 a nonce Content-Security-Policy, and assembles `.md.html` files only when it
 needs one. See [docs/embedding.md](docs/embedding.md) (shipped in both
 packages: `node_modules/orz-mdhtml-browser/docs/embedding.md`) and the
-working example in [`examples/webapp/`](examples/webapp/).
+working example in [`examples/webapp/`](https://github.com/wangyu16/orz-mdhtml/tree/main/examples/webapp).
 
 A platform that shows assembled files in an iframe speaks the host protocols
 (`orz-host-save@1`, `orz-host-ai@1`, `orz-host-include@1`; canonical spec:
@@ -297,13 +336,21 @@ host's include resolution.
   again. When unsure what a file is, `orz-mdhtml inspect --json <file>` and
   follow its `advice`; an old file gets `orz-mdhtml upgrade`.
 
+## Keys
+
+In the read view: `Cmd/Ctrl+E` edit, `Cmd/Ctrl+S` save; on the pencil (Tab to
+it) `ArrowUp` opens its list. In the editor: `Cmd/Ctrl+S` save, `Cmd/Ctrl+\`
+cycles split / editor / preview, `Cmd/Ctrl+Z` undo, `Shift+Cmd/Ctrl+Z` redo,
+`Esc` leaves the text for the toolbar, `Cmd/Ctrl+P` in the preview prints the
+page (not the preview frame; the read view keeps the browser's print).
+
 ## Browser support
 
 | | Chromium (Chrome, Edge, …) | Firefox, Safari |
 |---|---|---|
 | Read, themes, copy as Markdown | yes | yes |
 | Edit (editor, live preview, header pickers) | yes | yes |
-| Save in place (File System Access API) | yes | — Save downloads the file instead |
+| Save in place (File System Access API) | yes — the first Save asks for the file (a picker), later saves write it directly | — Save downloads the file instead |
 | Download a copy | download | download |
 | New document, Save as new copy | file picker | download |
 | Quiet update | saved in place | downloaded |
@@ -335,7 +382,10 @@ ends harmlessly with "check your connection" — the file is not changed. Use
 saved theme and the `<title>` into the header, keeps the file's delivery, and
 mints a `uid` (0.x ids are not valid uids). The 0.9 API (`buildMdHtml` and
 friends) and CLI options (`--theme`, `--title` on generation) are gone: content
-lives in the text's header now.
+lives in the text's header now. **The default delivery changed**: 0.x wrote
+small files that loaded the engine from the CDN; 1.0 writes **inline** files
+(the engine inside, about 1 MB). `upgrade` keeps each file's own delivery;
+pass `--cdn` for pages you publish on the web.
 
 ## Versions
 
@@ -362,8 +412,8 @@ reader clicks *Update now*.
 
 ## Development
 
-See [CLAUDE.md](CLAUDE.md) for the architecture, commands and conventions,
-[CHANGELOG.md](CHANGELOG.md) for releases.
+See [CLAUDE.md](https://github.com/wangyu16/orz-mdhtml/blob/main/CLAUDE.md) for the architecture, commands and conventions,
+[CHANGELOG.md](https://github.com/wangyu16/orz-mdhtml/blob/main/CHANGELOG.md) for releases.
 
 ## License
 

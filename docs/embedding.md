@@ -24,7 +24,7 @@ npm install orz-mdhtml-browser@1   # or: npm i orz-mdhtml-browser@1
 | a bundler (Vite, esbuild, webpack) | `import { mountEditor } from 'orz-mdhtml-browser'` | `esm/orz-mdhtml.browser.mjs` (`exports` → `import`) |
 | a plain `<script>` | `<script src=".../orz-mdhtml.browser.js">` → `globalThis.OrzCarrier` | `orz-mdhtml.browser.js` (`exports` → `default`) |
 | `require()` | not supported: it throws, pointing to `import` or `<script>` | `require.cjs` (`exports` → `require`) |
-| the CDN | `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js` (e.g. `@1.0.1`; pin an exact version) | the same IIFE |
+| the CDN | `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js` (e.g. `@1.0.2`; pin an exact version) | the same IIFE |
 
 Types: `orz-mdhtml-browser/index.d.ts` (`Editor`, `EditorOptions`,
 `EditorHooks`, …). The ES module sets no global and boots nothing; the IIFE
@@ -139,17 +139,30 @@ nonce policy, pass the nonce as `nonce` (FC-19 §3): the component stamps it on
 CodeMirror's `<script>` and `<style>` and on every script and style of the
 preview frame. Without it, a nonce or hash policy blocks the preview frame's
 inline scripts and the editor reports it (`error` event, source `render`).
-The example's policy:
+The example's policy (one header value; replace `RANDOM` with a fresh nonce
+per response):
 
 ```
-default-src 'none';
-script-src 'nonce-RANDOM' 'strict-dynamic';
-style-src 'self' 'nonce-RANDOM' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com;
-style-src-attr 'unsafe-inline';          (KaTeX and the diagram libraries write style attributes)
-font-src https://cdn.jsdelivr.net https://fonts.gstatic.com data:;
-img-src 'self' data: blob: https:;       (wherever resolveAsset points)
-connect-src 'self' https://cdn.jsdelivr.net;
+default-src 'none'; script-src 'nonce-RANDOM' 'strict-dynamic'; style-src 'self' 'nonce-RANDOM' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src https://cdn.jsdelivr.net https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net
 ```
+
+Why each part: `script-src` with `'strict-dynamic'` lets the nonce cover the
+scripts the component loads (CodeMirror, the preview libraries);
+`style-src-attr 'unsafe-inline'` is for the style attributes KaTeX and the
+diagram libraries write; `img-src` must cover wherever `hooks.resolveAsset`
+points; `connect-src` lets the component fetch from jsDelivr. The same
+value works in a `<meta http-equiv="Content-Security-Policy">` tag (the
+example does that). Tested in Chrome: the editor (CodeMirror 6), math,
+code highlighting, Mermaid, Chart.js and SMILES render with no violation
+but one — Mermaid's run-time `<style>` (below).
+
+**Use a nonce, not hashes.** A hash-only policy blocks the preview frame's
+inline scripts and the scripts the component loads; `mountEditor` takes no
+hash list. (`orz-markdown/carrier/editor` exports `PREVIEW_BRIDGE_HASH` and
+`previewScriptHashes(options)` for apps that build their own preview frame
+with the kit; `orz-mdhtml-browser` re-exports neither.) When the policy
+blocks the preview, the `error` event's message may name the kit's option
+`preview.nonce`: here the option is `nonce` on `mountEditor`.
 
 What loads from where: CodeMirror 6 from
 `cdn.jsdelivr.net/npm/orz-markdown@<version>/vendor/codemirror6.js` (pinned,
@@ -157,8 +170,14 @@ SRI-checked; a textarea until it arrives); themes from
 `cdn.jsdelivr.net/npm/orz-markdown@<version>/themes/`; KaTeX CSS from
 jsDelivr, highlight.js from cdnjs, Mermaid / Chart.js from jsDelivr, SMILES
 from unpkg (the preview libraries; with `'strict-dynamic'` the nonce covers
-them). Mermaid inserts `<style>` elements at run time: allow them with
-`style-src-elem 'unsafe-inline'` if your documents use diagrams.
+them). Mermaid inserts `<style>` elements at run time, which a nonce policy
+blocks (the diagram is drawn, unstyled). If your documents use diagrams, add
+a `style-src-elem` directive **without a nonce** (with a nonce present,
+`'unsafe-inline'` is ignored):
+
+```
+style-src-elem 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com
+```
 
 ## Without an editor
 
