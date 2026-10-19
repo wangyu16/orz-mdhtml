@@ -139,18 +139,23 @@ nonce policy, pass the nonce as `nonce` (FC-19 §3): the component stamps it on
 CodeMirror's `<script>` and `<style>` and on every script and style of the
 preview frame. Without it, a nonce or hash policy blocks the preview frame's
 inline scripts and the editor reports it (`error` event, source `render`).
-The example's policy (one header value; replace `RANDOM` with a fresh nonce
-per response):
+A tested policy (one header value; replace `RANDOM` with a fresh nonce per
+response; `examples/webapp/` uses its own variant — `frame-src 'self'` for its
+demo frame instead of YouTube, plus `base-uri 'none'; form-action 'none'`,
+which you may add too):
 
 ```
-default-src 'none'; script-src 'nonce-RANDOM' 'strict-dynamic'; style-src 'self' 'nonce-RANDOM' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src https://cdn.jsdelivr.net https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net
+default-src 'none'; script-src 'nonce-RANDOM' 'strict-dynamic'; style-src 'self' 'nonce-RANDOM' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src https://cdn.jsdelivr.net https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net; frame-src https://www.youtube.com
 ```
 
 Why each part: `script-src` with `'strict-dynamic'` lets the nonce cover the
 scripts the component loads (CodeMirror, the preview libraries);
 `style-src-attr 'unsafe-inline'` is for the style attributes KaTeX and the
 diagram libraries write; `img-src` must cover wherever `hooks.resolveAsset`
-points; `connect-src` lets the component fetch from jsDelivr. The same
+points; `connect-src` lets the component fetch from jsDelivr;
+`frame-src https://www.youtube.com` is only for documents that embed YouTube
+videos (`{{youtube …}}`: the player is a youtube.com/embed frame; without it
+the video is blocked) — drop it otherwise. The same
 value works in a `<meta http-equiv="Content-Security-Policy">` tag (the
 example does that). Tested in Chrome: the editor (CodeMirror 6), math,
 code highlighting, Mermaid, Chart.js and SMILES render with no violation
@@ -160,7 +165,10 @@ but one — Mermaid's run-time `<style>` (below).
 inline scripts and the scripts the component loads; `mountEditor` takes no
 hash list. (`orz-markdown/carrier/editor` exports `PREVIEW_BRIDGE_HASH` and
 `previewScriptHashes(options)` for apps that build their own preview frame
-with the kit; `orz-mdhtml-browser` re-exports neither.) When the policy
+with the kit; `orz-mdhtml-browser` re-exports neither. Take the hash from
+the same orz-markdown version the frame runs: the bridge, and so its hash,
+differs between kit versions — 2.3.0, which orz-mdhtml 1.0 embeds, and 2.4.0
+differ.) When the policy
 blocks the preview, the `error` event's message may name the kit's option
 `preview.nonce`: here the option is `nonce` on `mountEditor`.
 
@@ -171,7 +179,7 @@ SRI-checked; a textarea until it arrives); themes from
 jsDelivr, highlight.js from cdnjs, Mermaid / Chart.js from jsDelivr, SMILES
 from unpkg (the preview libraries; with `'strict-dynamic'` the nonce covers
 them). Mermaid inserts `<style>` elements at run time, which a nonce policy
-blocks (the diagram is drawn, unstyled). If your documents use diagrams, add
+blocks (the diagram is drawn unreadable: black shapes). If your documents use diagrams, add
 a `style-src-elem` directive **without a nonce** (with a nonce present,
 `'unsafe-inline'` is ignored):
 
