@@ -5,7 +5,8 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { THEMES, DEFAULT_THEME, isThemeId } from '../src/themes.js';
-import { VERSION } from '../src/version.js';
+import { VERSION as INSTALLED_KIT } from 'orz-markdown/version';
+import { VERSION, ORZ_MARKDOWN_VERSION } from '../src/version.js';
 
 const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string; dependencies: Record<string, string>; devDependencies: Record<string, string> };
 const sources = (dir: string): string[] => readdirSync(dir).filter((f) => /\.(ts|js|cjs|mjs)$/.test(f)).map((f) => `${dir}/${f}`);
@@ -20,8 +21,10 @@ describe('base', () => {
       expect(src, file).not.toMatch(/path-browserify|build\/shims|shims\/|inject\s*:/);
       expect(src, file).not.toMatch(/require\.resolve\(['"]orz-markdown|orzPackageJson|walking up/);
     }
-    expect(readFileSync('src/lib.ts', 'utf8')).toMatch(/from 'orz-markdown\/version'/);
+    // read at build time only (1.0.2): src/version.ts bakes the kit the build bundles; src/ never imports the installed kit's version
+    expect(readFileSync('scripts/sync-version.ts', 'utf8')).toMatch(/from 'orz-markdown\/version'/);
     expect(readFileSync('build/bundle.ts', 'utf8')).toMatch(/from 'orz-markdown\/version'/);
+    for (const file of [...sources('src'), ...sources('src/browser'), ...sources('src/browser/md')]) expect(readFileSync(file, 'utf8'), file).not.toMatch(/from 'orz-markdown\/version'/);
   });
 
   it('[B.2] one theme list — the kit\'s (orz-markdown/themes), equal to the stylesheets it ships', () => {
@@ -36,7 +39,8 @@ describe('base', () => {
     }
   });
 
-  it('[B.3] VERSION is the package version', () => {
+  it('[B.3] VERSION is the package version; ORZ_MARKDOWN_VERSION is the kit this build bundles', () => {
     expect(VERSION).toBe(pkg.version);
+    expect(ORZ_MARKDOWN_VERSION).toBe(INSTALLED_KIT);
   });
 });

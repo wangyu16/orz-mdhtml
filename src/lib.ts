@@ -13,7 +13,7 @@
  * `findRendererBundle`, `findAsset`, `orzVersionOf`, `selfVersionOf`): content
  * (title, theme, metadata) now comes only from the text's header.
  */
-import { VERSION as ORZ_MARKDOWN_VERSION } from 'orz-markdown/version';
+import { ORZ_MARKDOWN_VERSION } from './version.js';
 import { assemble as assembleText, type AssembleOptions } from './assemble.js';
 import { upgrade as upgradeFile, type UpgradeOptions, type UpgradeResult } from './legacy.js';
 import { engineSource } from './engine.js';
@@ -27,7 +27,11 @@ export { MEASURES, DEFAULT_MEASURE, type Measure } from './presentation.js';
 export { VERSION } from './version.js';
 export { engineSource, engineFiles, type EngineFiles } from './engine.js';
 
-/** The orz-markdown version this release renders with (its themes, KaTeX and CodeMirror pins). */
+/**
+ * The orz-markdown version this release bundles and renders with (its themes,
+ * KaTeX and CodeMirror pins), fixed at build time: the version its engine
+ * embeds and its files name, whatever orz-markdown an installation resolves.
+ */
 export { ORZ_MARKDOWN_VERSION };
 
 /** The engine of an inline assembly: the caller's, else this release's bundle. */

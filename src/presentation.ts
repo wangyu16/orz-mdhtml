@@ -11,7 +11,7 @@
  */
 import { readHeader } from 'orz-markdown/carrier';
 import { PREVIEW_CDN } from 'orz-markdown/preview-frame';
-import { VERSION as ORZ_MARKDOWN_VERSION } from 'orz-markdown/version';
+import { ORZ_MARKDOWN_VERSION } from './version.js';
 import { themeOf, type ThemeInfo } from './themes.js';
 
 /** The `measure` values of FC-18 §5.1 (orz-markdown's `measure-*` article classes). */
@@ -39,7 +39,11 @@ export function presentationOf(text: string): Presentation {
   return { theme: themeOf(fields['theme']?.trim()), measure: isMeasure(measure) ? measure : DEFAULT_MEASURE };
 }
 
-/** The pinned jsDelivr URL of an orz-markdown theme stylesheet (it imports `common.css` itself). */
+/**
+ * The pinned jsDelivr URL of an orz-markdown theme stylesheet (it imports
+ * `common.css` itself), at the kit version this release bundles (src/version.ts,
+ * fixed at build time), so Node and the browser engine write the same URL.
+ */
 export function themeHref(id: string): string {
   return `https://cdn.jsdelivr.net/npm/orz-markdown@${ORZ_MARKDOWN_VERSION}/themes/${themeOf(id).id}.css`;
 }

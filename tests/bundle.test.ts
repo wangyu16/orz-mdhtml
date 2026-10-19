@@ -283,6 +283,34 @@ chrome('real Chrome (playwright-core, channel chrome)', () => {
     await page.context().close();
   }, 180_000);
 
+  it('[A.9] browser parity with a newer installed kit: dist/lib.js, run where orz-markdown/version says 9.9.9, writes the bytes of the bundle\'s OrzCarrier.assemble (inline and cdn; no theme URL names the installed kit)', async () => {
+    const t = tempDir('orz-mdhtml-newer-kit-');
+    try {
+      // a resolve hook: the installed orz-markdown reports a newer version (what a `^` range resolves after a kit release)
+      const hook = `export async function resolve(s, c, n) { if (s === 'orz-markdown/version') return { url: 'data:text/javascript,export const VERSION = "9.9.9";', shortCircuit: true }; return n(s, c); }`;
+      t.write('register.mjs', `import { register } from 'node:module';\nregister(${JSON.stringify(`data:text/javascript,${encodeURIComponent(hook)}`)});\n`);
+      const texts = [TEXTS[0][1], '{{nyml\nkind: document\ntitle: T\ntheme: dark-elegant-1\nmeasure: wide\n}}\n\n# Hi\n\ntext\n'];
+      t.write('run.mjs', `import { VERSION as KIT } from 'orz-markdown/version';\nimport * as M from ${JSON.stringify(new URL(`file://${join(process.cwd(), 'dist/lib.js')}`).href)};\nconst texts = ${JSON.stringify(texts)};\nprocess.stdout.write(JSON.stringify({ kit: KIT, lib: M.ORZ_MARKDOWN_VERSION, out: texts.flatMap((x) => [M.assemble(x), M.assemble(x, { delivery: 'cdn' })]) }));\n`);
+      const r = spawnSync(process.execPath, ['--import', join(t.dir, 'register.mjs'), join(t.dir, 'run.mjs')], { cwd: process.cwd(), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+      expect(r.status, r.stderr).toBe(0);
+      const child = JSON.parse(r.stdout) as { kit: string; lib: string; out: string[] };
+      expect(child.kit).toBe('9.9.9'); // the simulation took effect
+      expect(child.lib).not.toBe('9.9.9');
+      expect(child.out.some((h) => h.includes('orz-markdown@9.9.9'))).toBe(false);
+      const page = await bundlePage();
+      const fromChrome = await page.evaluate(async (xs) => {
+        const C = (globalThis as unknown as { OrzCarrier: Carrier }).OrzCarrier;
+        const out: string[] = [];
+        for (const x of xs) out.push(await C.assemble(x), await C.assemble(x, { delivery: 'cdn' }));
+        return out;
+      }, texts);
+      fromChrome.forEach((h, i) => expect(child.out[i] === h, `case ${i}`).toBe(true));
+      await page.context().close();
+    } finally {
+      t.clean();
+    }
+  }, 120_000);
+
   it('[W.2] \\ce{H2O} renders through the bundle (mhchem on the KaTeX that renders)', async () => {
     const page = await bundlePage();
     const html = await page.evaluate(() => (globalThis as unknown as { OrzCarrier: Carrier }).OrzCarrier.renderPreview('Water: $\\ce{H2O}$ and $\\ce{CO2 + C -> 2 CO}$\n'));

@@ -20,13 +20,13 @@
  *   in-file update — so in this run `C.update.from-previous` is not applicable.
  *
  * KIT GAP (orz-markdown 2.3.0; claim H.3): from 1.0.1 a previous format-1
- * release exists — the published orz-mdhtml-browser 1.0.0 (the devDependency
+ * release exists — the published orz-mdhtml-browser (1.0.1 since 1.0.2; the devDependency
  * `orz-mdhtml-browser-previous`, pinned exactly). Given as `previous`, the
  * harness's `C.law.content-independence` also requires `renderPreview` to equal
  * the previous release's, which fails whenever the kit's parser output changes
  * (2.3.0 adds `data-url` to `{{youtube}}`) although the text-derived parts are
  * equal. So the 46-check run keeps `firstRelease`, and `C.update.from-previous`
- * runs against 1.0.0 in a registration of its own (`only` that check).
+ * runs against it in a registration of its own (`only` that check).
  *
  * No `allowSkips`: the final `[conformant]` test fails unless all 46 checks ran
  * in real Chrome and passed. Runs as its own vitest project after the others
@@ -45,7 +45,7 @@ type Browser = import('playwright-core').Browser;
 
 /** The previous release (the published orz-mdhtml-browser, a devDependency alias pinned to it). */
 const PREVIOUS = join(process.cwd(), 'node_modules', 'orz-mdhtml-browser-previous');
-const PREVIOUS_VERSION = '1.0.0';
+const PREVIOUS_VERSION = '1.0.1';
 
 /** The next patch version (`0.9.3` → `0.9.4`, `1.0.0-rc.1` → `1.0.0`). */
 export const bumpPatch = (v: string): string => {
@@ -163,7 +163,7 @@ if (!browser) {
     return { ...t, previous: { bundle: join(PREVIOUS, BUNDLE_FILE), release: join(PREVIOUS, 'release.json') } };
   };
   describe('[H.3] the previous release', () => {
-    it('[H.3] is the published orz-mdhtml-browser 1.0.0 (pinned devDependency; its manifest and package say so)', () => {
+    it('[H.3] is the published orz-mdhtml-browser 1.0.1 (pinned devDependency; its manifest and package say so)', () => {
       expect(parseManifest(JSON.parse(readFileSync(join(PREVIOUS, 'release.json'), 'utf8')), 'md')?.version).toBe(PREVIOUS_VERSION);
       expect(JSON.parse(readFileSync(join(PREVIOUS, 'package.json'), 'utf8'))).toMatchObject({ name: 'orz-mdhtml-browser', version: PREVIOUS_VERSION });
       expect(JSON.parse(readFileSync('package.json', 'utf8')).devDependencies['orz-mdhtml-browser-previous']).toBe(`npm:orz-mdhtml-browser@${PREVIOUS_VERSION}`);

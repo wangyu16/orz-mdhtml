@@ -43,6 +43,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { isScriptSafe } from 'orz-markdown/carrier/shell';
 import { VERSION as ORZ_MARKDOWN_VERSION } from 'orz-markdown/version';
+import { ORZ_MARKDOWN_VERSION as BAKED_KIT_VERSION } from '../src/version.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export const BUNDLE_FILE = 'orz-mdhtml.browser.js';
@@ -82,7 +83,7 @@ const versionAs = (version: string | undefined): Plugin => ({
   name: 'version-as',
   setup(b) {
     if (version === undefined) return;
-    b.onLoad({ filter: /[\\/]src[\\/]version\.ts$/ }, () => ({ contents: `export const VERSION = ${JSON.stringify(version)};\n`, loader: 'ts' }));
+    b.onLoad({ filter: /[\\/]src[\\/]version\.ts$/ }, () => ({ contents: `export const VERSION = ${JSON.stringify(version)};\nexport const ORZ_MARKDOWN_VERSION = ${JSON.stringify(ORZ_MARKDOWN_VERSION)};\n`, loader: 'ts' }));
   },
 });
 
@@ -111,6 +112,8 @@ export function checkBundleRule(code: string, what: string): void {
 export async function buildBrowser(o: { version?: string } = {}): Promise<BrowserBuild> {
   const pkgVersion = (JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { version: string }).version;
   const version = o.version ?? pkgVersion;
+  // The theme URLs name src/version.ts's kit version; it must be the kit this build bundles.
+  if (BAKED_KIT_VERSION !== ORZ_MARKDOWN_VERSION) throw new Error(`src/version.ts names orz-markdown ${BAKED_KIT_VERSION} but the build bundles ${ORZ_MARKDOWN_VERSION}: run \`npm run build\` (its prebuild syncs src/version.ts)`);
   const common = {
     bundle: true, minify: true, platform: 'browser' as const, target: ['es2020'], write: false, logLevel: 'silent' as const,
     charset: 'ascii' as const, legalComments: 'none' as const, absWorkingDir: ROOT, plugins: [oneKatex, versionAs(o.version)],
