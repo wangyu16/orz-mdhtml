@@ -144,7 +144,7 @@ describe('the bundle and its package (Node)', () => {
 
   it('[W.7] publishing safety: prepublishOnly refuses a release.json that does not match the files (version, integrity), require() gets a clear error', () => {
     const pkg = JSON.parse(readFileSync('browser/package.json', 'utf8')) as { scripts?: Record<string, string> };
-    expect(pkg.scripts?.prepublishOnly).toBe('node scripts/check-release.mjs');
+    expect(pkg.scripts?.prepublishOnly).toBe('node scripts/check-release.mjs && cd .. && npx tsx scripts/release-check.ts && npx tsx scripts/test-release.ts --check');
     const run = (dir: string): { status: number | null; out: string } => {
       const r = spawnSync(process.execPath, [join(dir, 'scripts', 'check-release.mjs')], { encoding: 'utf8' });
       return { status: r.status, out: `${r.stdout}${r.stderr}` };

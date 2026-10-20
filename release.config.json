@@ -1,0 +1,51 @@
+{
+  "$comment": "Release facts of this package, read by scripts/release-check.ts and scripts/test-release.ts (the family tooling, identical in every orz package; family root notes/PHASE4-CLAIMS.md).",
+  "browser": "browser",
+  "kit": {
+    "name": "orz-markdown",
+    "required": "2.3.0"
+  },
+  "manifest": "browser/release.json",
+  "bundles": [
+    "browser/orz-mdhtml.browser.js",
+    "browser/esm/orz-mdhtml.browser.mjs",
+    "browser/release.json",
+    "dist"
+  ],
+  "checks": [
+    [
+      "node",
+      "browser/scripts/check-release.mjs"
+    ]
+  ],
+  "build": [
+    "npm",
+    "run",
+    "build"
+  ],
+  "changelog": "CHANGELOG.md",
+  "test": {
+    "fast": [
+      "--project",
+      "main",
+      "--exclude",
+      "tests/bundle.test.ts",
+      "--exclude",
+      "tests/webapp.test.ts",
+      "--exclude",
+      "tests/standalone.test.ts"
+    ],
+    "changedAll": [
+      "package.json",
+      "package-lock.json",
+      "vitest.config.ts",
+      "release.config.json",
+      "tests/global-setup.ts",
+      "build/",
+      "src/browser/"
+    ],
+    "chrome": true,
+    "retries": 2,
+    "base": "origin/main"
+  }
+}

@@ -5,6 +5,18 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
 
 ## [Unreleased]
 
+### Release tooling
+
+- Publishing no longer re-runs the suite: `npm run test:release` runs it once
+  on the release commit and writes a green-run stamp (`.release/green.json`,
+  git-ignored); both `prepublishOnly`s run the family release gate
+  (`scripts/release-check.ts`, shared by every orz package, facts in
+  `release.config.json`: lockstep, dated entry, the kit installed from the
+  registry and bundled, clean tree, release manifest) and the stamp check, in
+  seconds. New scripts `release:check`, `test:fast`, `test:changed`,
+  `test:release`; the real-Chrome files are a vitest project of their own
+  (`chrome`). Development tooling only; nothing shipped changes.
+
 <a id="102"></a>
 
 ## [1.0.2] — 2026-10-19
