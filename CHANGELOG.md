@@ -16,6 +16,10 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
   seconds. New scripts `release:check`, `test:fast`, `test:changed`,
   `test:release`; the real-Chrome files are a vitest project of their own
   (`chrome`). Development tooling only; nothing shipped changes.
+- A file that fails in the stamp run is re-run alone with only its failed
+  tests (`vitest -t` on their exact names; up to 2 tries); a suite-level
+  failure (a hook, the file itself, a failed suite no failed test explains)
+  re-runs the whole file. The stamp records which, per try.
 
 <a id="102"></a>
 
