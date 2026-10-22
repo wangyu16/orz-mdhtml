@@ -35,6 +35,15 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
   text stays exactly as it is; `--json`: `twinWas: "source"`), and `inspect`
   advises exactly that, from either side (D-90).
 
+### Docs and example web app
+
+- The example web app's policy (`examples/webapp/index.html`) and the
+  recipe in `docs/embedding.md` allow `connect-src blob:` (with `img-src
+  blob:`): from orz-markdown 2.4.0 the editor reads the bytes of a `blob:`
+  URL `resolveAsset` gives (the app's uploads) to hand the sandboxed preview
+  the Blob; without it the example's upload shows a CSP violation (D-119,
+  D-67).
+
 ### Release tooling
 
 - Publishing no longer re-runs the suite: `npm run test:release` runs it once

@@ -13,9 +13,12 @@
     theme / KaTeX / highlight.js / Google Fonts hosts; style-src-attr for the
     style attributes KaTeX and the diagram libraries write.
   - connect-src: jsDelivr (inline assembly fetches the engine when the page
-    loaded it by URL; this page loads it from 'self').
+    loaded it by URL; this page loads it from 'self'), and blob: — this page's
+    resolveAsset gives the object URLs of its uploads, and the editor reads a
+    blob: URL's bytes once to hand the sandboxed preview the Blob (the preview
+    cannot load the page's object URLs). img-src has blob: for the same URLs.
 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-orz-demo-nonce' 'strict-dynamic'; style-src 'self' 'nonce-orz-demo-nonce' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src https://cdn.jsdelivr.net https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net; frame-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'nonce-orz-demo-nonce' 'strict-dynamic'; style-src 'self' 'nonce-orz-demo-nonce' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src https://cdn.jsdelivr.net https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' blob: https://cdn.jsdelivr.net; frame-src 'self'; base-uri 'none'; form-action 'none'">
 <title>orz-mdhtml — embedding example</title>
 <link rel="stylesheet" href="app.css">
 </head>

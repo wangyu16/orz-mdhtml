@@ -106,7 +106,7 @@ if (r.ok && await myConfirm(r.proposal.original, r.proposal.proposed)) editor.ap
 | `save(text)` | on Save / Cmd+S / `editor.save()` | a promise; reject to report a failure (the editor stays dirty). **With `save`, you own persistence**: nothing is written to disk or downloaded |
 | `ai.operations`, `ai.request(op, { text, selection? })` | the AI menu and `editor.proposeAi` (the proposal is reviewed before `applyAi` writes it), `editor.requestAi` | `{ proposed }` — the replacement of the selection (`selection: true` operations) or of the whole text |
 | `fetchInclude(target)` | the preview meets an include `includes` lacks: a URL (`{{md https://…}}` / `{{markdown …}}` / `{{md-include …}}`), or a file include's path as written (`{{md parts/a.md}}` → `'parts/a.md'`; you read your own files) | the Markdown, or `null`. Your trust policy (allowlist) decides |
-| `resolveAsset(path)` | every relative `src` / `srcset` / `poster` in the preview, **synchronously** (the preview does not wait) | the URL to load, as a string — not a promise: a URL your app already knows (a `blob:` URL of a stored asset, a public URL, a URL signed beforehand) |
+| `resolveAsset(path)` | every relative `src` / `srcset` / `poster` in the preview, **synchronously** (the preview does not wait) | the URL to load, as a string — not a promise: a URL your app already knows (a `blob:` URL of a stored asset — then allow `connect-src blob:` and `img-src blob:`, see the policy below —, a public URL, a URL signed beforehand) |
 | `uploadAsset(file)` | a file pasted or dropped into the editor, `editor.uploadAssets` | the relative path to insert (`![name](path)` for images) |
 | `resolveLink(href)` | a link clicked in the preview (as written, e.g. `week2.md`) | the URL to open |
 | `mintUid()` | `editor.ensureUid()` when the header has no `uid` | a **promise** of a `doc-[0-9a-z]{10,32}` id from your registry (FC-18 §10) |
@@ -145,14 +145,17 @@ demo frame instead of YouTube, plus `base-uri 'none'; form-action 'none'`,
 which you may add too):
 
 ```
-default-src 'none'; script-src 'nonce-RANDOM' 'strict-dynamic'; style-src 'self' 'nonce-RANDOM' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src https://cdn.jsdelivr.net https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net; frame-src https://www.youtube.com
+default-src 'none'; script-src 'nonce-RANDOM' 'strict-dynamic'; style-src 'self' 'nonce-RANDOM' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; style-src-attr 'unsafe-inline'; font-src https://cdn.jsdelivr.net https://fonts.gstatic.com data:; img-src 'self' data: blob: https:; connect-src 'self' blob: https://cdn.jsdelivr.net; frame-src https://www.youtube.com
 ```
 
 Why each part: `script-src` with `'strict-dynamic'` lets the nonce cover the
 scripts the component loads (CodeMirror, the preview libraries);
 `style-src-attr 'unsafe-inline'` is for the style attributes KaTeX and the
 diagram libraries write; `img-src` must cover wherever `hooks.resolveAsset`
-points; `connect-src` lets the component fetch from jsDelivr;
+points; `connect-src` lets the component fetch from jsDelivr, and `blob:`
+there is needed only when `resolveAsset` gives `blob:` URLs (the editor reads
+their bytes once and hands the sandboxed preview, which cannot load your
+page's object URLs, the Blob itself; `img-src blob:` covers the same URLs);
 `frame-src https://www.youtube.com` is only for documents that embed YouTube
 videos (`{{youtube …}}`: the player is a youtube.com/embed frame; without it
 the video is blocked) — drop it otherwise. The same

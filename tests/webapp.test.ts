@@ -163,5 +163,12 @@ describe('the app author\'s guide', () => {
     expect(doc).toMatch(/\| `mintUid\(\)` \|[^\n]*\*\*promise\*\* of a `doc-/);
     expect(doc).toMatch(/\| `resolveAsset\(path\)` \|[^\n]*\*\*synchronously\*\*[^\n]*not a promise/);
     expect(doc).not.toMatch(/e\.g\. a signed URL of your storage/);
+    // resolveAsset may give blob: URLs, whose bytes the editor reads (kit 2.4.0): the policies allow them (STATUS D-119, D-67)
+    const policies = [readFileSync('examples/webapp/index.html', 'utf8').match(/http-equiv="Content-Security-Policy" content="([^"]*)"/)![1]!, doc.match(/^default-src 'none'; script-src 'nonce-RANDOM'[^\n]*$/m)![0]];
+    for (const policy of policies) {
+      expect(policy).toMatch(/connect-src 'self' blob: /);
+      expect(policy).toMatch(/img-src [^;]*\bblob:/);
+    }
+    expect(doc).toMatch(/`connect-src blob:` and `img-src blob:`/);
   });
 });
