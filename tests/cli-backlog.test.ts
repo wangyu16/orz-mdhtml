@@ -9,6 +9,7 @@ import { execFile, spawn } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { assembleEnvelope } from 'orz-markdown/carrier';
 import { assemble, inspect, VERSION } from '../src/lib.js';
 import { LEGACY_FILES } from './helpers.js';
 
@@ -80,5 +81,25 @@ describe.concurrent('CLI backlog fixes (1.1.0)', () => {
       expect(typeof t.name).toBe('string');
       expect(t).not.toHaveProperty('label');
     }
+  });
+  it('[T.24] inspect of another kind\'s file names that file\'s kind and shell (orz-slides 1.0.0, not orz-mdhtml) and points to its CLI, reason other-kind (D-78)', async () => {
+    const d = folder();
+    const text = '{{nyml\nkind: document\ncarrier: slides\nuid: doc-2qvjtq3scd874lpy\n}}\n\n# Deck\n';
+    write(join(d, 'talk.slides.html'), assembleEnvelope(text, { kind: 'slides', shellVersion: '1.0.0', delivery: 'inline', headHtml: '', bodyHtml: '' }));
+    const human = await cli(['inspect', 'talk.slides.html'], d);
+    expect(human.code).toBe(0);
+    expect(human.stdout).toMatch(/^shell +orz-slides 1\.0\.0 \(another kind: use orz-slides\), inline delivery$/m);
+    expect(human.stdout).not.toMatch(/orz-mdhtml 1\.0\.0|\(unknown\)/);
+    expect(human.stdout).toContain('`npx orz-slides inspect talk.slides.html`');
+    const r = JSON.parse((await cli(['inspect', 'talk.slides.html', '--json'], d)).stdout) as ReturnType<typeof inspect>;
+    expect(r.reason).toBe('other-kind');
+    expect(r.kind).toBe('slides');
+    expect(r.shell).toMatchObject({ tool: 'orz-slides', version: '1.0.0' });
+    expect(r.writable).toBe(false);
+    // the text of another kind too; an md file has no reason
+    write(join(d, 'deck.slides.md'), text);
+    expect((JSON.parse((await cli(['inspect', 'deck.slides.md', '--json'], d)).stdout) as ReturnType<typeof inspect>).reason).toBe('other-kind');
+    expect(inspect(assemble('# A\n', { delivery: 'cdn' }), { filename: 'a.md.html' })).not.toHaveProperty('reason');
+    expect(inspect(assemble('# A\n', { delivery: 'cdn' })).shell).toMatchObject({ tool: 'orz-mdhtml', version: VERSION });
   });
 });

@@ -221,7 +221,9 @@ npx orz-mdhtml@1 inspect x.md.html --json    # also works on a text, a 0.x file,
 
 Read `input` (`text`, `assembled`, `legacy`, `html`), `kind`, `format`,
 `writable`, `shell.version` and `shell.relation` (`older` / `same` /
-`newer` than this tool), `uid`, `title`, `header.keys`, `includes`, `lint`,
+`newer` than this tool; `shell.tool` names the tool whose shell it is —
+another kind's file says `orz-slides` / `orz-paged`, with `reason:
+"other-kind"`: use that tool), `uid`, `title`, `header.keys`, `includes`, `lint`,
 `checks` (a file's structure), `sha256` (of the text it holds: the
 `--replaces` token), `twin` (the sibling `x.md` ↔ `x.md.html`; `null` when
 it does not exist: `holds` `same` / `different` / `none` — `none`: it exists

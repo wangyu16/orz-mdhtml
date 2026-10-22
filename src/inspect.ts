@@ -27,8 +27,13 @@ export interface InspectReport {
   format: number | null;
   /** Whether this tool may assemble, edit and save it (kind `md`, a format it writes). */
   writable: boolean;
-  /** The assembled file's markers (`#orz-shell`, generator meta), and how its shell compares to this tool's. */
-  shell: { version: string; generator: string | null; delivery: string; relation: 'same' | 'older' | 'newer' | 'unknown' } | null;
+  /**
+   * The assembled file's markers (`#orz-shell`, generator meta), the tool
+   * whose shell it is (`orz-mdhtml`, or `orz-slides` / `orz-paged` for
+   * another kind's file), and how its shell compares to this tool's
+   * (`unknown` for another kind's shell: its versions are not this tool's).
+   */
+  shell: { version: string; tool: string; generator: string | null; delivery: string; relation: 'same' | 'older' | 'newer' | 'unknown' } | null;
   /** What a legacy 0.x file holds outside its source. */
   legacy: { version: string | null; generator: string | null; delivery: 'inline' | 'cdn' | null; docId: string | null; theme: string | null; title: string | null; metaKeys: string[] } | null;
   /** The header `uid` when valid (FC-18 §10). */
@@ -80,7 +85,16 @@ export interface InspectReport {
   twin: { name: string; holds: 'same' | 'different' | 'none'; newer: 'input' | 'twin' | 'same-time' | 'unknown'; sha256: string | null; earlier?: 'git-head' | 'git-index' | 'git-log' | 'cache' } | null;
   /** Things found but not understood; nothing was changed because of them. */
   notes: string[];
+  /**
+   * `other-kind` when the input is an orz slides or paged document (a text or
+   * a file): this tool does not edit it; `advice` names its own CLI. Absent
+   * otherwise.
+   */
+  reason?: 'other-kind';
 }
+
+/** The CLI of a document kind (`md` → `orz-mdhtml`). */
+const toolOf = (kind: Kind): string => (kind === 'md' ? 'orz-mdhtml' : `orz-${kind}`);
 
 /** Options of {@link inspect}. */
 export interface InspectOptions {
@@ -195,7 +209,7 @@ export function inspect(input: string, options: InspectOptions = {}): InspectRep
       report.input = 'assembled';
       const cmp = ex.kind === 'md' ? compareSemver(ex.shell, VERSION) : null;
       const relation = cmp === -1 ? 'older' : cmp === 0 ? 'same' : cmp === 1 ? 'newer' : 'unknown';
-      report.shell = { version: ex.shell, generator: generatorOf(input), delivery: ex.delivery, relation };
+      report.shell = { version: ex.shell, tool: toolOf(ex.kind), generator: generatorOf(input), delivery: ex.delivery, relation };
       report.includes = ex.includes ? Object.keys(ex.includes).length : 0;
       if (ex.kind === 'md') report.checks = structureOf(input, ex.shell, ex.delivery, options.engineSource);
       if (report.checks) {
@@ -230,7 +244,12 @@ export function inspect(input: string, options: InspectOptions = {}): InspectRep
   const newer = doc.format > Math.max(...FORMATS);
   report.writable = doc.kind === 'md' && !newer && report.input !== 'legacy' && report.shell?.relation !== 'newer' && report.checks?.island !== 'unclosed';
 
-  if (doc.kind !== 'md') report.advice.push(`an orz ${doc.kind} document: use orz-${doc.kind} (\`npx orz-${doc.kind}\`)`);
+  if (doc.kind !== 'md') {
+    // another kind's text or file: name it and its own CLI (the same command, with that tool)
+    report.reason = 'other-kind';
+    const made = report.shell ? `, made by ${report.shell.tool} ${report.shell.version}` : '';
+    report.advice.push(`an orz ${doc.kind} document${made}: orz-mdhtml does not edit it — use ${toolOf(doc.kind)}: \`npx ${toolOf(doc.kind)} inspect ${self}\``);
+  }
   if (newer) report.advice.push(`text format ${doc.format} is newer than this tool reads and writes (format ${FORMATS.join(', ')}): read-only here; use a newer orz-mdhtml (\`npx orz-mdhtml@latest\`)`);
   const errors = doc.lint.filter((l) => l.level === 'error');
   if (errors.length > 0) report.advice.push(`fix the header lint errors in the text (${[...new Set(errors.map((l) => l.code))].join(', ')}), then assemble again`);

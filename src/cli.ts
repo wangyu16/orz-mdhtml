@@ -978,7 +978,7 @@ function humanInspect(file: string, r: InspectReport): string {
   const inputs: Record<InspectReport['input'], string> = { text: 'a text (twin or plain Markdown)', assembled: 'an assembled file (text format 1)', legacy: 'an orz-mdhtml 0.x file (before text format 1)', html: 'HTML that is not an orz document' };
   rows.push(['input', inputs[r.input]]);
   if (r.kind) rows.push(['kind', `${r.kind}${r.format !== null ? `, text format ${r.format}` : ''}`]);
-  if (r.shell) rows.push(['shell', `orz-mdhtml ${r.shell.version} (${r.shell.relation === 'same' ? 'this version' : r.shell.relation === 'older' ? `older than this tool, ${VERSION}` : r.shell.relation === 'newer' ? `newer than this tool, ${VERSION}` : 'unknown'}), ${r.shell.delivery} delivery`]);
+  if (r.shell) rows.push(['shell', `${r.shell.tool} ${r.shell.version} (${r.shell.tool !== 'orz-mdhtml' ? `another kind: use ${r.shell.tool}` : r.shell.relation === 'same' ? 'this version' : r.shell.relation === 'older' ? `older than this tool, ${VERSION}` : r.shell.relation === 'newer' ? `newer than this tool, ${VERSION}` : 'unknown'}), ${r.shell.delivery} delivery`]);
   if (r.legacy) rows.push(['legacy', `orz-mdhtml ${r.legacy.version ?? '0.x'}, ${r.legacy.delivery ?? 'unknown'} delivery${r.legacy.theme ? `, theme ${r.legacy.theme}` : ''}${r.legacy.metaKeys.length ? `, #orz-meta: ${r.legacy.metaKeys.join(', ')}` : ''}`]);
   if (r.kind) {
     rows.push(['uid', r.uid ?? '(none)']);

@@ -18,6 +18,11 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
 - The `--help` synopses name `[--cdn | --inline]` (`new`, `assemble`) and
   `--measure normal|wide|full` (D-107). `themes --json` keeps the family's
   `name` key (D-106; checked).
+- `inspect` of another kind's file (an orz-slides or orz-paged document) names
+  that file's own shell (`shell orz-slides 1.0.0 (another kind: use
+  orz-slides)`, not `orz-mdhtml 1.0.0 (unknown)`) and advises its tool's
+  command (`npx orz-slides inspect talk.slides.html`); `--json` adds
+  `shell.tool` and `reason: "other-kind"` (D-78).
 
 ### Release tooling
 
