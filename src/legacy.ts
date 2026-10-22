@@ -202,8 +202,16 @@ export interface UpgradeResult {
   from: 'legacy' | 'format-1';
   /** Header keys this upgrade wrote, with their values. */
   moved: Record<string, string>;
-  /** What was found but not moved, and why. */
+  /** What was found but not moved, and why (all of it: the normal conversions and the {@link warnings}). */
   notes: string[];
+  /**
+   * The notes worth a warning: something in the file that was not understood
+   * or could not be kept (an unknown theme, a value the header cannot hold,
+   * an unreadable config, an island not written the 0.x way). Not the normal
+   * conversions every 0.x file gets — a 0.x id becoming a new uid, a `<title>`
+   * the text's heading supersedes (STATUS D-108).
+   */
+  warnings: string[];
 }
 
 /** Options of {@link upgrade}: the assembly's, and a uid to use instead of minting one (tests). */
@@ -244,11 +252,13 @@ export function upgrade(html: string, options: UpgradeOptions = {}): UpgradeResu
       throw new Error(`orz-mdhtml upgrade: the file's shell (orz-mdhtml ${ex.shell}) is newer than this tool (${VERSION}); upgrading would downgrade it. Use \`npx orz-mdhtml@latest upgrade\`, or pass --force (library: { downgrade: true }) to re-assemble it with this older shell anyway`);
     }
     const includes = assembleOptions.includes ?? ex.includes;
-    return { text: ex.text, html: assemble(ex.text, { ...assembleOptions, ...(includes ? { includes } : {}) }), from: 'format-1', moved: {}, notes: [] };
+    return { text: ex.text, html: assemble(ex.text, { ...assembleOptions, ...(includes ? { includes } : {}) }), from: 'format-1', moved: {}, notes: [], warnings: [] };
   }
 
   const source = legacy.text;
   const notes = [...legacy.notes];
+  /** The normal conversions: in `notes`, never in `warnings`. */
+  const normal = new Set<string>();
   const header = readHeader(source);
   const has = (k: string): boolean => !!header && Object.prototype.hasOwnProperty.call(header.fields, k);
   const changes: Array<[string, string]> = [];
@@ -264,7 +274,12 @@ export function upgrade(html: string, options: UpgradeOptions = {}): UpgradeResu
   add('carrier', 'md', 'carrier');
   if (!has('uid')) {
     const own = [legacy.meta?.uid, legacy.docId].find((u): u is string => typeof u === 'string' && UID_PATTERN.test(u.trim()));
-    if (!own && legacy.docId) notes.push(`the 0.x docId ${JSON.stringify(legacy.docId)} is not a valid uid (doc-[0-9a-z]{10,32}); a new uid was minted`);
+    if (!own && legacy.docId) {
+      // every 0.x file: its id was a UUID, which is not a 1.0 uid — a normal conversion, not a warning (D-108)
+      const note = `the 0.x id ${JSON.stringify(legacy.docId)} is not in the 1.0 uid form (doc- and 10 to 32 lowercase letters or digits), so the document got a new uid`;
+      notes.push(note);
+      normal.add(note);
+    }
     add('uid', own?.trim() ?? injected ?? mintUid(), 'uid');
   }
   const meta = legacy.meta ?? {};
@@ -274,7 +289,11 @@ export function upgrade(html: string, options: UpgradeOptions = {}): UpgradeResu
   if (!has('title') && !meta.title && legacy.title && legacy.title !== 'Untitled') {
     const derived = readDocument(source, { kind: 'md' }).title;
     if (derived === 'Untitled') add('title', legacy.title, '<title>');
-    else if (derived !== legacy.title) notes.push(`the 0.x <title> ${JSON.stringify(legacy.title)} (the CLI --title, by default the file name) was not moved: the text's own heading gives its title`);
+    else if (derived !== legacy.title) {
+      const note = `the 0.x page title ${JSON.stringify(legacy.title)} (by default the file name) was not moved into the header: the text's first heading gives the title`;
+      notes.push(note);
+      normal.add(note);
+    }
   }
   add('author', meta.author, '#orz-meta author');
   add('description', meta.description, '#orz-meta description');
@@ -305,5 +324,5 @@ export function upgrade(html: string, options: UpgradeOptions = {}): UpgradeResu
   if (!after.endsWith(before) || after.slice(0, after.length - before.length).trim() !== '') {
     throw new Error('orz-mdhtml upgrade: the upgraded text does not keep the legacy source exactly; nothing was written');
   }
-  return { text, html: assemble(text, assembleOptions), from: 'legacy', moved, notes };
+  return { text, html: assemble(text, assembleOptions), from: 'legacy', moved, notes, warnings: notes.filter((n) => !normal.has(n)) };
 }

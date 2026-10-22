@@ -287,7 +287,7 @@ const html = assemble(text);                     // inline (this release's engin
 extract(html)?.text === text;                    // true: the exact text back
 readDocument(text).title;                        // 'Field notes' (header and derived facts, no rendering)
 inspect(html).advice;                            // what to do next, for any version
-upgrade(oldHtml);                                // { text, html, from, moved, notes } for a 0.x file
+upgrade(oldHtml);                                // { text, html, from, moved, notes, warnings } for a 0.x file
 ```
 
 Exports: `assemble`, `extract`, `readDocument`, `newDocument`, `inspect`,

@@ -57,7 +57,9 @@ describe('upgrade on the real legacy files', () => {
     expect(h.fields['carrier']).toBe('md');
     expect(h.fields['uid']).toBe(UID);
     expect(u.moved).toMatchObject({ carrier: 'md', uid: UID, title: 'Portable Metadata Example', license: 'CC-BY-4.0' });
-    expect(u.notes.join('\n')).toMatch(/docId .* is not a valid uid/);
+    expect(u.notes.join('\n')).toMatch(/the 0\.x id .* is not in the 1\.0 uid form .*so the document got a new uid/);
+    // a normal conversion: a note, never a warning (D-108)
+    expect(u.warnings.join('\n')).not.toMatch(/0\.x id/);
     expect(readDocument(u.text).meta).toMatchObject({ title: 'Portable Metadata Example', author: 'Example Author', keywords: ['mdhtml', 'metadata', 'editable document'], license: { spdx: 'CC-BY-4.0' } });
     // a minted uid without injection
     expect(readHeader(upgrade(META_HTML, { delivery: 'cdn' }).text)!.fields['uid']).toMatch(UID_PATTERN);
@@ -65,7 +67,8 @@ describe('upgrade on the real legacy files', () => {
     const s = upgrade(SAMPLE_HTML, { delivery: 'cdn', uid: UID });
     expect(readHeader(s.text)!.keys).toEqual(['carrier', 'uid']);
     expect(readDocument(s.text).title).toBe('orz-mdhtml');
-    expect(s.notes.join('\n')).toMatch(/<title> "sample".*not moved/);
+    expect(s.notes.join('\n')).toMatch(/page title "sample".*not moved/);
+    expect(s.warnings).toEqual([]);
   });
 
   it('[U.4] the file is the text\'s assembly and extracts back exactly; upgrading again changes nothing', () => {
@@ -76,7 +79,7 @@ describe('upgrade on the real legacy files', () => {
         expect(extract(u.html)!.text === u.text, name).toBe(true);
         expect(inspect(u.html)).toMatchObject({ input: 'assembled', kind: 'md', format: 1, uid: UID, writable: true });
         const again = upgrade(u.html, o);
-        expect(again).toEqual({ text: u.text, html: u.html, from: 'format-1', moved: {}, notes: [] });
+        expect(again).toEqual({ text: u.text, html: u.html, from: 'format-1', moved: {}, notes: [], warnings: [] });
       }
     }
     // a format-1 file keeps its includes on re-assembly
@@ -113,7 +116,7 @@ describe('upgrade on synthetic legacy files', () => {
     const ownUid = META_HTML.replace(/"docId":"[^"]*"/, '"docId":"doc-legacyown0000001"');
     const u = upgrade(ownUid, { delivery: 'cdn', uid: UID });
     expect(readHeader(u.text)!.fields['uid']).toBe('doc-legacyown0000001');
-    expect(u.notes.join('\n')).not.toMatch(/docId/);
+    expect(u.notes.join('\n')).not.toMatch(/0\.x id/);
     // a source without a heading takes the 0.x <title>
     const untitled = withLegacySource(META_HTML.replace(/<script type="application\/orz-meta\+json" id="orz-meta">[\s\S]*?<\/script>/, ''), 'no heading here\n');
     expect(readHeader(upgrade(untitled, { delivery: 'cdn', uid: UID }).text)!.fields['title']).toBe('Portable Metadata Example');
@@ -145,16 +148,19 @@ describe('upgrade on synthetic legacy files', () => {
     const u = upgrade(unwrapped, { delivery: 'cdn', uid: UID });
     expectSourceKept(u.text, lu.text);
     expect(u.notes.join('\n')).toMatch(/wrapper/);
+    expect(u.warnings.join('\n')).toMatch(/wrapper/); // not understood: a warning too (D-108)
     // an unknown theme: not moved, noted
     const odd = META_HTML.replace('<html lang="en" data-chrome="light">', '<html lang="en" data-theme="my-custom-theme">');
     const t = upgrade(odd, { delivery: 'cdn', uid: UID });
     expect(readHeader(t.text)!.fields['theme']).toBeUndefined();
     expect(t.notes.join('\n')).toMatch(/my-custom-theme.*not moved/);
+    expect(t.warnings.join('\n')).toMatch(/my-custom-theme.*not moved/);
     // a meta value the header cannot hold: left out, noted
     const curly = META_HTML.replace('"author": "Example Author"', '"author": "Example }} Author"');
     const c = upgrade(curly, { delivery: 'cdn', uid: UID });
     expect(readHeader(c.text)!.fields['author']).toBeUndefined();
     expect(c.notes.join('\n')).toMatch(/author not moved/);
+    expect(c.warnings.join('\n')).toMatch(/author not moved/);
     // unreadable config: noted, the source still upgraded
     const broken = META_HTML.replace('window.__ORZ_MDHTML__ = {', 'window.__ORZ_MDHTML__ = {,');
     expect(readLegacy(broken)!.notes.join('\n')).toMatch(/config/);

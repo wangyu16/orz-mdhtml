@@ -34,6 +34,14 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
   source, `upgrade x.md.html` gives it the header without `--force` (its
   text stays exactly as it is; `--json`: `twinWas: "source"`), and `inspect`
   advises exactly that, from either side (D-90).
+- `upgrade` of a 0.x file no longer warns that its 0.x id "is not a valid
+  uid" — every 0.x id is a UUID, so a new uid is the normal conversion: it is
+  a `Note:` line (and stays in `--json` `notes`), as is a `<title>` the
+  text's heading supersedes. What was not understood (an unknown theme, a
+  value the header cannot hold, …) is still a warning. The library's
+  `upgrade` result adds `warnings` (the notes worth a warning) (D-108).
+- `upgrade` writes the running release's shell — checked for a 0.x file and
+  a 1.0.0 file (D-93; fixed in 1.0.2, now a regression test).
 
 ### Docs and example web app
 

@@ -170,4 +170,41 @@ describe.concurrent('CLI backlog fixes (1.1.0)', () => {
     expect((JSON.parse((await cli(['inspect', 'notes.md.html', '--json'], d)).stdout) as ReturnType<typeof inspect>).twin).toMatchObject({ holds: 'different' });
     expect(json(await cli(['upgrade', 'notes.md.html', '--json'], d))).toMatchObject({ ok: false, reason: 'twin-differs', next: { command: 'upgrade', args: ['notes.md.html', '--text', 'notes.browser.md'] } });
   });
+  it('[T.27] upgrade of a 0.x file reports the new uid (its 0.x id is not a uid) as a note, not a warning; what was not understood stays a warning (D-108)', async () => {
+    const d = folder();
+    copyFileSync(LEGACY_FILES['fixtures/sample.md.html']!, join(d, 'sample.md.html'));
+    const human = await cli(['upgrade', 'sample.md.html'], d);
+    expect(human.code, human.stderr).toBe(0);
+    expect(human.stderr).toBe('');
+    expect(human.stdout).toMatch(/^Note: the 0\.x id "[0-9a-f-]+" is not in the 1\.0 uid form .*so the document got a new uid$/m);
+    expect(human.stdout).toMatch(/^Note: the 0\.x page title "sample" .*was not moved into the header/m);
+    const e = folder();
+    copyFileSync(LEGACY_FILES['fixtures/sample.md.html']!, join(e, 'sample.md.html'));
+    const j = json(await cli(['upgrade', 'sample.md.html', '--json'], e));
+    expect(j.warnings).toEqual([]);
+    expect((j.notes as string[]).join('\n')).toMatch(/0\.x id .*new uid/);
+    // an unknown theme is still a warning
+    const f = folder();
+    write(join(f, 'odd.md.html'), readFileSync(LEGACY_FILES['fixtures/sample.md.html']!, 'utf8').replace(/<html\b([^>]*)>/, '<html$1 data-theme="my-custom-theme">'));
+    const odd = await cli(['upgrade', 'odd.md.html'], f);
+    expect(odd.code).toBe(0);
+    expect(odd.stderr).toMatch(/warning: theme "my-custom-theme" is not an orz-markdown theme; not moved/);
+    expect(odd.stderr).not.toMatch(/0\.x id/);
+  });
+
+  it('[T.28] upgrade writes the running release\'s shell: a 0.x file and an older 1.x file both get shell = this package\'s version (D-93)', async () => {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
+    expect(VERSION).toBe(pkg.version);
+    const d = folder();
+    copyFileSync(LEGACY_FILES['fixtures/sample.md.html']!, join(d, 'old.md.html'));
+    expect(json(await cli(['upgrade', 'old.md.html', '--json'], d))).toMatchObject({ ok: true, shell: pkg.version });
+    expect(shellOf(readFileSync(join(d, 'old.md.html'), 'utf8'))).toBe(pkg.version);
+    // a 1.0.0 file (an older shell) is re-assembled with this one
+    const older = assemble('{{nyml\nkind: document\ncarrier: md\nuid: doc-abcdefghij12\n}}\n\n# Old\n', { delivery: 'cdn' }).replace(`"shell":"${VERSION}"`, '"shell":"1.0.0"');
+    expect(shellOf(older)).toBe('1.0.0');
+    write(join(d, 'one.md.html'), older);
+    const r = json(await cli(['upgrade', 'one.md.html', '--no-text', '--json'], d));
+    expect(r).toMatchObject({ ok: true, previous: '1.0.0', shell: pkg.version });
+    expect(shellOf(readFileSync(join(d, 'one.md.html'), 'utf8'))).toBe(pkg.version);
+  });
 });
