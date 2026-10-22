@@ -102,4 +102,35 @@ describe.concurrent('CLI backlog fixes (1.1.0)', () => {
     expect(inspect(assemble('# A\n', { delivery: 'cdn' }), { filename: 'a.md.html' })).not.toHaveProperty('reason');
     expect(inspect(assemble('# A\n', { delivery: 'cdn' })).shell).toMatchObject({ tool: 'orz-mdhtml', version: VERSION });
   });
+  it('[T.25] a text with no uid is assembled with a warning that says to take a header from `new` (D-83a); inspect advises the same, and inspect of a .md.html with no x.md beside it advises `extract` (D-83b)', async () => {
+    const d = folder();
+    write(join(d, 's.md'), 'text only\n');
+    const a = await cli(['assemble', 's.md'], d);
+    expect(a.code).toBe(0);
+    expect(a.stderr).toMatch(/warning: s\.md: the text has no header, so the document has no uid .*`orz-mdhtml new --title "…"` prints a fresh header — paste its \{\{nyml … \}\} block at the top of s\.md/);
+    const aj = json(await cli(['assemble', 's.md', '--json'], d));
+    expect(aj.uid).toBeNull();
+    expect((aj.warnings as string[]).some((w) => w.includes('has no uid'))).toBe(true);
+    // a header without a uid: copy the uid line
+    write(join(d, 'h.md'), '{{nyml\nkind: document\ncarrier: md\n}}\n\n# H\n');
+    expect((await cli(['assemble', 'h.md'], d)).stderr).toContain('the header has no uid');
+    // a text with a uid: no such warning
+    write(join(d, 'u.md'), '{{nyml\nkind: document\ncarrier: md\nuid: doc-abcdefghij12\n}}\n\n# U\n');
+    const u = await cli(['assemble', 'u.md'], d);
+    expect(u.stderr).toBe('');
+    expect((await cli(['inspect', 'u.md'], d)).stdout).not.toContain('no uid');
+    // inspect says it too
+    expect((await cli(['inspect', 's.md'], d)).stdout).toContain('paste its {{nyml … }} block at the top of s.md');
+    // D-83b: the .md.html alone
+    const b = join(d, 'b');
+    mkdirSync(b);
+    copyFileSync(join(d, 'u.md.html'), join(b, 'u.md.html'));
+    const r = JSON.parse((await cli(['inspect', 'b/u.md.html', '--json'], d)).stdout) as ReturnType<typeof inspect>;
+    expect(r.twin).toBeNull();
+    expect(r.advice).toContain('no text twin b/u.md beside it: `orz-mdhtml extract b/u.md.html` writes it (this file\'s text, exactly); edit b/u.md, then `orz-mdhtml assemble b/u.md`');
+    // with the twin beside it, no such advice
+    const withTwin = JSON.parse((await cli(['inspect', 'u.md.html', '--json'], d)).stdout) as ReturnType<typeof inspect>;
+    expect(withTwin.twin).toMatchObject({ holds: 'same' });
+    expect(withTwin.advice.join('\n')).not.toContain('no text twin');
+  });
 });

@@ -23,6 +23,11 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
   orz-slides)`, not `orz-mdhtml 1.0.0 (unknown)`) and advises its tool's
   command (`npx orz-slides inspect talk.slides.html`); `--json` adds
   `shell.tool` and `reason: "other-kind"` (D-78).
+- A text with no uid (no header, or a header without `uid`) is assembled
+  with a warning that says how to get one: `orz-mdhtml new` prints a fresh
+  header to paste at the top (or its `uid:` line to copy); `inspect` gives
+  the same advice. `inspect x.md.html` with no `x.md` beside it advises
+  `extract x.md.html`, which writes it (D-83).
 
 ### Release tooling
 

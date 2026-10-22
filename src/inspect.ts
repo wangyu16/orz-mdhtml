@@ -109,6 +109,12 @@ export interface InspectOptions {
    */
   twin?: { name: string; content: string; newer?: 'input' | 'twin' | 'same-time' | 'unknown'; earlier?: 'git-head' | 'git-index' | 'git-log' | 'cache' | null };
   /**
+   * The sibling twin's name when the caller looked and it does not exist
+   * (the CLI does): an assembled file then gets the advice to extract its
+   * text twin (`twin` stays null).
+   */
+  missingTwin?: string;
+  /**
    * This release's browser bundle (the Node library passes it): an inline
    * file of this shell version is compared with it (`checks.engine`).
    */
@@ -280,7 +286,26 @@ export function inspect(input: string, options: InspectOptions = {}): InspectRep
     }
   }
   if (report.input === 'text' && doc.kind === 'md' && !newer && report.twin?.holds !== 'different') report.advice.push(`a text twin: \`orz-mdhtml assemble ${self}\` makes its .md.html`);
+  if (report.input === 'assembled' && doc.kind === 'md' && !options.twin && options.missingTwin !== undefined && report.checks?.island !== 'unclosed') {
+    const tn = sh(options.missingTwin);
+    report.advice.push(`no text twin ${options.missingTwin} beside it: \`orz-mdhtml extract ${self}\` writes it (this file's text, exactly); edit ${options.missingTwin}, then \`orz-mdhtml assemble ${tn}\``);
+  }
+  // no uid: nothing names the document (hosts, and the CLI's "same document?" checks, go by it) — say how to get one
+  if ((report.input === 'text' || report.input === 'assembled') && doc.kind === 'md' && !newer && doc.meta.uid === undefined) {
+    const where = report.input === 'text' ? self : sh(options.twin?.name ?? options.missingTwin ?? 'file.md');
+    report.advice.push(missingUidAdvice(doc.header !== null, where));
+  }
   return report;
+}
+
+/**
+ * What to do about a text without a uid (STATUS D-83): `new` prints a header
+ * with a fresh one. `where` is the text to change, as a shell word.
+ */
+export function missingUidAdvice(hasHeader: boolean, where: string): string {
+  return hasHeader
+    ? `the header has no uid (the document's id, which hosts and the CLI's "same document?" checks go by): \`orz-mdhtml new\` prints a fresh header — copy its \`uid:\` line into the header of ${where}, then assemble again`
+    : `the text has no header, so the document has no uid (its id, which hosts and the CLI's "same document?" checks go by): \`orz-mdhtml new --title "…"\` prints a fresh header — paste its {{nyml … }} block at the top of ${where}, then assemble again`;
 }
 
 /** The text an `.md.html` holds (format 1, or a 0.x file's source), or null. */

@@ -25,6 +25,7 @@ import { storedText } from './assemble.js';
 import { isUrl, keepReferenced, resolveFileIncludes, unresolvedIncludes } from './includes.js';
 import { cacheDir, cleanInGit, earlierStateOf, lastWriter, rememberPair as recordPair, sha256, twinStateOf, type EarlierState } from './known-states.js';
 import { SHA256_PATTERN } from './sha256.js';
+import { missingUidAdvice } from './inspect.js';
 import { assemble, extract, inspect, newDocument, readDocument, readLegacy, upgrade, DEFAULT_THEME, ORZ_MARKDOWN_VERSION, THEMES, MEASURES, VERSION, type InspectReport } from './lib.js';
 
 const EXIT_OK = 0;
@@ -840,6 +841,7 @@ function cmdAssemble(p: Parsed, o: Io): void {
   }
   for (const w of errors(info.lint)) o.warn(w);
   for (const w of warnings(info.lint)) o.warn(w);
+  if (info.meta.uid === undefined) o.warn(`${names.input}: ${missingUidAdvice(info.header !== null, sh(names.input))}`);
   if (toStdout) { process.stdout.write(html); return; }
   const backedUp = check.risk !== null || shellRisk !== null ? backup(out!, o) : null;
   if (shellRisk !== null) o.warn(`${names.out} had a newer shell (orz-mdhtml ${newerShell}); --force re-assembled it with this older one (${VERSION})`);
@@ -1015,6 +1017,7 @@ function cmdInspect(p: Parsed, o: Io): void {
   // the sibling twin (x.md <-> x.md.html): does it hold the same text, and which is newer?
   const sibling = twinName(path);
   let twin: { name: string; content: string; newer: 'input' | 'twin' | 'same-time'; earlier?: Exclude<EarlierState, 'token'> | null } | undefined;
+  const missingTwin = sibling && sibling !== path && !existsSync(sibling) ? twinName(file) ?? basename(sibling) : undefined;
   if (sibling && sibling !== path && existsSync(sibling)) {
     const c = readMaybe(sibling);
     if (c !== null) {
@@ -1028,7 +1031,7 @@ function cmdInspect(p: Parsed, o: Io): void {
     }
   }
   // the name as given: advice names runnable paths (inspect sub/x.md → assemble sub/x.md)
-  const r = inspect(content, { filename: file, ...(twin ? { twin } : {}) });
+  const r = inspect(content, { filename: file, ...(twin ? { twin } : {}), ...(missingTwin !== undefined ? { missingTwin } : {}) });
   if (o.json) process.stdout.write(`${JSON.stringify(r, null, 2)}\n`);
   else process.stdout.write(`${humanInspect(file, r)}\n`);
 }

@@ -44,6 +44,8 @@ function cliBytes(args: string[], cwd: string): Promise<Buffer> {
   });
 }
 const json = (r: Run): Record<string, unknown> => JSON.parse(r.stdout) as Record<string, unknown>;
+/** The warnings other than the one a text without a uid gets (D-83; tests/cli-backlog.test.ts T.25). */
+const noUid = (w: unknown): string[] => (w as string[]).filter((x) => !/has no (header, so the document has no )?uid/.test(x));
 const bytes = (path: string): Buffer => readFileSync(path);
 const text = (path: string): string => new TextDecoder('utf-8', { ignoreBOM: true }).decode(readFileSync(path));
 const write = (path: string, s: string): void => writeFileSync(path, s, 'utf8');
@@ -275,7 +277,7 @@ describe.concurrent('the CLI', () => {
       write(join(d, name), content);
       const r = await cli(['inspect', name, '--json'], d);
       expect(r.code, name).toBe(0);
-      expect(json(r), name).toEqual(JSON.parse(JSON.stringify(inspect(content, { filename: name }))));
+      expect(json(r), name).toEqual(JSON.parse(JSON.stringify(inspect(content, { filename: name, missingTwin: name.endsWith('.md.html') ? name.slice(0, -5) : `${name}.html` }))));
       const h = await cli(['inspect', name], d);
       expect(h.code).toBe(0);
       expect(h.stdout).toMatch(new RegExp(`^file\\s+${name.replace(/\./g, '\\.')}\\ninput\\s+`));
@@ -619,7 +621,7 @@ describe.concurrent('the CLI', () => {
     expect(extract(text(join(d, 'doc.md.html')))!.includes).toEqual({ 'parts/a.md': 'OLD A\n', 'https://example.test/b.md': 'URL B\n' }); // a removed directive's entry goes
     // parts/a.md in the folder differs from the record: kept, but reported stale with the command that refreshes it (round 3, M2)
     expect(json(kept)).toMatchObject({ includes: 2, resolved: 0, unresolved: [], stale: [{ target: 'parts/a.md', kind: 'file', reason: 'stale-record' }] });
-    expect(json(kept).warnings).toEqual([expect.stringMatching(/\{\{md parts\/a\.md\}\} is stale \(stale-record\).*`orz-mdhtml assemble doc\.md --resolve-includes`/)]);
+    expect(noUid(json(kept).warnings)).toEqual([expect.stringMatching(/\{\{md parts\/a\.md\}\} is stale \(stale-record\).*`orz-mdhtml assemble doc\.md --resolve-includes`/)]);
     // --resolve-includes: the file include is read afresh from the folder (exact text), the URL entry kept
     const res = await cli(['assemble', 'doc.md', '--resolve-includes', '--json'], d);
     expect(res.code, res.stdout).toBe(0);
@@ -1045,7 +1047,7 @@ describe.concurrent('the CLI', () => {
     const a = await cli(['assemble', 'doc.md', '--json'], d, ro);
     expect(a.code, a.stdout).toBe(0);
     const h = json(a).sha256 as string;
-    expect(json(a).warnings).toEqual([`pair not recorded (cache not writable: ${join(d, 'not-a-folder', 'orz-mdhtml')}); the next assemble needs --replaces ${h}`]);
+    expect(noUid(json(a).warnings)).toEqual([`pair not recorded (cache not writable: ${join(d, 'not-a-folder', 'orz-mdhtml')}); the next assemble needs --replaces ${h}`]);
     write(join(d, 'doc.md'), '# Doc\n\nedited\n');
     expect(json(await cli(['assemble', 'doc.md', '--json'], d, ro))).toMatchObject({ ok: false, reason: 'twin-differs' });
     expect(json(await cli(['assemble', 'doc.md', '--replaces', h, '--json'], d, ro))).toMatchObject({ ok: true, replaced: 'token' });

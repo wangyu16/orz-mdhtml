@@ -261,7 +261,8 @@ has changed since as `stale: [{ target, kind: "file", reason:
 "stale-record" }]` (`--resolve-includes` records the current text).
 `inspect --json`'s `twin` is `{ name, holds: "same" | "different" | "none",
 newer: "input" | "twin" | "same-time" | "unknown", sha256, earlier? }`, or
-`null` when the sibling does not exist — `holds: "none"`: it exists but holds
+`null` when the sibling does not exist (an `x.md.html` alone gets the advice
+`extract x.md.html`, which writes it) — `holds: "none"`: it exists but holds
 no orz text; `newer` says which file was modified last: `input` the inspected
 one, `twin` its sibling. Inspect the file that exists: `inspect x.md` fails
 with `no-such-file` when there is only `x.md.html`.

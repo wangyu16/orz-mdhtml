@@ -107,7 +107,8 @@ text twin lacks — even when `x.md` is the newer file. Always compare first.
    fails with `no-such-file` when there is only `x.md.html`; then `inspect
    x.md.html --json` reports `twin: null`):
    - no `x.md` yet → `npx orz-mdhtml@1 extract x.md.html` (exact, byte for byte);
-   - `twin: null` → the sibling does not exist;
+   - `twin: null` → the sibling does not exist (inspecting `x.md.html`:
+     `advice` names `extract x.md.html`, which writes it);
    - `twin.holds: "same"` → go on;
    - `twin.holds: "different"` with `twin.earlier` set → the file holds an
      earlier text of `x.md`; go on (assemble replaces it);
