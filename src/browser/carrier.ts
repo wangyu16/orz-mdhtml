@@ -17,6 +17,7 @@ import { attachAiMenu, attachSettings, captureEngineSource, followPresentation, 
 import { createEditorShell, renderMarkdownPreviewWithIncludes, type EditorHooks, type EditorShell } from 'orz-markdown/carrier/editor';
 import type { PreferenceStore } from 'orz-markdown/carrier/shell';
 import { assemble as assembleSync, cdnBundleUrl, FORMATS, type AssembleOptions } from '../assemble.js';
+import { upgrade as upgradeSync, type UpgradeOptions, type UpgradeResult } from '../legacy.js';
 import { presentationOf, previewPresentation, articleClass, shellHead } from '../presentation.js';
 import { VERSION } from '../version.js';
 import { renderMd } from './md/render.js';
@@ -26,7 +27,7 @@ export const kind = 'md' as const;
 export const version: string = VERSION;
 export const formats: number[] = [...FORMATS];
 
-export type { DocumentInfo, Extracted, HeaderChange, EditorHooks, PreferenceStore };
+export type { DocumentInfo, Extracted, HeaderChange, EditorHooks, PreferenceStore, UpgradeOptions, UpgradeResult };
 
 /**
  * The engine an inline assembly writes when no `engineSource` is given. The
@@ -57,6 +58,35 @@ export function assemble(text: string, options: AssembleOptions = {}): Promise<s
       return Promise.resolve(assembleSync(text, { ...options, engineSource: own }));
     }
     return Promise.resolve(assembleSync(text, options));
+  } catch (e) {
+    return Promise.reject(e);
+  }
+}
+
+/**
+ * orz-mdhtml's extension of the FC-19 API (STATUS D-111): upgrade an
+ * orz-mdhtml file in the browser — the same function as the Node library's
+ * `upgrade`, so a host app needs no server for old files. A 0.x file becomes
+ * a text with a header (its source exactly; its `#orz-meta` metadata, title
+ * and theme moved into the header; `carrier: md` and a uid — `options.uid`,
+ * e.g. from the app's `mintUid`, else a fresh one) and that text's file; a
+ * 1.x file is re-assembled with this shell, its text and includes unchanged.
+ * `delivery` defaults to `inline` (as the Node library's; the CLI keeps the
+ * file's own), whose engine is found as {@link assemble} finds it. Rejects
+ * what the Node `upgrade` throws for (not an orz-mdhtml file, another kind, a
+ * newer shell without `downgrade: true`).
+ *
+ * (`extract` of a 0.x file returns only its source, without the metadata it
+ * keeps outside it — use this for 0.x files.)
+ */
+export function upgrade(html: string, options: UpgradeOptions = {}): Promise<UpgradeResult> {
+  try {
+    if ((options.delivery ?? 'inline') === 'inline' && options.engineSource === undefined) {
+      const own = engine.inline;
+      if (own === null) return engine.get(cdnBundleUrl()).then((src) => upgradeSync(html, { ...options, engineSource: src }));
+      return Promise.resolve(upgradeSync(html, { ...options, engineSource: own }));
+    }
+    return Promise.resolve(upgradeSync(html, options));
   } catch (e) {
     return Promise.reject(e);
   }

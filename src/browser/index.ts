@@ -15,7 +15,7 @@
  */
 import { captureEngineSource, startCarrier } from 'orz-markdown/carrier/app';
 import { BUNDLE_FILE } from '../assemble.js';
-import { useEngineSource } from './carrier.js';
+import { upgrade, useEngineSource } from './carrier.js';
 import { MD_KIND } from './md/kind.js';
 
 // Only this carrier's bundle is the engine (orz-markdown A.12): a script loaded as `orz-mdhtml.browser.js`,
@@ -24,4 +24,6 @@ import { MD_KIND } from './md/kind.js';
 // (release.json is computed from them after the build); the inline text is the file's `#orz-engine` or the
 // sandbox's verified bundle (U.6), which the update already checked against the release's integrity.
 useEngineSource(captureEngineSource(undefined, { bundle: BUNDLE_FILE }));
-startCarrier(MD_KIND);
+const { carrier } = startCarrier(MD_KIND);
+// orz-mdhtml's extension of the FC-19 global: upgrade an old file in the browser (STATUS D-111)
+try { (carrier as unknown as Record<string, unknown>).upgrade = upgrade; } catch { /* a frozen global */ }

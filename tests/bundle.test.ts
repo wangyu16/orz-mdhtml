@@ -14,10 +14,11 @@ import { escapeScriptText } from 'orz-markdown/carrier/read';
 import { renderMarkdownPreviewWithIncludes } from 'orz-markdown/carrier/editor';
 import { isScriptSafe, parseManifest, sandboxDocument } from 'orz-markdown/carrier/shell';
 import { assemble, extract, readDocument, type AssembleOptions } from '../src/assemble.js';
+import { upgrade as upgradeNode, readLegacy } from '../src/legacy.js';
 import { VERSION } from '../src/version.js';
 import { BUNDLE_FILE, ESM_FILE, asciiOnly, buildBrowser, checkBundleRule, scriptSafe, writeBrowser } from '../build/bundle.js';
 import { bundle, launch, routeCdn, serve, tempDir, type Browser, type Page } from './browser-env.js';
-import { corpus, HAZARDS } from './helpers.js';
+import { corpus, HAZARDS, LEGACY_FILES } from './helpers.js';
 
 const b = await bundle();
 const CORPUS = corpus('md');
@@ -134,7 +135,7 @@ describe('the bundle and its package (Node)', () => {
     expect(readFileSync('browser/docs/embedding.md', 'utf8')).toBe(readFileSync('docs/embedding.md', 'utf8'));
     // every runtime export of the ESM build is declared in index.d.ts
     const exported = /export\s*\{([^}]*)\}\s*;?\s*$/.exec(b.esm)![1].split(',').map((s) => s.trim().split(/\s+as\s+/).pop()!).filter(Boolean).sort();
-    expect(exported).toEqual(['DEFAULT_THEME', 'MEASURES', 'OrzCarrier', 'THEMES', 'assemble', 'editHeader', 'extract', 'formats', 'kind', 'mountEditor', 'readDocument', 'renderPreview', 'version']);
+    expect(exported).toEqual(['DEFAULT_THEME', 'MEASURES', 'OrzCarrier', 'THEMES', 'assemble', 'editHeader', 'extract', 'formats', 'kind', 'mountEditor', 'readDocument', 'renderPreview', 'upgrade', 'version']);
     const dts = readFileSync('browser/index.d.ts', 'utf8');
     for (const name of exported) expect(dts, name).toMatch(new RegExp(`export declare (const|function) ${name}\\b`));
     // the IIFE global's booted-file handle is typed too
@@ -186,7 +187,7 @@ async function bundlePage(): Promise<Page> {
   return page;
 }
 
-type Carrier = { kind: string; version: string; formats: number[]; assemble(t: string, o?: unknown): Promise<string>; extract(h: string): unknown; readDocument(t: string): unknown; mountEditor: unknown; renderPreview(t: string, o?: unknown): Promise<string>; standalone?: unknown };
+type Carrier = { kind: string; version: string; formats: number[]; assemble(t: string, o?: unknown): Promise<string>; extract(h: string): unknown; readDocument(t: string): unknown; mountEditor: unknown; renderPreview(t: string, o?: unknown): Promise<string>; upgrade(h: string, o?: unknown): Promise<{ text: string; html: string; from: string; moved: Record<string, string>; notes: string[]; warnings: string[] }>; standalone?: unknown };
 
 chrome('real Chrome (playwright-core, channel chrome)', () => {
   it('[W.4] globalThis.OrzCarrier per FC-19 §2; extract/readDocument agree with the kit; nothing booted outside a file', async () => {
@@ -199,15 +200,15 @@ chrome('real Chrome (playwright-core, channel chrome)', () => {
       return {
         keys: Object.keys(C).sort(),
         kind: C.kind, version: C.version, formats: C.formats,
-        types: ['assemble', 'extract', 'readDocument', 'mountEditor', 'renderPreview'].map((k) => typeof (C as unknown as Record<string, unknown>)[k]),
+        types: ['assemble', 'extract', 'readDocument', 'mountEditor', 'renderPreview', 'upgrade'].map((k) => typeof (C as unknown as Record<string, unknown>)[k]),
         promise: p instanceof Promise, html: await p,
         extracted: C.extract(html), info: C.readDocument(text), standalone: C.standalone,
         storage: Object.keys(localStorage), chrome: !!document.getElementById('orz-chrome'),
       };
     }, { text, html });
-    expect(r.keys).toEqual(['assemble', 'extract', 'formats', 'kind', 'mountEditor', 'readDocument', 'renderPreview', 'standalone', 'version']);
+    expect(r.keys).toEqual(['assemble', 'extract', 'formats', 'kind', 'mountEditor', 'readDocument', 'renderPreview', 'standalone', 'upgrade', 'version']);
     expect(r).toMatchObject({ kind: 'md', version: VERSION, formats: [1], promise: true, standalone: null, storage: [], chrome: false });
-    expect(r.types).toEqual(['function', 'function', 'function', 'function', 'function']);
+    expect(r.types).toEqual(['function', 'function', 'function', 'function', 'function', 'function']);
     expect(r.html === html).toBe(true);
     expect(r.extracted).toEqual(extract(html));
     expect(r.info).toEqual(JSON.parse(JSON.stringify(readDocument(text, { kind: 'md' }))));
@@ -262,6 +263,46 @@ chrome('real Chrome (playwright-core, channel chrome)', () => {
     expect(out.every((r) => r.version === VERSION)).toBe(true);
     await ctx.close();
   });
+
+  it('[W.8] OrzCarrier.upgrade in Chrome is the Node upgrade: a 0.x file keeps its title, metadata and theme in the header (unlike extract), with the given uid; inline and cdn; a 1.x file is re-assembled; refusals reject (D-111)', async () => {
+    const page = await bundlePage();
+    const UID = 'doc-browserupgrade01';
+    const files = Object.values(LEGACY_FILES).map((p) => readFileSync(p, 'utf8'));
+    const one = assemble('{{nyml\nkind: document\ncarrier: md\nuid: doc-abcdefghij12\n}}\n\n# One\n', { delivery: 'cdn' }).replace(`"shell":"${VERSION}"`, '"shell":"1.0.0"');
+    const r = await page.evaluate(async ({ files, one, UID }) => {
+      const C = (globalThis as unknown as { OrzCarrier: Carrier }).OrzCarrier;
+      const out: unknown[] = [];
+      for (const f of files) out.push(await C.upgrade(f, { delivery: 'cdn', uid: UID }), await C.upgrade(f, { uid: UID }), C.extract(f));
+      out.push(await C.upgrade(one, { delivery: 'cdn' }));
+      const refused: string[] = [];
+      for (const h of ['<!doctype html><title>x</title>', one.replace('"shell":"1.0.0"', '"shell":"99.0.0"')]) {
+        try { await C.upgrade(h); refused.push('resolved'); } catch (e) { refused.push(String((e as Error).message)); }
+      }
+      return { out, refused, promise: C.upgrade(one, { delivery: 'cdn' }) instanceof Promise };
+    }, { files, one, UID });
+    files.forEach((f, i) => {
+      const [cdn, inline, extracted] = r.out.slice(i * 3, i * 3 + 3) as [ReturnType<typeof upgradeNode>, ReturnType<typeof upgradeNode>, { text: string } | null];
+      const node = upgradeNode(f, { delivery: 'cdn', uid: UID });
+      expect(cdn).toEqual(node);
+      expect(inline).toEqual(upgradeNode(f, { uid: UID, engineSource: b.iife }));
+      // what extract alone loses, upgrade keeps: the header with the 0.x file's title, metadata and theme
+      const legacy = readLegacy(f)!;
+      expect(readDocument(cdn.text, { kind: 'md' }).meta.uid).toBe(UID);
+      const keys = readDocument(cdn.text, { kind: 'md' }).header?.keys ?? [];
+      for (const k of Object.keys(node.moved)) expect(keys, k).toContain(k);
+      if (legacy.meta?.title) expect(readDocument(cdn.text, { kind: 'md' }).title).toBe(legacy.meta.title);
+      expect(extracted?.text ?? '').not.toMatch(/^\{\{nyml/);
+    });
+    // the 0.8 metadata example keeps its metadata (title, author, license) in the header
+    expect(Object.keys((r.out[0] as { moved: Record<string, string> }).moved).length).toBeGreaterThan(2);
+    const re = r.out.at(-1) as ReturnType<typeof upgradeNode>;
+    expect(re.from).toBe('format-1');
+    expect(extract(re.html)!.shell).toBe(VERSION);
+    expect(r.promise).toBe(true);
+    expect(r.refused[0]).toMatch(/not an orz-mdhtml file/);
+    expect(r.refused[1]).toMatch(/newer than this tool/);
+    await page.context().close();
+  }, 120_000);
 
   it('[A.9] browser parity: the real bundle\'s OrzCarrier.assemble in Chrome writes the Node bytes for every md corpus file and hazard text (inline with the bundle given and defaulted, cdn, with and without includes)', async () => {
     const page = await bundlePage();

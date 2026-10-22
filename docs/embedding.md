@@ -193,7 +193,7 @@ style-src-elem 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.clo
 ## Without an editor
 
 ```ts
-import { assemble, extract, readDocument, renderPreview } from 'orz-mdhtml-browser';
+import { assemble, extract, readDocument, renderPreview, upgrade } from 'orz-mdhtml-browser';
 
 readDocument(text)                        // header + derived facts (title, author, uid, theme, lint) — no rendering; index with it
 await renderPreview(text, { includes, fetchInclude })  // the article's HTML, for a sandboxed read-only view (includes as in the editor)
@@ -202,7 +202,21 @@ await assemble(text, { delivery: 'cdn' })              // a small .md.html that 
 await assemble(text)                                   // an inline .md.html (fetches this release's bundle once, or pass engineSource)
 await assemble(text, { includes })                     // with resolved includes in #orz-includes
 extract(html)                                          // { text, kind, format, shell, delivery, includes } | null
+await upgrade(oldHtml, { uid })                        // { text, html, from, moved, notes, warnings }: an old file, upgraded in the browser
 ```
+
+**Old files.** `extract` of an orz-mdhtml 0.x file (made before 1.0) returns
+only its source: the title, metadata and theme it keeps outside the source
+are not in it. `upgrade(html, options)` (orz-mdhtml's own addition to the
+FC-19 API; also `OrzCarrier.upgrade`) is the Node library's `upgrade` in the
+browser, so an app needs no server for old files: a 0.x file's text comes
+back with a header (its source exactly, after `carrier: md`, a uid — pass
+your own `uid`, e.g. from `mintUid`, or one is minted — and its metadata,
+title and theme) and its `html` is that text's file of this release; a 1.x
+file is re-assembled with its text and includes unchanged (a newer shell is
+rejected unless `downgrade: true`). `delivery` defaults to `inline`, as
+`assemble`'s. `notes` say what was found but not moved; `warnings` are the
+ones worth showing (something not understood or not kept).
 
 `renderPreview` adds no script of its own, but it keeps the document's raw
 HTML as written — a document can hold `<script>` and event handlers (documents

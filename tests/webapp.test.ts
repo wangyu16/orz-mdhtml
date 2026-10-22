@@ -151,7 +151,7 @@ chrome('the example web app (real Chrome)', () => {
 describe('the app author\'s guide', () => {
   it('[X.3] docs/embedding.md covers install and import (ESM and IIFE), every export, every hook, the CSP recipe and versions', () => {
     const doc = readFileSync('docs/embedding.md', 'utf8');
-    for (const term of ['npm install orz-mdhtml-browser', 'globalThis.OrzCarrier', 'esm/orz-mdhtml.browser.mjs', 'mountEditor', 'assemble', 'extract', 'readDocument', 'renderPreview',
+    for (const term of ['npm install orz-mdhtml-browser', 'globalThis.OrzCarrier', 'esm/orz-mdhtml.browser.mjs', 'mountEditor', 'assemble', 'extract', 'readDocument', 'renderPreview', 'upgrade(html',
       'save(text)', 'ai.request', 'fetchInclude', 'resolveAsset', 'uploadAsset', 'resolveLink', 'mintUid', 'nonce', 'Content-Security-Policy', "'strict-dynamic'", 'pins the component version', 'files carry their own shells']) {
       expect(doc, term).toContain(term);
     }

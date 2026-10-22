@@ -27,6 +27,30 @@ export interface Extracted {
   includes?: Record<string, string>;
 }
 
+/** Options of {@link upgrade}: the assembly's, a uid for a 0.x file (default: a fresh one), and `downgrade`. */
+export interface UpgradeOptions extends AssembleOptions {
+  /** The uid a 0.x file without a valid one gets (e.g. from your `mintUid`); default: a fresh one. */
+  uid?: string;
+  /** Re-assemble a file whose shell is newer than this release (default `false`: rejected). */
+  downgrade?: boolean;
+}
+
+/** What {@link upgrade} resolves to. */
+export interface UpgradeResult {
+  /** The text (a 0.x file: its source exactly, after a header with its metadata, title, theme, `carrier: md` and a uid). */
+  text: string;
+  /** The text's file, assembled with this release's shell. */
+  html: string;
+  /** `legacy` (a 0.x file) or `format-1` (a 1.x file, re-assembled with its text and includes). */
+  from: 'legacy' | 'format-1';
+  /** The header keys the upgrade wrote, with their values. */
+  moved: Record<string, string>;
+  /** What was found but not moved, and why: the normal conversions and the warnings. */
+  notes: string[];
+  /** The notes worth a warning (something not understood or not kept). */
+  warnings: string[];
+}
+
 export interface Lint { level: 'error' | 'warning' | 'info'; code: string; message: string; line?: number; from?: number; to?: number }
 
 export interface DocumentInfo {
@@ -160,6 +184,12 @@ export declare function assemble(text: string, options?: AssembleOptions): Promi
 export declare function extract(html: string): Extracted | null;
 export declare function readDocument(text: string): DocumentInfo;
 export declare function renderPreview(text: string, options?: RenderPreviewOptions): Promise<string>;
+/**
+ * orz-mdhtml's extension: upgrade an orz-mdhtml file in the browser, as the
+ * Node library's `upgrade` does: a 0.x file keeps its title, metadata and
+ * theme (in the header; `extract` of a 0.x file returns only its source).
+ */
+export declare function upgrade(html: string, options?: UpgradeOptions): Promise<UpgradeResult>;
 export declare function mountEditor(element: HTMLElement, options: EditorOptions): Editor;
 export declare function editHeader(text: string, changes: Readonly<Record<string, HeaderChange>>): string;
 export declare const THEMES: ReadonlyArray<{ id: string; name: string; scheme: 'light' | 'dark' }>;
@@ -210,6 +240,8 @@ export interface OrzCarrierApi {
   readDocument: typeof readDocument;
   mountEditor: typeof mountEditor;
   renderPreview: typeof renderPreview;
+  /** orz-mdhtml's extension: upgrade an old file in the browser. */
+  upgrade: typeof upgrade;
   /** The booted file's handle in an assembled `.md.html` (the IIFE only); null elsewhere. Not in the ES module's `OrzCarrier`. */
   readonly standalone?: StandaloneFile | null;
 }

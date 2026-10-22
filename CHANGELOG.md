@@ -51,6 +51,16 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
   holds this text"); no contract ids or "format-1" in `--help`. The
   `reason` codes are unchanged. (The kit's own messages are the kit's.)
 
+### Browser package (`orz-mdhtml-browser`)
+
+- New `upgrade(html, options)` — the ESM export and `OrzCarrier.upgrade`
+  (orz-mdhtml's own addition to the FC-19 API, typed in `index.d.ts`): the
+  Node library's `upgrade`, in the browser. A host app can open a 0.x file
+  without a server: its text comes back with a header holding its title,
+  metadata and theme (and a uid: `options.uid`, e.g. the app's `mintUid`, or
+  a fresh one), which `extract` of a 0.x file — its source only — does not
+  give; a 1.x file is re-assembled with this shell (D-111).
+
 ### Docs and example web app
 
 - The example web app's policy (`examples/webapp/index.html`) and the
