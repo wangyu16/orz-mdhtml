@@ -8,7 +8,7 @@ theme      (default)
 header     carrier, title, uid
 includes   1
 structure  complete, engine from jsDelivr
-sha256     3e64f3900b301b1fb143e1bbf15d43328ec2f0f811e7f1623d694014187ead7c (of the text it holds; --replaces takes it)
+sha256     3e64f3900b301b1fb143e1bbf15d43328ec2f0f811e7f1623d694014187ead7c (of the text it holds: the value to pass as --replaces)
 writable   yes
 lint       clean
 

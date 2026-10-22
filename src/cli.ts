@@ -138,7 +138,7 @@ Exit status: 0 done, 1 refused or failed, 2 usage error.`;
 const HELP: Record<string, string> = {
   new: `orz-mdhtml new [file.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn | --inline] [--force] [--json]
 
-Writes a new format-1 text twin: a header (kind: document, carrier: md, a fresh uid,
+Writes a new text twin: a header (kind: document, carrier: md, a fresh uid,
 the given title/theme/measure/lang), then a starter body. Without a file the text is
 printed to stdout. --html also writes its assembled file (file.md.html; --cdn for a
 small web file). Refuses to overwrite an existing file unless --force, which keeps
@@ -147,7 +147,7 @@ Themes: ${THEMES.map((t) => t.id).join(', ')}.`,
   assemble: `orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces <sha256>] [--force] [--json]
 orz-mdhtml <file.md> [-o out.md.html] [--cdn | --inline] [--force] [--json]
 
-Writes the self-editing file of a text twin: x.md -> x.md.html (FC-18 §3), the text
+Writes the self-editing file of a text twin: x.md -> x.md.html, the text
 stored exactly (line endings, BOM); -o writes it elsewhere (missing folders are created).
 Delivery: --inline (this release's engine inside the file) or --cdn (loads it from
 jsDelivr); without either, an existing output keeps its delivery, a new one is inline.
@@ -194,8 +194,8 @@ everything, --force replaces it and keeps the old file as x.md.html~ (or ~1, ~2,
   extract: `orz-mdhtml extract <file.md.html> [-o out.md] [--replaces <sha256>] [--force] [--json]
 
 Writes the exact text twin of an assembled file: x.md.html -> x.md, byte for byte the
-text that was assembled (CR LF and BOM kept). A 0.x file (before text format 1) is
-refused: use \`orz-mdhtml upgrade <file>\`, which writes its format-1 text twin. Warns
+text that was assembled (CR LF and BOM kept). A 0.x file (made before 1.0) is
+refused: use \`orz-mdhtml upgrade <file>\`, which writes its text twin. Warns
 when the file was cut off (the text may be incomplete).
 
 Replaces an existing x.md (or -o output) that holds a different text (no --force
@@ -219,8 +219,8 @@ file is reported as empty (damaged), not extracted.`,
   upgrade: `orz-mdhtml upgrade <old.md.html> [-o out.md.html] [--text out.md | --no-text] [--cdn | --inline] [--force] [--json]
 
 Turns an orz-mdhtml file into a file of this version. A 0.x file: its source is kept
-exactly and its metadata, title and theme move into a format-1 header (with carrier: md
-and a uid). A format-1 file: re-assembled with this shell, text and includes unchanged.
+exactly and its metadata, title and theme move into a header (with carrier: md
+and a uid). A 1.x file: re-assembled with this shell, text and includes unchanged.
 Writes the file in place (or to -o) and its text twin (twin of the output, or --text;
 --no-text skips it). Keeps the old file's delivery (--cdn / --inline to choose). Also
 repairs a damaged shell or engine (the text must be intact).
@@ -526,7 +526,7 @@ function assembledOutputCheck(t: AssembleTarget, existing: string | null): { ris
     if (heldHash === token) return { risk: null, earlier: 'token' };
     return {
       risk: {
-        message: `${names.out} no longer holds the text you named (--replaces ${token}): it holds another one (sha256 ${heldHash}) — saved in the browser or written by someone else since; not replaced. Bring its changes in: \`${commandLine(legacy ? legacyPull : pull)}\`, merge them into ${names.input}, then \`${legacy ? `${again(['--replaces'])}\` followed by the sha256 that upgrade printed` : `${again(['--replaces', heldHash])}\``}`,
+        message: `${names.out} no longer holds the text you named (--replaces ${token}): it holds another one (sha256 ${heldHash}) — saved in the browser or written by someone else since; not replaced. Bring its changes in: \`${commandLine(legacy ? legacyPull : pull)}\`, merge them into ${names.input}, then \`${legacy ? `${again(['--replaces'])} <sha256>\` with the sha256 that upgrade printed` : `${again(['--replaces', heldHash])}\``}`,
         reason: 'replaces-mismatch',
         next: legacy ? legacyPull : pull,
       },
@@ -547,7 +547,7 @@ function assembledOutputCheck(t: AssembleTarget, existing: string | null): { ris
   if (legacy) {
     return {
       risk: {
-        message: `${names.out} is a legacy orz-mdhtml 0.x file holding a different text than ${names.input}; not replaced. Its text is not readable by extract: \`${commandLine(legacyPull)}\` writes its format-1 text to ${other} (and makes ${names.out} a file of this version, printing the sha256 of the text it then holds); compare and merge it into ${names.input}, then \`${again(['--replaces'])}\` followed by that sha256 (it replaces ${names.out} only while it still holds that text)`,
+        message: `${names.out} is an orz-mdhtml 0.x file (made before 1.0) holding a different text than ${names.input}; not replaced. extract does not read 0.x files: \`${commandLine(legacyPull)}\` writes its text (with a header) to ${other} (and makes ${names.out} a file of this version, printing the sha256 of the text it then holds); compare and merge it into ${names.input}, then \`${again(['--replaces'])} <sha256>\` with that sha256 (it replaces ${names.out} only while it still holds that text)`,
         reason: 'legacy-file',
         next: legacyPull,
       },
@@ -852,7 +852,7 @@ function cmdAssemble(p: Parsed, o: Io): void {
   const n = Object.keys(includes).length;
   o.say(`Wrote ${out} (${d}${!p.flags.has('--cdn') && !p.flags.has('--inline') && prior !== null ? ' as before' : ''}, orz-mdhtml ${VERSION}${n ? `, ${n} include${n === 1 ? '' : 's'}` : ''})`);
   if (check.earlier !== null) o.say(`  (it held ${check.earlier === 'token' ? 'the text whose SHA-256 --replaces gave' : `an earlier text of ${basename(input)}: ${EARLIER_SOURCE[check.earlier]}`})`);
-  o.say(`  sha256 ${hash} (the text it holds; --replaces takes it)`);
+  o.say(`  sha256 ${hash} (of the text the file holds: pass it as --replaces, and a later assemble replaces the file only while it still holds this text)`);
   emit(o, { command: 'assemble', input, output: out, kind: 'md', format: info.format, shell: VERSION, delivery: d, uid: info.meta.uid ?? null, title: info.title, theme: info.theme ?? null, includes: n, resolved, unresolved, stale, backup: backedUp, replaced: check.earlier, sha256: hash, bytes: Buffer.byteLength(html, 'utf8') });
 }
 
@@ -872,14 +872,14 @@ function cmdExtract(p: Parsed, o: Io): void {
     const taken = textTarget !== undefined && existsSync(resolve(textTarget)) && !(present !== null && !looksHtml(present) && sameText(present, legacy.text));
     const textArgs = textTarget === undefined ? [] : taken ? ['--text', otherName(textTarget)] : outArg !== undefined && outArg !== '-' ? ['--text', outArg] : [];
     const next: Next = { command: 'upgrade', args: [file, ...textArgs] };
-    throw new CliError(`${file} is an orz-mdhtml ${legacy.version ?? '0.x'} file (before text format 1): run \`${commandLine(next)}\` — it writes the format-1 text${taken ? ` to ${textArgs[1]} (${textTarget} exists: compare and merge the two)` : ' twin'} (the source exactly, metadata moved into the header) and a file of this version`, 'legacy-file', next);
+    throw new CliError(`${file} is an orz-mdhtml ${legacy.version ?? '0.x'} file (made before 1.0), which extract does not read: run \`${commandLine(next)}\` — it writes its text${taken ? ` to ${textArgs[1]} (${textTarget} exists: compare and merge the two)` : ' twin'} (the text exactly, with its metadata moved into a header) and a file of this version`, 'legacy-file', next);
   }
   if (!ex) {
     if (html.trim() === '') throw new CliError(`${file} is empty (${statSync(input).size} bytes): a damaged or unfinished file, it holds no text to extract — look for its text twin or a backup (${file}~)`, 'not-orz');
     throw new CliError(`${file} holds no orz document (no #orz-src island); \`orz-mdhtml inspect ${sh(file)}\` says what it is`, 'not-orz', { command: 'inspect', args: [file] });
   }
-  if (ex.shell === '') o.warn(`${file} has an #orz-src island but no #orz-shell: an unknown writer; the island was read as format 1 would be — check the text`);
-  else if (inspect(html).checks?.island === 'unclosed') o.warn(`${file} was cut off: its #orz-src island is not closed, so the text may be incomplete — compare it with a backup before relying on it`);
+  if (ex.shell === '') o.warn(`${file} holds a document's text but does not say which program wrote it (no #orz-shell: an unknown writer); the text was read as orz-mdhtml reads its own files — check it`);
+  else if (inspect(html).checks?.island === 'unclosed') o.warn(`${file} was cut off inside its text (#orz-src is not closed), so the text may be incomplete — compare it with a backup before relying on it`);
   const toStdout = outArg === '-';
   if (toStdout && o.json) throw new CliError('-o - (stdout) and --json exclude each other', EXIT_USAGE);
   if (toStdout) { process.stdout.write(ex.text); return; }
@@ -903,7 +903,7 @@ function cmdExtract(p: Parsed, o: Io): void {
   const info = readDocument(ex.text, { kind: ex.kind });
   o.say(`Wrote ${out} (${ex.kind}, text format ${ex.format}, from orz-${ex.kind === 'md' ? 'mdhtml' : ex.kind} ${ex.shell || 'unknown'})`);
   if (check.earlier !== null) o.say(`  (${names.out} held ${check.earlier === 'token' ? 'the text whose SHA-256 --replaces gave' : `a known state: ${EARLIER_SOURCE[check.earlier]}`})`);
-  o.say(`  sha256 ${hash} (of the text; --replaces takes it)`);
+  o.say(`  sha256 ${hash} (of the text written: pass it as --replaces, and a later extract replaces ${names.out} only while it still holds this text)`);
   emit(o, { command: 'extract', input, output: out, kind: ex.kind, format: ex.format, shell: ex.shell || null, delivery: ex.delivery || null, uid: info.meta.uid ?? null, title: info.title, includes: ex.includes ? Object.keys(ex.includes).length : 0, backup: backedUp, replaced: check.earlier, sha256: hash, bytes: Buffer.byteLength(ex.text, 'utf8') });
 }
 
@@ -980,13 +980,13 @@ function cmdUpgrade(p: Parsed, o: Io): void {
   const moved = Object.keys(r.moved);
   if (moved.length > 0) o.say(`Moved into the header: ${moved.join(', ')}`);
   for (const n of conversions) o.say(`Note: ${n}`);
-  o.say(`  sha256 ${sha256(held)} (the text the file holds; --replaces takes it)`);
+  o.say(`  sha256 ${sha256(held)} (of the text the file holds: pass it as --replaces, and a later assemble replaces the file only while it still holds this text)`);
   emit(o, { command: 'upgrade', input, output: out, text: textOut, from: r.from, previous: r.from === 'legacy' ? legacy?.version ?? null : ex?.shell ?? null, shell: VERSION, delivery: d, uid: info.meta.uid ?? null, title: info.title, moved: r.moved, notes: r.notes, backups, ...(twinIsSource ? { twinWas: 'source' } : {}), sha256: sha256(held) });
 }
 
 function humanInspect(file: string, r: InspectReport): string {
   const rows: Array<[string, string]> = [['file', file]];
-  const inputs: Record<InspectReport['input'], string> = { text: 'a text (twin or plain Markdown)', assembled: 'an assembled file (text format 1)', legacy: 'an orz-mdhtml 0.x file (before text format 1)', html: 'HTML that is not an orz document' };
+  const inputs: Record<InspectReport['input'], string> = { text: 'a text (twin or plain Markdown)', assembled: 'an assembled file (text format 1)', legacy: 'an orz-mdhtml 0.x file (made before 1.0)', html: 'HTML that is not an orz document' };
   rows.push(['input', inputs[r.input]]);
   if (r.kind) rows.push(['kind', `${r.kind}${r.format !== null ? `, text format ${r.format}` : ''}`]);
   if (r.shell) rows.push(['shell', `${r.shell.tool} ${r.shell.version} (${r.shell.tool !== 'orz-mdhtml' ? `another kind: use ${r.shell.tool}` : r.shell.relation === 'same' ? 'this version' : r.shell.relation === 'older' ? `older than this tool, ${VERSION}` : r.shell.relation === 'newer' ? `newer than this tool, ${VERSION}` : 'unknown'}), ${r.shell.delivery} delivery`]);
@@ -1002,7 +1002,7 @@ function humanInspect(file: string, r: InspectReport): string {
       const whole = r.checks.island === 'closed' && r.checks.end === 'closed';
       rows.push(['structure', `${whole ? 'complete' : r.checks.island === 'unclosed' ? 'cut off inside the text (#orz-src not closed)' : 'cut off after the text (no </html>)'}, ${engine}`]);
     }
-    if (r.sha256) rows.push(['sha256', `${r.sha256} (of the text it holds; --replaces takes it)`]);
+    if (r.sha256) rows.push(['sha256', `${r.sha256} (of the text it holds: the value to pass as --replaces)`]);
     if (r.twin) {
       const when = { input: 'this one is newer', twin: 'the twin is newer', 'same-time': 'same modification time', unknown: '' }[r.twin.newer];
       const earlier = r.twin.earlier ? `, an earlier text of the text twin (${EARLIER_SOURCE[r.twin.earlier]})` : '';

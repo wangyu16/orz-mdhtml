@@ -68,7 +68,7 @@ describe.concurrent('the CLI', () => {
     const g = await cli(['assemble', 'golden.md', '--cdn', '-o', 'golden.cdn.md.html'], d);
     expect(g.code, g.stderr).toBe(0);
     expect(golden(text(join(d, 'golden.cdn.md.html')))).toBe(read(`${GOLDEN}/golden.cdn.md.html`));
-    expect(g.stdout).toBe(`Wrote ${join(d, 'golden.cdn.md.html')} (cdn, orz-mdhtml ${VERSION})\n  sha256 ${sha256(storedText(source))} (the text it holds; --replaces takes it)\n`);
+    expect(g.stdout).toBe(`Wrote ${join(d, 'golden.cdn.md.html')} (cdn, orz-mdhtml ${VERSION})\n  sha256 ${sha256(storedText(source))} (of the text the file holds: pass it as --replaces, and a later assemble replaces the file only while it still holds this text)\n`);
 
     const samples: Array<[string, string]> = [
       ['crlf-bom', `\uFEFF${source.replace(/\n/g, '\r\n')}`],
@@ -186,7 +186,7 @@ describe.concurrent('the CLI', () => {
       write(file, read(path));
       const r = await cli(['extract', file], d);
       expect(r.code, name).toBe(1);
-      expect(r.stderr).toMatch(/before text format 1.*orz-mdhtml upgrade/);
+      expect(r.stderr).toMatch(/made before 1\.0.*orz-mdhtml upgrade/);
       expect(existsSync(file.replace(/\.html$/, ''))).toBe(false);
     }
     // an island without #orz-shell (an unknown writer): extracted with a warning
@@ -850,7 +850,7 @@ describe.concurrent('the CLI', () => {
     write(join(d, 'old.md'), '{{nyml\nkind: meta\ntitle: Old\n}}\n\n# my 0.x text, edited\n');
     await fail(['assemble', 'old.md'], 'legacy-file', { command: 'upgrade', args: ['old.md.html', '--text', 'old.browser.md'] });
     const lr = json(await cli(['assemble', 'old.md', '--json'], d));
-    expect(String(lr.error)).toMatch(/legacy orz-mdhtml 0\.x file.*orz-mdhtml upgrade old\.md\.html --text old\.browser\.md.*merge/);
+    expect(String(lr.error)).toMatch(/orz-mdhtml 0\.x file \(made before 1\.0\).*orz-mdhtml upgrade old\.md\.html --text old\.browser\.md.*merge/);
     expect(String(lr.error)).not.toMatch(/orz-mdhtml extract/);
     await fail(['upgrade', 'old.md.html'], 'twin-differs', { command: 'upgrade', args: ['old.md.html', '--text', 'old.browser.md'] });
     expect(text(join(d, 'old.md.html'))).toBe(legacy);
@@ -1164,7 +1164,7 @@ describe.concurrent('the CLI', () => {
     expect(json(await cli(['extract', 'old.md.html', '--json'], l))).toMatchObject({ reason: 'legacy-file', next: { command: 'upgrade', args: ['old.md.html', '--text', 'old.browser.md'] } });
     const refused = await cli(['assemble', 'old.md', '--json'], l);
     expect(json(refused)).toMatchObject({ reason: 'legacy-file', next: { command: 'upgrade', args: ['old.md.html', '--text', 'old.browser.md'] } });
-    expect(String(json(refused).error)).toMatch(/then `orz-mdhtml assemble old\.md --replaces` followed by that sha256/);
+    expect(String(json(refused).error)).toMatch(/then `orz-mdhtml assemble old\.md --replaces <sha256>` with that sha256/);
     expect(String(json(refused).error)).not.toMatch(/--force/);
     // a --replaces mismatch over a 0.x file: next is the upgrade too (C20)
     expect(json(await cli(['assemble', 'old.md', '--replaces', '0'.repeat(64), '--json'], l))).toMatchObject({ reason: 'replaces-mismatch', next: { command: 'upgrade', args: ['old.md.html', '--text', 'old.browser.md'] } });

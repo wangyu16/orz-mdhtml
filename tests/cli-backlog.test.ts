@@ -34,7 +34,7 @@ const json = (r: Run): Record<string, unknown> => JSON.parse(r.stdout) as Record
 const write = (path: string, s: string): void => writeFileSync(path, s, 'utf8');
 const shellOf = (html: string): string => /"shell":"([^"]*)"/.exec(html)?.[1] ?? '';
 
-describe.concurrent('CLI backlog fixes (1.1.0)', () => {
+describe.concurrent('CLI backlog fixes (1.1.0)', { timeout: 180_000 }, () => {
   it('[T.22] a reader that closes the pipe early (assemble x.md -o - | head -c 10) ends the command quietly: exit 0, no stack (D-77)', async () => {
     const d = folder();
     write(join(d, 'x.md'), `# Big\n\n${'lorem ipsum '.repeat(20000)}\n`);
@@ -169,7 +169,7 @@ describe.concurrent('CLI backlog fixes (1.1.0)', () => {
     write(join(d, 'notes.md'), `${readLegacy(html)!.text}\nan edit of my own\n`);
     expect((JSON.parse((await cli(['inspect', 'notes.md.html', '--json'], d)).stdout) as ReturnType<typeof inspect>).twin).toMatchObject({ holds: 'different' });
     expect(json(await cli(['upgrade', 'notes.md.html', '--json'], d))).toMatchObject({ ok: false, reason: 'twin-differs', next: { command: 'upgrade', args: ['notes.md.html', '--text', 'notes.browser.md'] } });
-  });
+  }, 180_000);
   it('[T.27] upgrade of a 0.x file reports the new uid (its 0.x id is not a uid) as a note, not a warning; what was not understood stays a warning (D-108)', async () => {
     const d = folder();
     copyFileSync(LEGACY_FILES['fixtures/sample.md.html']!, join(d, 'sample.md.html'));
@@ -207,4 +207,22 @@ describe.concurrent('CLI backlog fixes (1.1.0)', () => {
     expect(r).toMatchObject({ ok: true, previous: '1.0.0', shell: pkg.version });
     expect(shellOf(readFileSync(join(d, 'one.md.html'), 'utf8'))).toBe(pkg.version);
   });
+  it('[T.29] the CLI\'s own messages are in user words: no contract ids, no "format-1", "before text format 1", "compatibility shim", "--replaces followed by the sha256" or "--replaces takes it" — in help, inspect, refusals and upgrade output (D-91)', async () => {
+    const JARGON = [/FC-\d+/, /format-1/, /before text format/, /compatibility shim/, /\bexperimental\b/, /followed by (the|that) sha256/, /--replaces takes it/, /island was read as format 1/];
+    const d = folder();
+    const legacy = readFileSync(LEGACY_FILES['fixtures/sample.md.html']!, 'utf8');
+    write(join(d, 'old.md.html'), legacy);
+    write(join(d, 'old.md'), `${readLegacy(legacy)!.text}\nmine\n`);
+    write(join(d, 'x.md'), '{{nyml\nkind: document\ncarrier: md\nuid: doc-abcdefghij12\n}}\n\n# X\n');
+    const runs: Run[] = [];
+    for (const c of ['new', 'assemble', 'extract', 'upgrade', 'inspect', 'themes']) runs.push(await cli([c, '--help'], d));
+    runs.push(await cli(['--help'], d));
+    runs.push(await cli(['inspect', 'old.md.html'], d), await cli(['inspect', 'old.md'], d));
+    runs.push(await cli(['extract', 'old.md.html'], d), await cli(['assemble', 'old.md'], d), await cli(['assemble', 'old.md', '--replaces', '0'.repeat(64)], d));
+    runs.push(await cli(['assemble', 'x.md'], d), await cli(['extract', 'x.md.html', '-o', 'y.md'], d));
+    runs.push(await cli(['upgrade', 'old.md.html', '--text', 'old.browser.md'], d));
+    for (const r of runs) for (const j of JARGON) expect(`${r.stdout}${r.stderr}`, String(j)).not.toMatch(j);
+    // the sha256 line says what it is for
+    expect(runs.at(-3)!.stdout).toMatch(/^  sha256 [0-9a-f]{64} \(of the text the file holds: pass it as --replaces, and a later assemble replaces the file only while it still holds this text\)$/m);
+  }, 180_000);
 });

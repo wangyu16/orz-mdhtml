@@ -42,6 +42,14 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
   `upgrade` result adds `warnings` (the notes worth a warning) (D-108).
 - `upgrade` writes the running release's shell — checked for a 0.x file and
   a 1.0.0 file (D-93; fixed in 1.0.2, now a regression test).
+- The CLI's own messages are in user words (D-91): a 0.x file is "made
+  before 1.0" (not "experimental, before text format 1; no compatibility
+  shim"); a suggested command is written out (`assemble x.md --replaces
+  <sha256>` with the sha256 upgrade printed, not "--replaces followed by the
+  sha256"); the printed `sha256` says what it is for ("pass it as
+  --replaces, and a later assemble replaces the file only while it still
+  holds this text"); no contract ids or "format-1" in `--help`. The
+  `reason` codes are unchanged. (The kit's own messages are the kit's.)
 
 ### Docs and example web app
 

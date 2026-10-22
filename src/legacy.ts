@@ -245,7 +245,7 @@ export function upgrade(html: string, options: UpgradeOptions = {}): UpgradeResu
   const legacy = readLegacy(html);
   if (!legacy) {
     const ex = extract(html);
-    if (!ex || ex.shell === '') throw new Error('orz-mdhtml upgrade: not an orz-mdhtml file (no 0.x markers and no format-1 #orz-src/#orz-shell)');
+    if (!ex || ex.shell === '') throw new Error('orz-mdhtml upgrade: not an orz-mdhtml file (neither a 0.x file nor one made by orz-mdhtml 1.x)');
     if (ex.kind !== 'md') throw new Error(`orz-mdhtml upgrade: an orz-${ex.kind} file; use orz-${ex.kind}`);
     if (ex.format > 1) throw new Error(`orz-mdhtml upgrade: text format ${ex.format} is newer than this tool writes (format 1)`);
     if (!downgrade && compareSemver(ex.shell, VERSION) === 1) {

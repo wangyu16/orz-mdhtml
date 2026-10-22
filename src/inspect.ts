@@ -189,17 +189,17 @@ export function inspect(input: string, options: InspectOptions = {}): InspectRep
       if (twinText && sameText(twinText.content, legacy.text)) {
         // the text beside it is this file's own source: upgrade adds the header to it (nothing to merge; D-90)
         report.advice.push(
-          `legacy orz-mdhtml ${legacy.version ?? '0.x'} file next to its own source, ${twinText.name} (the same text): run \`orz-mdhtml upgrade ${self}\` — it adds a header to ${twinText.name} (a uid, and this file's metadata, title and theme; the text itself stays exactly as it is) and re-assembles this file from it. The file's own "Framework 1.0.0 available" banner cannot update it (it ends with "check your connection")`,
+          `orz-mdhtml ${legacy.version ?? '0.x'} file (made before 1.0) next to its own source, ${twinText.name} (the same text): run \`orz-mdhtml upgrade ${self}\` — it adds a header to ${twinText.name} (a uid, and this file's metadata, title and theme; the text itself stays exactly as it is) and re-assembles this file from it. The file's own "Framework 1.0.0 available" banner cannot update it (it ends with "check your connection")`,
         );
       } else if (twinText) {
         // a 0.x file next to a text twin (often a 0.x text): upgrade must not replace it — its text goes to another name
         const other = sh(browserName(twinText.name));
         report.advice.push(
-          `legacy orz-mdhtml ${legacy.version ?? '0.x'} file (experimental, before text format 1; no compatibility shim) next to the text ${twinText.name}: run \`orz-mdhtml upgrade ${self} --text ${other}\` — it writes this file's format-1 text (the source exactly, its metadata, title and theme moved into a header) to ${browserName(twinText.name)} and re-assembles this file from it; then compare ${browserName(twinText.name)} with ${twinText.name}, merge what you keep into ${twinText.name} (keep the new header), and \`orz-mdhtml assemble ${sh(twinText.name)} --replaces\` followed by the sha256 upgrade printed (it replaces this file only while it holds that text). The file's own "Framework 1.0.0 available" banner cannot update it (it ends with "check your connection")`,
+          `orz-mdhtml ${legacy.version ?? '0.x'} file (made before 1.0) next to the text ${twinText.name}, which differs from it: run \`orz-mdhtml upgrade ${self} --text ${other}\` — it writes this file's text (exactly, with its metadata, title and theme moved into a header) to ${browserName(twinText.name)} and re-assembles this file from it; then compare ${browserName(twinText.name)} with ${twinText.name}, merge what you keep into ${twinText.name} (keep the new header), and \`orz-mdhtml assemble ${sh(twinText.name)} --replaces <sha256>\` with the sha256 upgrade printed (it replaces this file only while it holds that text). The file's own "Framework 1.0.0 available" banner cannot update it (it ends with "check your connection")`,
         );
       } else {
         report.advice.push(
-          `legacy orz-mdhtml ${legacy.version ?? '0.x'} file (experimental, before text format 1; no compatibility shim): run \`orz-mdhtml upgrade ${self}\` for its format-1 text twin and a new file; the source is kept exactly and its metadata, title and theme move into the header. The file's own "Framework 1.0.0 available" banner cannot update it (it ends with "check your connection"); \`orz-mdhtml upgrade\` is the way`,
+          `orz-mdhtml ${legacy.version ?? '0.x'} file (made before 1.0): run \`orz-mdhtml upgrade ${self}\` for its text twin and a file of this version; the text is kept exactly and its metadata, title and theme move into the header. The file's own "Framework 1.0.0 available" banner cannot update it (it ends with "check your connection"); \`orz-mdhtml upgrade\` is the way`,
         );
       }
       text = legacy.text;
@@ -273,9 +273,9 @@ export function inspect(input: string, options: InspectOptions = {}): InspectRep
     if (report.input === 'legacy') {
       // the advice above already names upgrade --text
     } else if (t.holds === 'same' && twinLegacy) {
-      report.advice.push(`${t.name} is a legacy orz-mdhtml 0.x file holding this very text: \`orz-mdhtml upgrade ${tn}\` adds a header to this text (a uid, and the file's metadata, title and theme; the text itself stays exactly as it is) and re-assembles ${t.name} from it — rather than \`assemble\`, which would drop the metadata the 0.x file keeps outside its text`);
+      report.advice.push(`${t.name} is an orz-mdhtml 0.x file (made before 1.0) holding this very text: \`orz-mdhtml upgrade ${tn}\` adds a header to this text (a uid, and the file's metadata, title and theme; the text itself stays exactly as it is) and re-assembles ${t.name} from it — rather than \`assemble\`, which would drop the metadata the 0.x file keeps outside its text`);
     } else if (t.holds === 'different' && twinLegacy) {
-      report.advice.push(`${t.name} is a legacy orz-mdhtml 0.x file holding a different text than this text twin: \`orz-mdhtml upgrade ${tn} --text ${sh(browserName(options.filename ?? 'file.md'))}\` gives its format-1 text (and makes it a file of this version); compare and merge that into ${options.filename ?? 'this text'}, then \`orz-mdhtml assemble ${self} --replaces\` followed by the sha256 upgrade printed (it replaces ${t.name} only while it holds that text). Not \`extract\`: it does not read 0.x files`);
+      report.advice.push(`${t.name} is an orz-mdhtml 0.x file (made before 1.0) holding a different text than this text twin: \`orz-mdhtml upgrade ${tn} --text ${sh(browserName(options.filename ?? 'file.md'))}\` gives its text (with a header; and makes it a file of this version); compare and merge that into ${options.filename ?? 'this text'}, then \`orz-mdhtml assemble ${self} --replaces <sha256>\` with the sha256 upgrade printed (it replaces ${t.name} only while it holds that text). Not \`extract\`: it does not read 0.x files`);
     } else if (t.holds === 'different' && options.twin.earlier) {
       const source = { 'git-head': 'its last commit', 'git-index': 'its staged version', 'git-log': 'one of its recent commits', cache: 'what orz-mdhtml last wrote there' }[options.twin.earlier];
       t.earlier = options.twin.earlier;
@@ -299,7 +299,7 @@ export function inspect(input: string, options: InspectOptions = {}): InspectRep
     report.advice.push(`no text twin ${options.missingTwin} beside it: \`orz-mdhtml extract ${self}\` writes it (this file's text, exactly); edit ${options.missingTwin}, then \`orz-mdhtml assemble ${tn}\``);
   }
   // no uid: nothing names the document (hosts, and the CLI's "same document?" checks, go by it) — say how to get one
-  if ((report.input === 'text' || report.input === 'assembled') && doc.kind === 'md' && !newer && doc.meta.uid === undefined && !(besideLegacy && report.twin?.holds === 'same')) {
+  if ((report.input === 'text' || report.input === 'assembled') && doc.kind === 'md' && !newer && doc.meta.uid === undefined && !besideLegacy) {
     const where = report.input === 'text' ? self : sh(options.twin?.name ?? options.missingTwin ?? 'file.md');
     report.advice.push(missingUidAdvice(doc.header !== null, where));
   }

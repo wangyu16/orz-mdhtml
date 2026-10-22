@@ -57,7 +57,7 @@ describe('inspect', () => {
       expect(r.legacy!.delivery).toBe('cdn');
       expect(r.legacy!.docId).toMatch(/^[0-9a-f-]{36}$/);
       expect(r.legacy!.theme).toBe('light-neat-3');
-      expect(r.advice[0]).toMatch(/legacy orz-mdhtml 0\.\d+\.\d+ file.*`orz-mdhtml upgrade file\.md\.html`/);
+      expect(r.advice[0]).toMatch(/orz-mdhtml 0\.\d+\.\d+ file \(made before 1\.0\).*`orz-mdhtml upgrade file\.md\.html`/);
     }
     const meta = inspect(read(LEGACY_FILES['fixtures/metadata.md.html']));
     expect(meta.legacy).toMatchObject({ title: 'Portable Metadata Example', metaKeys: ['title', 'author', 'description', 'source', 'date', 'keywords', 'license'] });
@@ -140,17 +140,17 @@ describe('inspect', () => {
     const oldText = '{{nyml\nkind: meta\ntitle: Old\n}}\n\n# my own text\n';
     const fromText = inspect(oldText, { filename: 'sample.md', twin: { name: 'sample.md.html', content: legacy } });
     expect(fromText.twin!.holds).toBe('different');
-    expect(fromText.advice.join('\n')).toMatch(/sample\.md\.html is a legacy orz-mdhtml 0\.x file.*orz-mdhtml upgrade sample\.md\.html --text sample\.browser\.md.*merge.*Not `extract`/);
+    expect(fromText.advice.join('\n')).toMatch(/sample\.md\.html is an orz-mdhtml 0\.x file \(made before 1\.0\).*orz-mdhtml upgrade sample\.md\.html --text sample\.browser\.md.*merge.*Not `extract`/);
     expect(fromText.advice.join('\n')).not.toMatch(/orz-mdhtml extract/);
     // and ends with assemble --replaces (the sha256 upgrade printed), never --force (round 3, L3)
-    expect(fromText.advice.join('\n')).toMatch(/then `orz-mdhtml assemble sample\.md --replaces` followed by the sha256 upgrade printed/);
+    expect(fromText.advice.join('\n')).toMatch(/then `orz-mdhtml assemble sample\.md --replaces <sha256>` with the sha256 upgrade printed/);
     expect(fromText.advice.join('\n')).not.toMatch(/--force/);
     const fromLegacy = inspect(legacy, { filename: 'sample.md.html', twin: { name: 'sample.md', content: oldText } });
     expect(fromLegacy.twin!.holds).toBe('different');
-    expect(fromLegacy.advice.join('\n')).toMatch(/next to the text sample\.md: run `orz-mdhtml upgrade sample\.md\.html --text sample\.browser\.md`.*merge/);
-    expect(fromLegacy.advice.join('\n')).toMatch(/`orz-mdhtml assemble sample\.md --replaces` followed by the sha256 upgrade printed/);
+    expect(fromLegacy.advice.join('\n')).toMatch(/next to the text sample\.md, which differs from it: run `orz-mdhtml upgrade sample\.md\.html --text sample\.browser\.md`.*merge/);
+    expect(fromLegacy.advice.join('\n')).toMatch(/`orz-mdhtml assemble sample\.md --replaces <sha256>` with the sha256 upgrade printed/);
     expect(fromLegacy.advice.join('\n')).not.toMatch(/--force/);
-    expect(inspect(legacy, { filename: 'sample.md.html' }).advice.join('\n')).toMatch(/run `orz-mdhtml upgrade sample\.md\.html` for its format-1 text twin/);
+    expect(inspect(legacy, { filename: 'sample.md.html' }).advice.join('\n')).toMatch(/run `orz-mdhtml upgrade sample\.md\.html` for its text twin/);
     // the same text (mixed line endings stored in one style count as the same)
     const mixed = 'a\r\nb\nc\n';
     expect(inspect(mixed, { twin: { name: 'm.md.html', content: assemble(mixed, { delivery: 'cdn' }) } }).twin).toEqual({ name: 'm.md.html', holds: 'same', newer: 'unknown', sha256: sha256(extract(assemble(mixed, { delivery: 'cdn' }))!.text) });
