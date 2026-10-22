@@ -186,7 +186,12 @@ export function inspect(input: string, options: InspectOptions = {}): InspectRep
       };
       report.notes.push(...legacy.notes);
       const twinText = options.twin && !looksHtml(options.twin.content) ? options.twin : null;
-      if (twinText) {
+      if (twinText && sameText(twinText.content, legacy.text)) {
+        // the text beside it is this file's own source: upgrade adds the header to it (nothing to merge; D-90)
+        report.advice.push(
+          `legacy orz-mdhtml ${legacy.version ?? '0.x'} file next to its own source, ${twinText.name} (the same text): run \`orz-mdhtml upgrade ${self}\` — it adds a header to ${twinText.name} (a uid, and this file's metadata, title and theme; the text itself stays exactly as it is) and re-assembles this file from it. The file's own "Framework 1.0.0 available" banner cannot update it (it ends with "check your connection")`,
+        );
+      } else if (twinText) {
         // a 0.x file next to a text twin (often a 0.x text): upgrade must not replace it — its text goes to another name
         const other = sh(browserName(twinText.name));
         report.advice.push(
@@ -267,6 +272,8 @@ export function inspect(input: string, options: InspectOptions = {}): InspectRep
     const twinLegacy = report.input === 'text' && looksHtml(options.twin.content) && readLegacy(options.twin.content) !== null;
     if (report.input === 'legacy') {
       // the advice above already names upgrade --text
+    } else if (t.holds === 'same' && twinLegacy) {
+      report.advice.push(`${t.name} is a legacy orz-mdhtml 0.x file holding this very text: \`orz-mdhtml upgrade ${tn}\` adds a header to this text (a uid, and the file's metadata, title and theme; the text itself stays exactly as it is) and re-assembles ${t.name} from it — rather than \`assemble\`, which would drop the metadata the 0.x file keeps outside its text`);
     } else if (t.holds === 'different' && twinLegacy) {
       report.advice.push(`${t.name} is a legacy orz-mdhtml 0.x file holding a different text than this text twin: \`orz-mdhtml upgrade ${tn} --text ${sh(browserName(options.filename ?? 'file.md'))}\` gives its format-1 text (and makes it a file of this version); compare and merge that into ${options.filename ?? 'this text'}, then \`orz-mdhtml assemble ${self} --replaces\` followed by the sha256 upgrade printed (it replaces ${t.name} only while it holds that text). Not \`extract\`: it does not read 0.x files`);
     } else if (t.holds === 'different' && options.twin.earlier) {
@@ -285,13 +292,14 @@ export function inspect(input: string, options: InspectOptions = {}): InspectRep
       report.advice.push(`${t.name} exists but is not an orz file: \`orz-mdhtml assemble\` will not replace it without --force`);
     }
   }
-  if (report.input === 'text' && doc.kind === 'md' && !newer && report.twin?.holds !== 'different') report.advice.push(`a text twin: \`orz-mdhtml assemble ${self}\` makes its .md.html`);
+  const besideLegacy = report.input === 'text' && options.twin !== undefined && looksHtml(options.twin.content) && readLegacy(options.twin.content) !== null;
+  if (report.input === 'text' && doc.kind === 'md' && !newer && report.twin?.holds !== 'different' && !besideLegacy) report.advice.push(`a text twin: \`orz-mdhtml assemble ${self}\` makes its .md.html`);
   if (report.input === 'assembled' && doc.kind === 'md' && !options.twin && options.missingTwin !== undefined && report.checks?.island !== 'unclosed') {
     const tn = sh(options.missingTwin);
     report.advice.push(`no text twin ${options.missingTwin} beside it: \`orz-mdhtml extract ${self}\` writes it (this file's text, exactly); edit ${options.missingTwin}, then \`orz-mdhtml assemble ${tn}\``);
   }
   // no uid: nothing names the document (hosts, and the CLI's "same document?" checks, go by it) — say how to get one
-  if ((report.input === 'text' || report.input === 'assembled') && doc.kind === 'md' && !newer && doc.meta.uid === undefined) {
+  if ((report.input === 'text' || report.input === 'assembled') && doc.kind === 'md' && !newer && doc.meta.uid === undefined && !(besideLegacy && report.twin?.holds === 'same')) {
     const where = report.input === 'text' ? self : sh(options.twin?.name ?? options.missingTwin ?? 'file.md');
     report.advice.push(missingUidAdvice(doc.header !== null, where));
   }
@@ -326,7 +334,17 @@ function twinCheck(input: 'text' | 'assembled', text: string, twin: NonNullable<
   }
   // the input is a file: the twin is a text
   if (looksHtml(twin.content) && heldText(twin.content) !== null) return { name: twin.name, holds: 'none', newer, sha256: null };
-  return { name: twin.name, holds: storedText(twin.content) === text ? 'same' : 'different', newer, sha256: sha256(twin.content) };
+  return { name: twin.name, holds: sameText(twin.content, text) ? 'same' : 'different', newer, sha256: sha256(twin.content) };
+}
+
+/**
+ * Whether a text twin holds the text a file holds (`held`), compared as the
+ * file would store the twin (mixed line endings are one style). `inspect`
+ * and `upgrade` compare a twin with a file — a 0.x file's source included —
+ * this one way (STATUS D-90).
+ */
+export function sameText(twinText: string, held: string): boolean {
+  return storedText(twinText) === held;
 }
 
 /** The first `<script …>` start tag whose attributes match, with its content's bounds (raw text: up to the first `</script`). */

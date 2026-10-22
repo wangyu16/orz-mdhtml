@@ -10,7 +10,8 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpat
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assembleEnvelope } from 'orz-markdown/carrier';
-import { assemble, inspect, VERSION } from '../src/lib.js';
+import { assemble, inspect, readLegacy, VERSION } from '../src/lib.js';
+import { withoutHeader } from 'orz-markdown/carrier';
 import { LEGACY_FILES } from './helpers.js';
 
 const CLI = join(process.cwd(), 'dist', 'cli.js');
@@ -132,5 +133,41 @@ describe.concurrent('CLI backlog fixes (1.1.0)', () => {
     const withTwin = JSON.parse((await cli(['inspect', 'u.md.html', '--json'], d)).stdout) as ReturnType<typeof inspect>;
     expect(withTwin.twin).toMatchObject({ holds: 'same' });
     expect(withTwin.advice.join('\n')).not.toContain('no text twin');
+  });
+  it('[T.26] a 0.x file next to its own source: inspect (from either side) and upgrade compare it the same way — "the same text", and upgrade gives the twin a header without --force, keeping its text exactly (D-90)', async () => {
+    for (const fixture of Object.values(LEGACY_FILES)) {
+      const d = folder();
+      const html = readFileSync(fixture, 'utf8');
+      const source = readLegacy(html)!.text;
+      write(join(d, 'notes.md.html'), html);
+      write(join(d, 'notes.md'), source);
+      const fromFile = JSON.parse((await cli(['inspect', 'notes.md.html', '--json'], d)).stdout) as ReturnType<typeof inspect>;
+      expect(fromFile.twin, fixture).toMatchObject({ holds: 'same' });
+      expect(fromFile.advice.join('\n')).toContain('run `orz-mdhtml upgrade notes.md.html` — it adds a header to notes.md');
+      expect(fromFile.advice.join('\n')).not.toContain('--text');
+      const fromText = JSON.parse((await cli(['inspect', 'notes.md', '--json'], d)).stdout) as ReturnType<typeof inspect>;
+      expect(fromText.twin).toMatchObject({ holds: 'same' });
+      expect(fromText.advice.join('\n')).toContain('`orz-mdhtml upgrade notes.md.html` adds a header to this text');
+      expect(fromText.advice.join('\n')).not.toMatch(/assemble notes\.md`|no uid/);
+      // extract names the same plain upgrade
+      const ex = json(await cli(['extract', 'notes.md.html', '--json'], d));
+      expect(ex).toMatchObject({ ok: false, reason: 'legacy-file', next: { command: 'upgrade', args: ['notes.md.html'] } });
+      // upgrade does what inspect said: no refusal, no --force, no backup
+      const up = await cli(['upgrade', 'notes.md.html', '--json'], d);
+      expect(up.code, up.stdout).toBe(0);
+      expect(json(up)).toMatchObject({ ok: true, twinWas: 'source', backups: [] });
+      const twin = readFileSync(join(d, 'notes.md'), 'utf8');
+      expect(twin).toMatch(/^\{\{nyml\n/);
+      expect(withoutHeader(twin).body.endsWith(source.replace(/^﻿/, ''))).toBe(true);
+      expect(existsSync(join(d, 'notes.md~'))).toBe(false);
+      expect(shellOf(readFileSync(join(d, 'notes.md.html'), 'utf8'))).toBe(VERSION);
+    }
+    // a twin with other text is still refused, as before
+    const d = folder();
+    const html = readFileSync(Object.values(LEGACY_FILES)[0]!, 'utf8');
+    write(join(d, 'notes.md.html'), html);
+    write(join(d, 'notes.md'), `${readLegacy(html)!.text}\nan edit of my own\n`);
+    expect((JSON.parse((await cli(['inspect', 'notes.md.html', '--json'], d)).stdout) as ReturnType<typeof inspect>).twin).toMatchObject({ holds: 'different' });
+    expect(json(await cli(['upgrade', 'notes.md.html', '--json'], d))).toMatchObject({ ok: false, reason: 'twin-differs', next: { command: 'upgrade', args: ['notes.md.html', '--text', 'notes.browser.md'] } });
   });
 });

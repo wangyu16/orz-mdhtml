@@ -28,6 +28,12 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
   header to paste at the top (or its `uid:` line to copy); `inspect` gives
   the same advice. `inspect x.md.html` with no `x.md` beside it advises
   `extract x.md.html`, which writes it (D-83).
+- A 0.x file next to its own source: `inspect` said "the same text" while
+  `upgrade` refused "holds a different text". Both (and `extract`'s advice)
+  now compare the twin one way; when the text beside the 0.x file is its own
+  source, `upgrade x.md.html` gives it the header without `--force` (its
+  text stays exactly as it is; `--json`: `twinWas: "source"`), and `inspect`
+  advises exactly that, from either side (D-90).
 
 ### Release tooling
 

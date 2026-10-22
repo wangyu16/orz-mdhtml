@@ -25,7 +25,7 @@ import { storedText } from './assemble.js';
 import { isUrl, keepReferenced, resolveFileIncludes, unresolvedIncludes } from './includes.js';
 import { cacheDir, cleanInGit, earlierStateOf, lastWriter, rememberPair as recordPair, sha256, twinStateOf, type EarlierState } from './known-states.js';
 import { SHA256_PATTERN } from './sha256.js';
-import { missingUidAdvice } from './inspect.js';
+import { missingUidAdvice, sameText } from './inspect.js';
 import { assemble, extract, inspect, newDocument, readDocument, readLegacy, upgrade, DEFAULT_THEME, ORZ_MARKDOWN_VERSION, THEMES, MEASURES, VERSION, type InspectReport } from './lib.js';
 
 const EXIT_OK = 0;
@@ -867,7 +867,9 @@ function cmdExtract(p: Parsed, o: Io): void {
   if (legacy) {
     // upgrade writes the text twin of the file unless --text: next to an existing text, to another name (then merge)
     const textTarget = outArg !== undefined && outArg !== '-' ? outArg : twinName(file) ?? undefined;
-    const taken = textTarget !== undefined && existsSync(resolve(textTarget));
+    const present = textTarget !== undefined && existsSync(resolve(textTarget)) ? readMaybe(resolve(textTarget)) : null;
+    // the text there is this file's own source (as inspect compares it): upgrade gives it a header, nothing to merge (D-90)
+    const taken = textTarget !== undefined && existsSync(resolve(textTarget)) && !(present !== null && !looksHtml(present) && sameText(present, legacy.text));
     const textArgs = textTarget === undefined ? [] : taken ? ['--text', otherName(textTarget)] : outArg !== undefined && outArg !== '-' ? ['--text', outArg] : [];
     const next: Next = { command: 'upgrade', args: [file, ...textArgs] };
     throw new CliError(`${file} is an orz-mdhtml ${legacy.version ?? '0.x'} file (before text format 1): run \`${commandLine(next)}\` — it writes the format-1 text${taken ? ` to ${textArgs[1]} (${textTarget} exists: compare and merge the two)` : ' twin'} (the source exactly, metadata moved into the header) and a file of this version`, 'legacy-file', next);
@@ -948,7 +950,11 @@ function cmdUpgrade(p: Parsed, o: Io): void {
   // the upgraded text's uid — unless upgrade minted it for a 0.x file without one (then it says nothing about identity)
   const newUid = uidOf(r.text);
   const ownUids = legacy ? [uidOf(legacy.text), legacy.meta?.uid, legacy.docId].map((u) => (typeof u === 'string' ? u.trim() : null)) : [newUid];
-  const textCheck = textOut ? textOutputCheck(textOut, r.text, out, { out: textName, file: outName }, null, newUid !== null && ownUids.includes(newUid) ? newUid : null, () => ({
+  // a 0.x file next to its own source (inspect: "the same text"): the twin gets the header, its text stays exactly — nothing
+  // to merge, so it is replaced as upgrade's own state (D-90)
+  const twinNow = legacy && textOut !== null && existsSync(textOut) ? readMaybe(textOut) : null;
+  const twinIsSource = twinNow !== null && !looksHtml(twinNow) && sameText(twinNow, legacy!.text);
+  const textCheck = twinIsSource ? { risk: null, earlier: null } : textOut ? textOutputCheck(textOut, r.text, out, { out: textName, file: outName }, null, newUid !== null && ownUids.includes(newUid) ? newUid : null, () => ({
     message: legacy
       ? `Upgrade to another name instead: \`${commandLine({ command: 'upgrade', args: [file, ...(p.values['--out'] !== undefined ? ['-o', outName] : []), ...(p.flags.has('--cdn') ? ['--cdn'] : p.flags.has('--inline') ? ['--inline'] : []), '--text', otherText] })}\`, then compare ${otherText} with ${textName} and merge (keep the new header); or --no-text, or --force (the old text is kept as ${textName}~)`
       : `Pass --text ${otherText} (then merge), --no-text, or --force to replace it (the old text is kept as ${textName}~)`,
@@ -968,11 +974,11 @@ function cmdUpgrade(p: Parsed, o: Io): void {
   for (const n of r.notes) o.warn(n);
   const info = readDocument(r.text);
   o.say(`Upgraded ${input}${out !== input ? ` -> ${out}` : ''} (from ${r.from === 'legacy' ? `orz-mdhtml ${legacy?.version ?? '0.x'}` : `orz-mdhtml ${ex?.shell ?? '?'}`} to ${VERSION}, ${d})`);
-  if (textOut) o.say(`Wrote ${textOut} (the text twin)`);
+  if (textOut) o.say(`Wrote ${textOut} (the text twin${twinIsSource ? `; it held this file's source, which it keeps exactly, now with a header` : ''})`);
   const moved = Object.keys(r.moved);
   if (moved.length > 0) o.say(`Moved into the header: ${moved.join(', ')}`);
   o.say(`  sha256 ${sha256(held)} (the text the file holds; --replaces takes it)`);
-  emit(o, { command: 'upgrade', input, output: out, text: textOut, from: r.from, previous: r.from === 'legacy' ? legacy?.version ?? null : ex?.shell ?? null, shell: VERSION, delivery: d, uid: info.meta.uid ?? null, title: info.title, moved: r.moved, notes: r.notes, backups, sha256: sha256(held) });
+  emit(o, { command: 'upgrade', input, output: out, text: textOut, from: r.from, previous: r.from === 'legacy' ? legacy?.version ?? null : ex?.shell ?? null, shell: VERSION, delivery: d, uid: info.meta.uid ?? null, title: info.title, moved: r.moved, notes: r.notes, backups, ...(twinIsSource ? { twinWas: 'source' } : {}), sha256: sha256(held) });
 }
 
 function humanInspect(file: string, r: InspectReport): string {
