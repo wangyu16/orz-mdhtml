@@ -5,6 +5,12 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
 
 ## [Unreleased]
 
+### Fixed (CLI)
+
+- A reader that stops early (`orz-mdhtml assemble x.md -o - | head -c 10`)
+  no longer makes the CLI print a Node stack (EPIPE): it exits quietly
+  (STATUS D-77).
+
 ### Release tooling
 
 - Publishing no longer re-runs the suite: `npm run test:release` runs it once

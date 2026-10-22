@@ -1078,4 +1078,13 @@ export function main(argv: string[]): number {
   }
 }
 
+// A reader that stops early (`assemble x.md -o - | head -c 10`) closes the pipe: that is not a failure of
+// this command — exit quietly instead of printing Node's "Unhandled 'error' event" stack (STATUS D-77).
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on('error', (e: NodeJS.ErrnoException) => {
+    if (e.code === 'EPIPE') process.exit(process.exitCode ?? EXIT_OK);
+    throw e;
+  });
+}
+
 process.exitCode = main(process.argv.slice(2));
