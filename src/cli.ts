@@ -3,8 +3,8 @@
  * The orz-mdhtml CLI (FC-10; REBUILD §3a): text twins (`x.md`) and their
  * self-editing files (`x.md.html`, FC-18 text format 1).
  *
- *   orz-mdhtml new [file.md] [--title T] [--theme id] [--measure m] [--lang l] [--html] [--cdn]
- *   orz-mdhtml assemble <file.md> [-o out] [--cdn] [--resolve-includes | --no-includes] [--replaces sha256]   (also: orz-mdhtml <file.md>)
+ *   orz-mdhtml new [file.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn | --inline]
+ *   orz-mdhtml assemble <file.md> [-o out] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces sha256]   (also: orz-mdhtml <file.md>)
  *   orz-mdhtml extract <file.md.html> [-o out] [--replaces sha256]
  *   orz-mdhtml upgrade <old.md.html> [-o out] [--text out.md | --no-text] [--cdn | --inline]
  *   orz-mdhtml inspect <file> [--json]
@@ -86,9 +86,9 @@ const USAGE = `orz-mdhtml ${VERSION} — Markdown that edits itself.
 A document is its text twin (x.md); its self-editing file (x.md.html) is assembled from it.
 
 Usage:
-  orz-mdhtml new [file.md] [--title T] [--theme id] [--measure m] [--lang l] [--html] [--cdn]
-  orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn] [--resolve-includes | --no-includes] [--replaces sha256]
-  orz-mdhtml <file.md> [-o out.md.html] [--cdn]          same as assemble
+  orz-mdhtml new [file.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn | --inline]
+  orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces sha256]
+  orz-mdhtml <file.md> [-o out.md.html] [--cdn | --inline]          same as assemble
   orz-mdhtml extract <file.md.html> [-o out.md] [--replaces sha256]
   orz-mdhtml upgrade <old.md.html> [-o out.md.html] [--text out.md | --no-text] [--cdn | --inline]
   orz-mdhtml inspect <file> [--json]
@@ -135,7 +135,7 @@ for a merge.
 Exit status: 0 done, 1 refused or failed, 2 usage error.`;
 
 const HELP: Record<string, string> = {
-  new: `orz-mdhtml new [file.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn] [--force] [--json]
+  new: `orz-mdhtml new [file.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn | --inline] [--force] [--json]
 
 Writes a new format-1 text twin: a header (kind: document, carrier: md, a fresh uid,
 the given title/theme/measure/lang), then a starter body. Without a file the text is
@@ -143,8 +143,8 @@ printed to stdout. --html also writes its assembled file (file.md.html; --cdn fo
 small web file). Refuses to overwrite an existing file unless --force, which keeps
 each replaced file as <file>~.
 Themes: ${THEMES.map((t) => t.id).join(', ')}.`,
-  assemble: `orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn] [--resolve-includes | --no-includes] [--replaces <sha256>] [--force] [--json]
-orz-mdhtml <file.md> [-o out.md.html] [--cdn] [--force] [--json]
+  assemble: `orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces <sha256>] [--force] [--json]
+orz-mdhtml <file.md> [-o out.md.html] [--cdn | --inline] [--force] [--json]
 
 Writes the self-editing file of a text twin: x.md -> x.md.html (FC-18 §3), the text
 stored exactly (line endings, BOM); -o writes it elsewhere (missing folders are created).
@@ -1044,6 +1044,21 @@ const COMMANDS: Record<string, (p: Parsed, o: Io) => void> = { new: cmdNew, asse
 
 // ── main ────────────────────────────────────────────────────────────────────
 
+/** A bare word (no dot, no slash), as a command name is — a text's file name has an extension or a folder. */
+const looksLikeCommand = (word: string): boolean => /^[a-z][a-z0-9-]*$/i.test(word);
+
+/** Commands of the sibling carriers, and what orz-mdhtml offers instead. */
+const OTHER_COMMANDS: Record<string, string> = {
+  templates: 'orz-mdhtml has no templates (that is orz-paged); a document\'s look is its theme: `orz-mdhtml themes` lists them',
+  template: 'orz-mdhtml has no templates (that is orz-paged); a document\'s look is its theme: `orz-mdhtml themes` lists them',
+  theme: 'did you mean `orz-mdhtml themes`? (it lists the themes a header may name)',
+  layouts: 'orz-mdhtml has no layouts (that is orz-slides); `orz-mdhtml themes` lists the themes',
+};
+
+/** The message for a command name orz-mdhtml does not have. */
+const unknownCommand = (word: string): string =>
+  `${OTHER_COMMANDS[word.toLowerCase()] ?? `orz-mdhtml has no command "${word}"`}. Commands: ${Object.keys(COMMANDS).join(', ')} (see \`orz-mdhtml --help\`)${existsSync(`${word}.md`) ? `; to assemble ${word}.md: \`orz-mdhtml assemble ${word}.md\`` : ''}`;
+
 export function main(argv: string[]): number {
   const json = argv.includes('--json');
   let command = 'assemble';
@@ -1052,6 +1067,7 @@ export function main(argv: string[]): number {
     if (first === undefined) { process.stderr.write(`${USAGE}\n`); return EXIT_USAGE; }
     if (first === '-h' || first === '--help' || first === 'help') {
       const topic = first === 'help' ? argv[1] : undefined;
+      if (topic !== undefined && !HELP[topic] && looksLikeCommand(topic)) { command = topic; throw new CliError(unknownCommand(topic), EXIT_USAGE); }
       process.stdout.write(`${topic && HELP[topic] ? HELP[topic] : USAGE}\n`);
       return EXIT_OK;
     }
@@ -1062,6 +1078,11 @@ export function main(argv: string[]): number {
     }
     let rest = argv;
     if (COMMANDS[first]) { command = first; rest = argv.slice(1); }
+    else if (looksLikeCommand(first) && !existsSync(first)) {
+      // `orz-mdhtml templates --help`: a word that names no file is a command this tool does not have, not a text
+      command = first;
+      throw new CliError(unknownCommand(first), EXIT_USAGE);
+    }
     else if (first.startsWith('-') && first !== '-') {
       // `orz-mdhtml --cdn x.md`: options before the file, the assemble shorthand
       command = 'assemble';
@@ -1073,7 +1094,7 @@ export function main(argv: string[]): number {
   } catch (e) {
     const err = e instanceof CliError ? e : new CliError(e instanceof Error ? e.message : String(e));
     if (json) process.stdout.write(`${JSON.stringify({ ok: false, command, error: err.message, reason: err.reason, ...(err.next ? { next: err.next } : {}), exitCode: err.code }, null, 2)}\n`);
-    else process.stderr.write(`orz-mdhtml ${command}: ${err.message}\n${err.code === EXIT_USAGE ? `(see orz-mdhtml ${command} --help)\n` : ''}`);
+    else process.stderr.write(`orz-mdhtml ${command}: ${err.message}\n${err.code === EXIT_USAGE && HELP[command] ? `(see orz-mdhtml ${command} --help)\n` : ''}`);
     return err.code;
   }
 }

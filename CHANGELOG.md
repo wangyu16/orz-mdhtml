@@ -10,6 +10,14 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
 - A reader that stops early (`orz-mdhtml assemble x.md -o - | head -c 10`)
   no longer makes the CLI print a Node stack (EPIPE): it exits quietly
   (STATUS D-77).
+- A command name orz-mdhtml does not have (`orz-mdhtml templates --help`,
+  `help templates`) is a usage error that lists the commands — for
+  `templates`, it points to `orz-mdhtml themes` — instead of being read as a
+  file name and answered with the `assemble` help (D-105). A bare word that
+  is a file is still assembled.
+- The `--help` synopses name `[--cdn | --inline]` (`new`, `assemble`) and
+  `--measure normal|wide|full` (D-107). `themes --json` keeps the family's
+  `name` key (D-106; checked).
 
 ### Release tooling
 

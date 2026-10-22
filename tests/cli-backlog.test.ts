@@ -48,4 +48,37 @@ describe.concurrent('CLI backlog fixes (1.1.0)', () => {
     expect(r.stderr).not.toMatch(/EPIPE|Unhandled|node:events/);
     expect(r.code).toBe(0);
   });
+  it('[T.23] a command name orz-mdhtml does not have is a usage error, never read as a file (D-105); the synopses name --cdn | --inline and the measures (D-107); themes --json names each theme `name` (D-106)', async () => {
+    const d = folder();
+    write(join(d, 'notes.md'), '# Notes\n');
+    for (const args of [['templates', '--help'], ['templates'], ['help', 'templates']]) {
+      const r = await cli(args, d);
+      expect(r.code, args.join(' ')).toBe(2);
+      expect(r.stdout, args.join(' ')).toBe('');
+      expect(r.stderr).toContain('orz-mdhtml has no templates');
+      expect(r.stderr).toContain('`orz-mdhtml themes`');
+      expect(r.stderr).not.toMatch(/no such file|orz-mdhtml assemble/);
+    }
+    const j = json(await cli(['frobnicate', '--json'], d));
+    expect(j).toMatchObject({ ok: false, command: 'frobnicate', reason: 'bad-usage', exitCode: 2 });
+    expect(String(j.error)).toContain('has no command "frobnicate"');
+    // a bare word next to its .md names the command to run
+    expect((await cli(['notes'], d)).stderr).toContain('`orz-mdhtml assemble notes.md`');
+    expect(existsSync(join(d, 'notes.md.html'))).toBe(false);
+    // a bare word that IS a file is still assembled as before (the shorthand)
+    write(join(d, 'plain'), '# Plain\n');
+    expect((await cli(['plain', '-o', 'plain.md.html'], d)).code).toBe(0);
+    // synopses
+    const usage = (await cli(['--help'], d)).stdout;
+    expect(usage).toContain('orz-mdhtml new [file.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn | --inline]');
+    expect(usage).toContain('orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn | --inline] ');
+    expect((await cli(['assemble', '--help'], d)).stdout.split('\n')[0]).toContain('[--cdn | --inline]');
+    expect((await cli(['new', '--help'], d)).stdout.split('\n')[0]).toContain('[--measure normal|wide|full]');
+    // themes --json: the picker name is `name` (the family key), no `label`
+    const themes = json(await cli(['themes', '--json'], d)).themes as Array<Record<string, unknown>>;
+    for (const t of themes) {
+      expect(typeof t.name).toBe('string');
+      expect(t).not.toHaveProperty('label');
+    }
+  });
 });

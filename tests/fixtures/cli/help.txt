@@ -2,9 +2,9 @@ orz-mdhtml {{VERSION}} — Markdown that edits itself.
 A document is its text twin (x.md); its self-editing file (x.md.html) is assembled from it.
 
 Usage:
-  orz-mdhtml new [file.md] [--title T] [--theme id] [--measure m] [--lang l] [--html] [--cdn]
-  orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn] [--resolve-includes | --no-includes] [--replaces sha256]
-  orz-mdhtml <file.md> [-o out.md.html] [--cdn]          same as assemble
+  orz-mdhtml new [file.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn | --inline]
+  orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces sha256]
+  orz-mdhtml <file.md> [-o out.md.html] [--cdn | --inline]          same as assemble
   orz-mdhtml extract <file.md.html> [-o out.md] [--replaces sha256]
   orz-mdhtml upgrade <old.md.html> [-o out.md.html] [--text out.md | --no-text] [--cdn | --inline]
   orz-mdhtml inspect <file> [--json]

@@ -40,8 +40,8 @@ npm run clean
 The CLI (`orz-mdhtml --help`; FC-10, inline by default, `--cdn` for the web):
 
 ```bash
-orz-mdhtml new [x.md] [--title T] [--theme id] [--measure m] [--lang l] [--html] [--cdn]
-orz-mdhtml assemble x.md [-o out] [--cdn] [--resolve-includes | --no-includes] [--replaces sha256]   # also: orz-mdhtml x.md
+orz-mdhtml new [x.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn | --inline]
+orz-mdhtml assemble x.md [-o out] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces sha256]   # also: orz-mdhtml x.md
 orz-mdhtml extract x.md.html [-o out] [--replaces sha256]   # the exact text twin; 0.x files → upgrade
 orz-mdhtml upgrade old.md.html [-o out] [--text t.md | --no-text] [--cdn | --inline]
 orz-mdhtml inspect <file> [--json]

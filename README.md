@@ -121,8 +121,8 @@ For a web app, the browser engine and editor component:
 ## The CLI
 
 ```
-orz-mdhtml new [file.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn]
-orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn] [--resolve-includes | --no-includes] [--replaces sha256]   (also: orz-mdhtml <file.md>)
+orz-mdhtml new [file.md] [--title T] [--theme id] [--measure normal|wide|full] [--lang l] [--html] [--cdn | --inline]
+orz-mdhtml assemble <file.md> [-o out.md.html] [--cdn | --inline] [--resolve-includes | --no-includes] [--replaces sha256]   (also: orz-mdhtml <file.md>)
 orz-mdhtml extract <file.md.html> [-o out.md] [--replaces sha256]
 orz-mdhtml upgrade <old.md.html> [-o out.md.html] [--text out.md | --no-text] [--cdn | --inline]
 orz-mdhtml inspect <file> [--json]
