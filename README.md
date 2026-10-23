@@ -73,7 +73,7 @@ measure: wide
 |---|---|
 | `carrier` | `md` (written by `new`) |
 | `uid` | the document's id, `doc-` + 10–32 of `[0-9a-z]`; `new` mints it — keep it, never invent or copy one |
-| `title`, `author`, `description`, `date`, `keywords`, `source` | document metadata (`keywords` comma-separated); no `title`: the first heading |
+| `title`, `author`, `description`, `date`, `keywords`, `source` | document metadata (`keywords` comma-separated); no `title`: the first heading; no heading either: `Untitled` |
 | `license`, `license_name`, `license_url` | an SPDX id, or a name and a URL |
 | `lang` | BCP 47 language of the content (default `en`) |
 | `theme` | a theme id (below; default `light-neat-3`) |
@@ -85,7 +85,8 @@ reported by `inspect` (lint). A Markdown file without a header still
 assembles (title from its first heading, no `uid`); to give it one, run
 `orz-mdhtml new --title "…"` with no file name — it prints a fresh header
 and a starter body on stdout — and paste the `{{nyml` … `}}` block at the
-top.
+top. A text with no `title` in its header and no heading is titled
+`Untitled` — by the CLI and in the browser alike, never after the file name.
 
 Themes (`orz-mdhtml themes`; the reader can switch theme, which edits the
 header):
@@ -134,7 +135,7 @@ orz-mdhtml themes
 | `new` | writes a new text twin: a header with `carrier: md`, a fresh `uid` and the given keys (`--measure normal\|wide\|full`), then a starter body. `--html` also assembles it; without a file name the text goes to stdout (a header to paste onto existing Markdown). |
 | `assemble` | writes `x.md.html` (or the `-o` path; missing folders are created) from `x.md` (exact text in, the same bytes every time). Keeps the delivery and the includes the existing file holds (`--cdn` / `--inline` choose the delivery); `--resolve-includes` reads file includes from the text's folder. An include left unresolved shows an "Included file not available" note in the file and is reported once with why (a warning, and `unresolved` in `--json`); a recorded include whose file has changed since is a warning too (`stale` in `--json`). |
 | `extract` | writes the exact text twin of an assembled file (`x.md.html` → `x.md`) and reports its includes. Replaces an existing, different `x.md` only when it is a known state (below). A 0.x file is refused with the advice to run `upgrade`; a cut-off file gives a warning. |
-| `upgrade` | turns a 0.x file (or a file of an older 1.x shell) into a file of this version, in place by default, and writes its text twin (`x.md`) unless `--no-text`. Keeps the file's delivery unless `--cdn` / `--inline`. Repairs a damaged engine; refuses (unless `--force`) to downgrade a newer shell or to upgrade a file cut off inside its text. |
+| `upgrade` | turns a 0.x file (or a file of an older 1.x shell) into a file of this version, in place by default, and writes its text twin (`x.md`) unless `--no-text`. Keeps the file's delivery unless `--cdn` / `--inline`. Repairs a damaged engine; refuses (unless `--force`) to downgrade a newer shell or to upgrade a file cut off inside its text. A 0.x file upgraded in place is kept as `old.md.html~`. |
 | `inspect` | diagnoses a text or a file of any version: kind, text format, shell version and how it compares to this tool, delivery, uid, header keys, lint, the file's structure (cut off? engine intact?), the SHA-256 of the text it holds, whether the sibling twin (`x.md` ↔ `x.md.html`) holds the same text (and that text's SHA-256) and which is newer, and advice in plain sentences naming the files. |
 | `themes` | lists the theme ids a header may name, with their names (`--json`: `id`, `name`, `scheme`, `default`). |
 
@@ -372,7 +373,7 @@ format 1; 1.0 does not open them as they are. Upgrade each once:
 
 ```bash
 npx orz-mdhtml@1 inspect old.md.html        # what it is and what to do
-npx orz-mdhtml@1 upgrade old.md.html        # → old.md.html (format 1) and old.md (its text twin)
+npx orz-mdhtml@1 upgrade old.md.html        # → old.md.html (format 1, the 0.x file kept as old.md.html~) and old.md (its text twin)
 npx orz-mdhtml@1 upgrade old.md.html --text old.browser.md   # when old.md exists (e.g. a 0.x text): then merge
 ```
 

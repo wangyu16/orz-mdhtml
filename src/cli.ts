@@ -228,7 +228,8 @@ Refuses (unless --force) a file whose shell is newer than this tool (a downgrade
 file cut off inside its text (#orz-src not closed: the text may be incomplete), -o onto
 another document, and an existing text twin that differs (unless it is a known state,
 as for extract): for a 0.x file next to its own text, \`--text x.browser.md\` and merge.
---force keeps each replaced file as <file>~.`,
+--force keeps each replaced file as <file>~. A 0.x file upgraded in place is kept as
+<file>~ (or <file>~1, ~2, ...).`,
   inspect: `orz-mdhtml inspect <file> [--json]
 
 Diagnoses a text twin, an assembled file, a 0.x file or any HTML: kind, text format,
@@ -353,7 +354,7 @@ function writeOut(path: string, data: string): void {
  * name is never followed or written through (`lstat`, then an exclusive
  * create). A backup that already holds exactly these bytes is reused.
  */
-function backup(path: string, o: Io): string {
+function backup(path: string, o: Pick<Io, 'warn'>): string {
   let data: Buffer;
   try { data = readFileSync(path); } catch (e) { throw new CliError(`could not read ${path} to keep a copy: ${(e as Error).message}; nothing was written`, 'write-failed'); }
   for (let i = 0; i < 1000; i++) {
@@ -962,7 +963,9 @@ function cmdUpgrade(p: Parsed, o: Io): void {
   })) : { risk: null, earlier: null };
   if (!force) for (const risk of [outRisk, textCheck.risk]) if (risk !== null) throw new CliError(risk.message, risk.reason, risk.next);
   const backups: string[] = [];
+  // replaced in place: a newer shell, a cut file, or a 0.x file (its text was converted) is kept as ~ (D-92, as orz-slides)
   if (out === input && (newerShell !== null || cut)) backups.push(backup(input, o));
+  else if (out === input && legacy !== null) backups.push(backup(input, { warn: () => undefined }));
   const ob = guard(out, outRisk, force, o);
   if (ob) backups.push(ob);
   if (textOut) { const tb = guard(textOut, textCheck.risk, force, o); if (tb) backups.push(tb); }
@@ -980,6 +983,7 @@ function cmdUpgrade(p: Parsed, o: Io): void {
   const moved = Object.keys(r.moved);
   if (moved.length > 0) o.say(`Moved into the header: ${moved.join(', ')}`);
   for (const n of conversions) o.say(`Note: ${n}`);
+  if (out === input && legacy !== null && backups[0]) o.say(`Kept the 0.x file as ${backups[0]}`);
   o.say(`  sha256 ${sha256(held)} (of the text the file holds: pass it as --replaces, and a later assemble replaces the file only while it still holds this text)`);
   emit(o, { command: 'upgrade', input, output: out, text: textOut, from: r.from, previous: r.from === 'legacy' ? legacy?.version ?? null : ex?.shell ?? null, shell: VERSION, delivery: d, uid: info.meta.uid ?? null, title: info.title, moved: r.moved, notes: r.notes, backups, ...(twinIsSource ? { twinWas: 'source' } : {}), sha256: sha256(held) });
 }

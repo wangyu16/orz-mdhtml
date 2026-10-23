@@ -152,10 +152,10 @@ describe.concurrent('CLI backlog fixes (1.1.0)', { timeout: 180_000 }, () => {
       // extract names the same plain upgrade
       const ex = json(await cli(['extract', 'notes.md.html', '--json'], d));
       expect(ex).toMatchObject({ ok: false, reason: 'legacy-file', next: { command: 'upgrade', args: ['notes.md.html'] } });
-      // upgrade does what inspect said: no refusal, no --force, no backup
+      // upgrade does what inspect said: no refusal, no --force, no backup of the twin (the 0.x file is kept as ~, D-92)
       const up = await cli(['upgrade', 'notes.md.html', '--json'], d);
       expect(up.code, up.stdout).toBe(0);
-      expect(json(up)).toMatchObject({ ok: true, twinWas: 'source', backups: [] });
+      expect(json(up)).toMatchObject({ ok: true, twinWas: 'source', backups: [join(d, 'notes.md.html~')] });
       const twin = readFileSync(join(d, 'notes.md'), 'utf8');
       expect(twin).toMatch(/^\{\{nyml\n/);
       expect(withoutHeader(twin).body.endsWith(source.replace(/^﻿/, ''))).toBe(true);
@@ -225,4 +225,39 @@ describe.concurrent('CLI backlog fixes (1.1.0)', { timeout: 180_000 }, () => {
     // the sha256 line says what it is for
     expect(runs.at(-3)!.stdout).toMatch(/^  sha256 [0-9a-f]{64} \(of the text the file holds: pass it as --replaces, and a later assemble replaces the file only while it still holds this text\)$/m);
   }, 180_000);
+  it('[T.4] upgrade of a 0.x file in place keeps the original as <file>~ (then ~1: a backup is never replaced), says so and lists it in --json backups; -o and a 1.x file keep none (D-92, as orz-slides)', async () => {
+    const d = folder();
+    const old = readFileSync(LEGACY_FILES['fixtures/sample.md.html']!, 'utf8');
+    write(join(d, 'old.md.html'), old);
+    const human = await cli(['upgrade', 'old.md.html', '--no-text'], d);
+    expect(human.code, human.stderr).toBe(0);
+    expect(human.stdout).toContain(`Kept the 0.x file as ${join(d, 'old.md.html~')}`);
+    expect(human.stderr).toBe('');
+    expect(readFileSync(join(d, 'old.md.html~'), 'utf8')).toBe(old);
+    // a 1.x file now: upgraded again, no backup
+    expect(json(await cli(['upgrade', 'old.md.html', '--no-text', '--json'], d))).toMatchObject({ ok: true, from: 'format-1', backups: [] });
+    // a second 0.x file of the same name: the first backup is kept, the new one is ~1
+    const at = old.lastIndexOf('</body>');
+    const other = `${old.slice(0, at)}<!-- another -->\n${old.slice(at)}`;
+    write(join(d, 'old.md.html'), other);
+    const j = json(await cli(['upgrade', 'old.md.html', '--json'], d));
+    expect(j).toMatchObject({ ok: true, from: 'legacy', backups: [join(d, 'old.md.html~1')] });
+    expect(readFileSync(join(d, 'old.md.html~'), 'utf8')).toBe(old);
+    expect(readFileSync(join(d, 'old.md.html~1'), 'utf8')).toBe(other);
+    // -o leaves the 0.x file as it is: no backup
+    const e = folder();
+    write(join(e, 'old.md.html'), old);
+    expect(json(await cli(['upgrade', 'old.md.html', '-o', 'new.md.html', '--json'], e))).toMatchObject({ ok: true, backups: [] });
+    expect(existsSync(join(e, 'old.md.html~'))).toBe(false);
+    expect(readFileSync(join(e, 'old.md.html'), 'utf8')).toBe(old);
+  });
+  it('[T.30] a text with no header title and no heading is titled "Untitled", never after its file name (D-79)', async () => {
+    const d = folder();
+    write(join(d, 's.md'), 'text only\n');
+    const r = json(await cli(['assemble', 's.md', '--json'], d));
+    expect(r).toMatchObject({ ok: true, title: 'Untitled' });
+    expect(readFileSync(join(d, 's.md.html'), 'utf8')).toContain('<title>Untitled</title>');
+    expect(inspect(readFileSync(join(d, 's.md.html'), 'utf8')).title).toBe('Untitled');
+    expect(JSON.parse((await cli(['inspect', 's.md', '--json'], d)).stdout)).toMatchObject({ title: 'Untitled' });
+  });
 });

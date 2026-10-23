@@ -210,7 +210,7 @@ license: CC-BY-4.0
 - One `key: value` per line; `key: |` then more-indented lines for a
   multi-line value. A value must not contain `}}`. Edit the header in place —
   change one line, never rewrite or reorder the block.
-- No `title`? The file's title is the first heading.
+- No `title`? The file's title is the first heading; with no heading either it is `Untitled` (in the CLI and the browser alike — never the file name).
 - An old `{{nyml kind: meta}}` block is read as the header and becomes
   `kind: document` on the first edit.
 
@@ -300,7 +300,7 @@ A failure is `{ "ok": false, "error", "reason", "next"?, "exitCode" }`.
 ## Upgrade old files
 
 ```bash
-npx orz-mdhtml@1 upgrade old.md.html            # in place, and writes old.md (its text twin)
+npx orz-mdhtml@1 upgrade old.md.html            # in place (the 0.x file kept as old.md.html~), and writes old.md (its text twin)
 npx orz-mdhtml@1 upgrade old.md.html -o new.md.html --text new.md
 ```
 
@@ -313,6 +313,9 @@ file of an older shell is re-assembled with its text and includes unchanged
 (this also repairs a damaged engine). A file of a newer shell is refused (no
 downgrades), and so is a file cut off inside its text (the text may be
 incomplete) — `--force` overrides either and keeps the old file as `x.md.html~`.
+A 0.x file upgraded in place is kept as `x.md.html~` (or `~1`, `~2`… when that
+name is taken; `--json` lists it in `backups`): delete it once the upgrade is
+checked — beside a page you serve, it is public too.
 If `x.md` already exists and differs (a 0.x text next to its 0.x file),
 `upgrade` refuses to overwrite it: `upgrade x.md.html --text x.browser.md`,
 then merge. Upgrading twice changes nothing more. With orz-mdhtml 1.0.0 on npm,

@@ -304,7 +304,7 @@ chrome('real Chrome (playwright-core, channel chrome)', () => {
     await page.context().close();
   }, 120_000);
 
-  it('[A.9] browser parity: the real bundle\'s OrzCarrier.assemble in Chrome writes the Node bytes for every md corpus file and hazard text (inline with the bundle given and defaulted, cdn, with and without includes)', async () => {
+  it('[A.9] [T.30] browser parity: the real bundle\'s OrzCarrier.assemble in Chrome writes the Node bytes for every md corpus file and hazard text (inline with the bundle given and defaulted, cdn, with and without includes); a text with no title is "Untitled" there too', async () => {
     const page = await bundlePage();
     const sets: Array<[string, AssembleOptions]> = [['inline', {}], ['cdn', { delivery: 'cdn' }], ['inline+includes', { includes: SOME_INCLUDES }], ['cdn+includes', { delivery: 'cdn', includes: SOME_INCLUDES }]];
     const cases = TEXTS.flatMap(([id, text, own]) => sets.map(([name, o]) => ({ id: `${id} ${name}`, text, opts: own ? { ...o, includes: own } : o })));
@@ -321,6 +321,11 @@ chrome('real Chrome (playwright-core, channel chrome)', () => {
     // and with an explicit engineSource (the update's path)
     const given = await page.evaluate(async ({ t, e }) => (globalThis as unknown as { OrzCarrier: Carrier }).OrzCarrier.assemble(t, { engineSource: e }), { t: TEXTS[0][1], e: 'window.x=1;' });
     expect(given === assemble(TEXTS[0][1], { engineSource: 'window.x=1;' })).toBe(true);
+    // T.30 (D-79): no header title and no heading → "Untitled" in the browser too, the same bytes as Node
+    const untitled = await page.evaluate(async (t) => { const C = (globalThis as unknown as { OrzCarrier: Carrier }).OrzCarrier; return { title: (C.readDocument(t) as { title: string }).title, html: await C.assemble(t, { delivery: 'cdn' }) }; }, 'text only\n');
+    expect(untitled.title).toBe('Untitled');
+    expect(untitled.html).toContain('<title>Untitled</title>');
+    expect(untitled.html === assemble('text only\n', { delivery: 'cdn' })).toBe(true);
     await page.context().close();
   }, 180_000);
 

@@ -7,6 +7,13 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
 
 ### Fixed (CLI)
 
+- `upgrade` of a 0.x file in place keeps the original as `old.md.html~`
+  (or `~1`, `~2`… — a backup is never replaced), as orz-slides does; it
+  says "Kept the 0.x file as old.md.html~" and `--json` lists it in
+  `backups` (STATUS D-92, D-115).
+- A text with no `title` in its header and no heading is titled `Untitled`
+  by the CLI and in the browser (never after the file name); now documented
+  and pinned by a test (D-79; no change of behaviour).
 - A reader that stops early (`orz-mdhtml assemble x.md -o - | head -c 10`)
   no longer makes the CLI print a Node stack (EPIPE): it exits quietly
   (STATUS D-77).
