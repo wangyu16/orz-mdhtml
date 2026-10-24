@@ -135,7 +135,7 @@ describe('the bundle and its package (Node)', () => {
     expect(readFileSync('browser/docs/embedding.md', 'utf8')).toBe(readFileSync('docs/embedding.md', 'utf8'));
     // every runtime export of the ESM build is declared in index.d.ts
     const exported = /export\s*\{([^}]*)\}\s*;?\s*$/.exec(b.esm)![1].split(',').map((s) => s.trim().split(/\s+as\s+/).pop()!).filter(Boolean).sort();
-    expect(exported).toEqual(['DEFAULT_THEME', 'MEASURES', 'OrzCarrier', 'THEMES', 'assemble', 'editHeader', 'extract', 'formats', 'kind', 'mountEditor', 'readDocument', 'renderPreview', 'upgrade', 'version']);
+    expect(exported).toEqual(['DEFAULT_THEME', 'MEASURES', 'OrzCarrier', 'THEMES', 'assemble', 'editHeader', 'extract', 'formats', 'includeTargets', 'kind', 'linkTargets', 'mountEditor', 'readDocument', 'renderPreview', 'upgrade', 'version']);
     const dts = readFileSync('browser/index.d.ts', 'utf8');
     for (const name of exported) expect(dts, name).toMatch(new RegExp(`export declare (const|function) ${name}\\b`));
     // the IIFE global's booted-file handle is typed too
