@@ -8,4 +8,4 @@ export const VERSION = "1.0.2";
  * assembled file name, in Node and in the browser alike — not the kit an
  * installation happens to resolve.
  */
-export const ORZ_MARKDOWN_VERSION = "2.3.0";
+export const ORZ_MARKDOWN_VERSION = "2.5.0";
