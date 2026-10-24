@@ -13,22 +13,21 @@
  *   with `OrzCarrier.mountEditor` on the file's context;
  * - `protocols`: the file speaks orz-host-ai@1 and orz-host-include@1;
  * - `next`: this build again with the patch number bumped (`buildBrowser({ version })`);
- * - `firstRelease: true`: 1.0 is the first release of text format 1 and of
- *   `release.json`. The published 0.x `orz-mdhtml-browser` releases are the
- *   experimental pre-format files (no `#orz-shell`, no manifest, a different
- *   bundle file); owner decision 1 (REBUILD §3a) gives them `upgrade`, not an
- *   in-file update — so in this run `C.update.from-previous` is not applicable.
+ * - `previous`: the published previous release (the devDependency
+ *   `orz-mdhtml-browser-previous`, pinned exactly; claim H.3): its files
+ *   update to this one (`C.update.from-previous`). 1.0 was the first release
+ *   of text format 1; the 0.x releases are upgraded, not updated (owner
+ *   decision 1, REBUILD §3a).
+ * - `twinLinks: true` (orz-markdown 2.5.0, FC-18 §8.2): `assemble` takes the
+ *   twin-link naming, so the `C.links.*`, `C.save.keeps-links` and
+ *   `C.update.keeps-links` checks apply (claim H.1).
  *
- * KIT GAP (orz-markdown 2.3.0; claim H.3): from 1.0.1 a previous format-1
- * release exists — the published orz-mdhtml-browser (1.0.1 since 1.0.2; the devDependency
- * `orz-mdhtml-browser-previous`, pinned exactly). Given as `previous`, the
- * harness's `C.law.content-independence` also requires `renderPreview` to equal
- * the previous release's, which fails whenever the kit's parser output changes
- * (2.3.0 adds `data-url` to `{{youtube}}`) although the text-derived parts are
- * equal. So the 46-check run keeps `firstRelease`, and `C.update.from-previous`
- * runs against it in a registration of its own (`only` that check).
+ * One run of all 50 checks (the 1.0.x KIT GAP — a separate registration for
+ * `C.update.from-previous` because the harness compared `renderPreview` with
+ * the previous release's — is gone: the kit compares a previous release on
+ * the text-derived parts only since 2.4.0; STATUS D-60).
  *
- * No `allowSkips`: the final `[conformant]` test fails unless all 46 checks ran
+ * No `allowSkips`: the final `[conformant]` test fails unless all 50 checks ran
  * in real Chrome and passed. Runs as its own vitest project after the others
  * (vitest.config.ts).
  */
@@ -45,7 +44,7 @@ type Browser = import('playwright-core').Browser;
 
 /** The previous release (the published orz-mdhtml-browser, a devDependency alias pinned to it). */
 const PREVIOUS = join(process.cwd(), 'node_modules', 'orz-mdhtml-browser-previous');
-const PREVIOUS_VERSION = '1.0.1';
+const PREVIOUS_VERSION = '1.0.2';
 
 /** The next patch version (`0.9.3` → `0.9.4`, `1.0.0-rc.1` → `1.0.0`). */
 export const bumpPatch = (v: string): string => {
@@ -99,7 +98,8 @@ async function makeTarget(): Promise<CarrierTarget> {
     protocols: { ai: true, include: true },
     editor: EDITOR_DRIVER,
     next: { bundle: join(nextDir, BUNDLE_FILE), release: join(nextDir, 'release.json') },
-    firstRelease: true,
+    previous: { bundle: join(PREVIOUS, BUNDLE_FILE), release: join(PREVIOUS, 'release.json') },
+    twinLinks: true,
   };
   return target;
 }
@@ -125,7 +125,7 @@ afterAll(async () => {
 describe('the conformance target', () => {
   beforeAll(async () => { await makeTarget(); }, 120_000);
 
-  it('[H.2] the target is the real carrier: the library\'s engine and manifest, its assemble and newDocument, a next build with a higher version, firstRelease', async () => {
+  it('[H.2] the target is the real carrier: the library\'s engine and manifest, its assemble and newDocument, a next build with a higher version, the published previous release, twinLinks', async () => {
     const t = await makeTarget();
     const own = await buildBrowser();
     expect(readFileSync(t.bundle, 'utf8') === own.iife).toBe(true);
@@ -139,11 +139,12 @@ describe('the conformance target', () => {
     expect(bumpPatch('1.0.0-rc.1')).toBe('1.0.0');
     // the next build differs from this one only by its version
     expect(readFileSync(t.next!.bundle, 'utf8').split(JSON.stringify(bumpPatch(VERSION))).join('V') === own.iife.split(JSON.stringify(VERSION)).join('V')).toBe(true);
-    expect(t.firstRelease).toBe(true);
-    expect(t.previous).toBeUndefined();
+    expect(t.firstRelease).toBeUndefined();
+    expect(t.previous).toEqual({ bundle: join(PREVIOUS, BUNDLE_FILE), release: join(PREVIOUS, 'release.json') });
+    expect(t.twinLinks).toBe(true);
     const text = await t.create();
     expect(await t.assemble(text)).toBe(assemble(text, { engineSource: own.iife }));
-    expect(CHECK_IDS.length).toBe(46);
+    expect(CHECK_IDS.length).toBe(50);
   });
 });
 
@@ -157,23 +158,11 @@ if (!browser) {
     browser: browser as never,
     log: (line) => log.push(line),
   });
-  // KIT GAP (see the top): the update from the published previous release, alone
-  const fromPrevious = async (): Promise<CarrierTarget> => {
-    const { firstRelease: _first, ...t } = await makeTarget();
-    return { ...t, previous: { bundle: join(PREVIOUS, BUNDLE_FILE), release: join(PREVIOUS, 'release.json') } };
-  };
   describe('[H.3] the previous release', () => {
-    it('[H.3] is the published orz-mdhtml-browser 1.0.1 (pinned devDependency; its manifest and package say so)', () => {
+    it(`[H.3] is the published orz-mdhtml-browser ${PREVIOUS_VERSION} (pinned devDependency; its manifest and package say so)`, () => {
       expect(parseManifest(JSON.parse(readFileSync(join(PREVIOUS, 'release.json'), 'utf8')), 'md')?.version).toBe(PREVIOUS_VERSION);
       expect(JSON.parse(readFileSync(join(PREVIOUS, 'package.json'), 'utf8'))).toMatchObject({ name: 'orz-mdhtml-browser', version: PREVIOUS_VERSION });
       expect(JSON.parse(readFileSync('package.json', 'utf8')).devDependencies['orz-mdhtml-browser-previous']).toBe(`npm:orz-mdhtml-browser@${PREVIOUS_VERSION}`);
     });
-  });
-  registerConformance({ describe, it, beforeAll, afterAll }, fromPrevious, {
-    title: '[H.3] orz-mdhtml: files of the published previous release update to this one (C.update.from-previous, real Chrome)',
-    browser: browser as never,
-    only: ['C.update.from-previous'],
-    allowSkips: true,
-    log: (line) => log.push(`H.3 ${line}`),
   });
 }

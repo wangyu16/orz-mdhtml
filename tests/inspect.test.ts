@@ -198,7 +198,7 @@ describe('inspect', () => {
     expect(ci.input).toBe('assembled');
     expect(ci.checks).toMatchObject({ island: 'unclosed', end: 'unclosed' });
     expect(ci.writable).toBe(false);
-    expect(ci.advice.join('\n')).toMatch(/not closed.*text may be incomplete — recover what you can: `orz-mdhtml extract file\.md\.html -o file\.recovered\.md`/);
+    expect(ci.advice.join('\n')).toMatch(/cut off: its text stops part-way.*may be incomplete — recover what you can: `orz-mdhtml extract file\.md\.html -o file\.recovered\.md`/);
     expect(ci.advice.join('\n')).not.toMatch(/upgrade file\.md\.html` re-assembles/); // never "re-assemble it" from a cut text (round 2, B#4)
     const ciNamed = inspect(cutIsland.split(`"shell":"${VERSION}"`).join('"shell":"0.0.1"'), { filename: 'notes.md.html' });
     expect(ciNamed.advice.join('\n')).toMatch(/orz-mdhtml extract notes\.md\.html -o notes\.recovered\.md/);

@@ -15,7 +15,7 @@
  */
 import { captureEngineSource, startCarrier } from 'orz-markdown/carrier/app';
 import { BUNDLE_FILE } from '../assemble.js';
-import { upgrade, useEngineSource } from './carrier.js';
+import { includeTargets, linkTargets, upgrade, useEngineSource } from './carrier.js';
 import { MD_KIND } from './md/kind.js';
 
 // Only this carrier's bundle is the engine (orz-markdown A.12): a script loaded as `orz-mdhtml.browser.js`,
@@ -25,5 +25,6 @@ import { MD_KIND } from './md/kind.js';
 // sandbox's verified bundle (U.6), which the update already checked against the release's integrity.
 useEngineSource(captureEngineSource(undefined, { bundle: BUNDLE_FILE }));
 const { carrier } = startCarrier(MD_KIND);
-// orz-mdhtml's extension of the FC-19 global: upgrade an old file in the browser (STATUS D-111)
-try { (carrier as unknown as Record<string, unknown>).upgrade = upgrade; } catch { /* a frozen global */ }
+// orz-mdhtml's extensions of the FC-19 global: upgrade an old file in the browser (STATUS D-111), and the
+// targets a text points at (the kit's browser-safe includeTargets / linkTargets, 2.5.0)
+try { Object.assign(carrier as unknown as Record<string, unknown>, { upgrade, includeTargets, linkTargets }); } catch { /* a frozen global */ }

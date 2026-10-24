@@ -18,7 +18,9 @@ import { assemble as assembleText, type AssembleOptions } from './assemble.js';
 import { upgrade as upgradeFile, type UpgradeOptions, type UpgradeResult } from './legacy.js';
 import { engineSource } from './engine.js';
 
-export { extract, readDocument, newDocument, cdnBundleUrl, BUNDLE_FILE, FORMATS, type AssembleOptions, type NewDocumentOptions, type Extracted, type DocumentInfo, type Kind } from './assemble.js';
+export { extract, readDocument, newDocument, cdnBundleUrl, BUNDLE_FILE, FORMATS, type AssembleOptions, type NewDocumentOptions, type Extracted, type DocumentInfo, type Kind, type TwinNaming } from './assemble.js';
+/** The targets a text points at (orz-markdown 2.5.0, browser-safe; the browser package exports them too): its include directives and its links (line, `twin` / `asset` / `other`). */
+export { includeTargets, linkTargets, type LinkTarget } from './assemble.js';
 import { inspect as inspectInput, type InspectOptions, type InspectReport } from './inspect.js';
 export type { InspectOptions, InspectReport } from './inspect.js';
 export { readLegacy, type LegacyFile, type UpgradeResult, type UpgradeOptions } from './legacy.js';

@@ -3,9 +3,61 @@
 All notable changes to **orz-mdhtml** are recorded here. Versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+<a id="110"></a>
+
+## [1.1.0] — 2026-10-24
+
+Built on orz-markdown **2.5.0** (`^2.5.0`; the files of this release name
+it): twin-link naming, the kit's targets of a text, and its editor repairs.
+
+### Added
+
+- **Link names of a published site** (orz-markdown 2.5.0 K1, FC-18 §8.2,
+  FC-19 §2–§3): `assemble(text, { twinLinks })` (Node library and browser),
+  `renderPreview(text, { twinLinks })` and `mountEditor(element, { twinLinks })`
+  take a host's twin-link naming — e.g. `{ md: '{stem}.html' }`, so
+  `[next](next.md)` points at `next.html` (a kind left out keeps the family
+  name). `assemble` stores it in `#orz-shell` as `"links"` (only when it is
+  not the family naming: every other file keeps its exact bytes);
+  `extract(html).twinLinks` gives it back. A file with a naming renders its
+  read view and its editor's preview with it and keeps it in every save,
+  copy and quiet update (the kit's app), in `upgrade` of a 1.x file, and in
+  `orz-mdhtml assemble x.md` over that file. The conformance target declares
+  `twinLinks: true` (the kit's `C.links.*`, `C.save.keeps-links`,
+  `C.update.keeps-links` apply).
+- `includeTargets(text)` and `linkTargets(text)` (orz-markdown 2.5.0 K2,
+  browser-safe): a text's include directives and its links (with line and
+  `kind`: `twin` / `asset` / `other`) exactly as the renderer reads them —
+  from the Node library, the ESM build and `OrzCarrier` (orz-mdhtml's
+  additions to the FC-19 global, like `upgrade`). The CLI's include handling
+  uses the kit's `includeTargets` (its own copy is gone; same results).
+
+### Changed
+
+- The theme menu's colour dots are each theme's own (the kit's `themeSwatch`:
+  its page and signature colours, split diagonally) instead of one dot per
+  colour scheme (STATUS D-95). With the kit: a list marker typed after a
+  continued one replaces it (`- - pears` no more), Sync scroll's pressed
+  state is a tinted fill and ring, no white flash on a theme change in the
+  editor (D-100), the save status no longer pushes Save onto a second row
+  (D-101), and a preview the page's policy blocks is reported within about a
+  second, naming the `nonce` option and the frame's script hashes (D-80).
+- CLI messages shared with the kit's `carrier/node` use its 2.5.0 wording
+  (D-91): "no longer holds the text you named with --replaces: it has
+  changed since …", "--replaces needs the fingerprint of the text the file
+  should still hold …", "could not note that the two files match … add
+  --replaces <sha256> to it", and a cut-off file "stops part-way (the file
+  ends before the text does)" instead of naming `#orz-src`. Reason codes are
+  unchanged.
 
 ### Fixed (CLI)
+
+- `assemble x.md` over a 0.x `x.md.html` that holds the very same text no
+  longer replaces it silently, dropping the title, metadata and theme the
+  0.x file keeps outside its text: it refuses (`legacy-file`) and names
+  `orz-mdhtml upgrade x.md.html`, which moves them into the text's header
+  (`--force` assembles anyway, keeping the 0.x file as `x.md.html~`)
+  (STATUS D-120).
 
 - `upgrade` of a 0.x file in place keeps the original as `old.md.html~`
   (or `~1`, `~2`… — a backup is never replaced), as orz-slides does; it
@@ -76,6 +128,15 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
   URL `resolveAsset` gives (the app's uploads) to hand the sandboxed preview
   the Blob; without it the example's upload shows a CSP violation (D-119,
   D-67).
+
+### Tests
+
+- The conformance run is one run of the kit's 50 checks with the published
+  previous release (`orz-mdhtml-browser` 1.0.2, devDependency
+  `orz-mdhtml-browser-previous`) as `previous`: the 1.0.x workaround (a
+  separate run for `C.update.from-previous`, a KIT GAP of orz-markdown 2.3.0)
+  is gone — the kit compares a previous release on the text-derived parts
+  only since 2.4.0 (STATUS D-60).
 
 ### Release tooling
 

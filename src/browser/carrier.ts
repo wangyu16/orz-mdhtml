@@ -12,7 +12,7 @@
  * src/assemble.ts — the same function the Node library runs, so Node and the
  * browser write the same bytes (FC-18 law 2).
  */
-import { extract as kitExtract, readDocument as kitReadDocument, type DocumentInfo, type Extracted, type HeaderChange } from 'orz-markdown/carrier';
+import { extract as kitExtract, readDocument as kitReadDocument, type DocumentInfo, type Extracted, type HeaderChange, type TwinNaming } from 'orz-markdown/carrier';
 import { attachAiMenu, attachSettings, captureEngineSource, followPresentation, type EngineSource, type StandaloneContext } from 'orz-markdown/carrier/app';
 import { createEditorShell, renderMarkdownPreviewWithIncludes, type EditorHooks, type EditorShell } from 'orz-markdown/carrier/editor';
 import type { PreferenceStore } from 'orz-markdown/carrier/shell';
@@ -27,7 +27,10 @@ export const kind = 'md' as const;
 export const version: string = VERSION;
 export const formats: number[] = [...FORMATS];
 
-export type { DocumentInfo, Extracted, HeaderChange, EditorHooks, PreferenceStore, UpgradeOptions, UpgradeResult };
+export type { DocumentInfo, Extracted, HeaderChange, EditorHooks, PreferenceStore, UpgradeOptions, UpgradeResult, TwinNaming };
+export type { LinkTarget } from 'orz-markdown/carrier';
+/** The targets a text points at (orz-markdown 2.5.0, browser-safe): its include directives and its links — for an app's link check or include resolution. */
+export { includeTargets, linkTargets } from 'orz-markdown/carrier';
 
 /**
  * The engine an inline assembly writes when no `engineSource` is given. The
@@ -108,8 +111,13 @@ export interface RenderPreviewOptions {
   fetchInclude?(target: string): Promise<string | null>;
   /** Resolved includes (`extract(html).includes`): target as written → text. */
   includes?: Readonly<Record<string, string>>;
-  /** `false`: links as written; default `true` (links to text twins point at their `.html` form). */
-  twinLinks?: boolean;
+  /**
+   * `false`: links as written; default `true` (links to text twins point at
+   * their `.html` form, the family names: `x.md` → `x.md.html`). A
+   * `TwinNaming` (FC-18 §8.2, 2.5.0; e.g. `extract(html).twinLinks`) names
+   * them as the host publishes them (`{ md: '{stem}.html' }`: `x.html`).
+   */
+  twinLinks?: boolean | TwinNaming;
   /**
    * `true`: a whole HTML document (theme, KaTeX and highlight.js stylesheets of
    * the header's theme, the article with its measure) for a sandboxed iframe's
@@ -131,7 +139,7 @@ export async function renderPreview(text: string, options: RenderPreviewOptions 
   const inner = await renderMd(text, {
     ...(options.fetchInclude ? { fetchInclude: options.fetchInclude } : {}),
     ...(options.includes ? { includes: options.includes } : {}),
-    ...(options.twinLinks === false ? { twinLinks: false } : {}),
+    ...(options.twinLinks !== undefined ? { twinLinks: options.twinLinks } : {}),
   });
   if (!options.document) return inner;
   const p = presentationOf(text);
@@ -176,6 +184,14 @@ export interface EditorOptions {
    * mounted on an assembled file saves under the file's own name.
    */
   fileName?: string;
+  /**
+   * FC-19 §3 `twinLinks` (orz-markdown 2.5.0): the host's twin-link naming
+   * (FC-18 §8.2, e.g. `{ md: '{stem}.html' }`): the preview names links to
+   * text twins so (unless `hooks.resolveLink`, which gets the source href),
+   * and a save without `hooks.save` writes it into the file. An editor
+   * mounted on an assembled file uses the file's own naming.
+   */
+  twinLinks?: TwinNaming;
 }
 
 /**
@@ -187,8 +203,9 @@ export type Editor = EditorShell;
 /**
  * Mount the md editor (FC-19 §3–4) in `element`: the kit's editor shell with
  * the md preview renderer (`renderMarkdownPreviewWithIncludes`), the header's
- * theme and measure in the preview (they follow header edits), and the md
- * settings in its toolbar (spec/carrier-app.md §3.2).
+ * theme and measure in the preview (they follow header edits), the md
+ * settings in its toolbar (spec/carrier-app.md §3.2) and the twin-link naming
+ * (the file's, else `options.twinLinks`) in its preview and saves.
  *
  * With `hooks.save` the app owns persistence (FC-19 §8.5 app host). Without it
  * the standalone save runs: on an assembled file (`ctx`, given by the kit's
@@ -209,6 +226,8 @@ export function mountEditor(element: HTMLElement, options: EditorOptions, standa
   const hooks: EditorHooks = { ...appHooks, ...(ai ? { ai } : {}), ...(fetchInclude ? { fetchInclude } : {}) };
   const preferences = options.preferences ?? ctx?.preferences;
   const present = (text: string) => previewPresentation(presentationOf(text));
+  // the twin-link naming (FC-18 §8.2): the file's, else the app's
+  const twinLinks = ctx ? ctx.twinLinks : options.twinLinks;
 
   const shell = createEditorShell(element as never, {
     text: options.text,
@@ -221,6 +240,7 @@ export function mountEditor(element: HTMLElement, options: EditorOptions, standa
     ...(preferences ? { preferences } : {}),
     ...(options.nonce ? { nonce: options.nonce } : {}),
     ...(ctx?.adapter ? { adapter: ctx.adapter } : {}),
+    ...(twinLinks ? { twinLinks } : {}),
     hooks,
     ...(isApp ? {
       ...(options.includes ? { includes: options.includes } : {}),
@@ -235,7 +255,7 @@ export function mountEditor(element: HTMLElement, options: EditorOptions, standa
       standalone: ctx.standalone,
     } : {
       // no hooks.save and no file: an inline file of the text (with the app's includes), through the picker or a download
-      assemble: (t: string, o?: { includes?: Record<string, string> }) => assemble(t, { ...(o?.includes ? { includes: o.includes } : {}) }),
+      assemble: (t: string, o?: { includes?: Record<string, string>; twinLinks?: TwinNaming }) => assemble(t, { ...(o?.includes ? { includes: o.includes } : {}), ...(o?.twinLinks ? { twinLinks: o.twinLinks } : {}) }),
       ...(options.includes ? { includes: options.includes } : {}),
       ...(typeof options.fileName === 'string' && options.fileName !== '' ? { fileName: options.fileName } : {}),
     }),

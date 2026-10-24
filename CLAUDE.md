@@ -10,7 +10,7 @@ Guidance for AI agents working in this repository.
 (`x.md`, orz text format 1, FC-18) and its **self-editing file** (`x.md.html`)
 is `assemble(text)` — a single page that reads like a themed website and can
 be edited and saved in the browser. Built on the orz-markdown carrier kit
-([orz-markdown](../orz-markdown) `carrier/*`, **`^2.3.0`**): the standalone
+([orz-markdown](../orz-markdown) `carrier/*`, **`^2.5.0`**): the standalone
 file's whole runtime is the kit's `orz-markdown/carrier/app`; this repo
 supplies the md kind behind its `StandaloneKind` seam.
 
@@ -74,11 +74,11 @@ Tests live in `tests/` and are bound to the claims in `notes/CLAIMS.md`
 engine into `dist/` first (the CLI tests spawn `dist/cli.js`). The
 `conformance` project (`tests/conformance.test.ts`, ~2 min of Chrome) runs
 orz-markdown's carrier harness against the real carrier after the others; it
-must stay conformant (46 checks, no `allowSkips`), and files of the
-published previous release (devDependency `orz-mdhtml-browser-previous`,
-pinned exactly; bump it to the last published version after each release)
-must update to this one (`C.update.from-previous` in a run of its own: claim
-H.3, a KIT GAP). Real-Chrome tests skip
+must stay conformant (50 checks with kit 2.5.0, no `allowSkips`, target
+`twinLinks: true`), and files of the published previous release
+(devDependency `orz-mdhtml-browser-previous`, pinned exactly; bump it to the
+last published version after each release) must update to this one
+(`C.update.from-previous`, in the same run since 1.1.0: claim H.3). Real-Chrome tests skip
 without an installed Chrome (playwright-core, channel `chrome`) — such a run
 verifies nothing "real". Still **verify generated files in a real browser**
 (Save in place needs Chromium); `build/serve.cjs` is a dependency-free
@@ -92,6 +92,11 @@ closed loop. **1.0.1**: rebuilt on the published `orz-markdown ^2.3.0` (a
 real install, no symlink) for the kit's preview-bridge security fix and the
 screen `light-playful-1` notebook (the kit's baseline grid, run by
 `enhanceDocument`'s default `grid` and the preview frame; claim R.16).
+**1.1.0**: on `orz-markdown ^2.5.0` — the twin-link naming `twinLinks`
+through `assemble`/`extract`, `renderPreview`, `mountEditor`, the read view
+and the CLI's `assemble` over a file (claims A.11, T.31, X.6), the kit's
+`includeTargets`/`linkTargets` re-exported, `themeSwatch` theme dots, the
+browser `upgrade` (D-111), CLI backlog repairs (CHANGELOG).
 
 ## Architecture
 
@@ -187,7 +192,7 @@ family root; never edit the copy here alone). This package's facts are in
 `release.config.json` (kit floor `kit.required`, bundles, manifest check,
 fast lane).
 
-1. orz-markdown is installed from the registry (`^2.3.0`; never a link). For a later kit, `npx npm@11 install orz-markdown@^X.Y.Z` (the gate refuses a range below `kit.required`, a link, a non-registry lockfile entry, an older install, or a bundle that embeds another kit). After a release, bump the devDependency `orz-mdhtml-browser-previous` to it (H.3).
+1. orz-markdown is installed from the registry (`^2.5.0`; never a link). For a later kit, `npx npm@11 install orz-markdown@^X.Y.Z` (the gate refuses a range below `kit.required`, a link, a non-registry lockfile entry, an older install, or a bundle that embeds another kit). After a release, bump the devDependency `orz-mdhtml-browser-previous` to it (H.3).
 2. Bump **both** `package.json` and `browser/package.json` to the same
    version; date the CHANGELOG entry (`## [x.y.z] — YYYY-MM-DD`, no
    "unreleased"). `npm run build`, `npm run examples`, commit, push `main`.

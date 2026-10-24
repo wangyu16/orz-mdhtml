@@ -1047,12 +1047,12 @@ describe.concurrent('the CLI', () => {
     const a = await cli(['assemble', 'doc.md', '--json'], d, ro);
     expect(a.code, a.stdout).toBe(0);
     const h = json(a).sha256 as string;
-    expect(noUid(json(a).warnings)).toEqual([`pair not recorded (cache not writable: ${join(d, 'not-a-folder', 'orz-mdhtml')}); the next assemble needs --replaces ${h}`]);
+    expect(noUid(json(a).warnings)).toEqual([`could not note that the two files match (cache folder not writable: ${join(d, 'not-a-folder', 'orz-mdhtml')}), so the next assemble cannot tell it may replace the file: add --replaces ${h} to it`]);
     write(join(d, 'doc.md'), '# Doc\n\nedited\n');
     expect(json(await cli(['assemble', 'doc.md', '--json'], d, ro))).toMatchObject({ ok: false, reason: 'twin-differs' });
     expect(json(await cli(['assemble', 'doc.md', '--replaces', h, '--json'], d, ro))).toMatchObject({ ok: true, replaced: 'token' });
     const x = await cli(['extract', 'doc.md.html', '-o', 'copy.md', '--json'], d, ro);
-    expect((json(x).warnings as string[]).join('\n')).toMatch(new RegExp(`pair not recorded .*the next extract needs --replaces ${json(x).sha256 as string}`));
+    expect((json(x).warnings as string[]).join('\n')).toMatch(new RegExp(`could not note that the two files match .*the next extract cannot tell it may replace the file: add --replaces ${json(x).sha256 as string} to it`));
     // the human output prints the sha256 (extract, upgrade; assemble: T.1)
     expect((await cli(['extract', 'doc.md.html', '-o', 'copy2.md'], d)).stdout).toMatch(new RegExp(`^  sha256 ${sha256('# Doc\n\nedited\n')} `, 'm'));
     expect((await cli(['upgrade', 'doc.md.html', '--no-text'], d)).stdout).toMatch(new RegExp(`^  sha256 ${sha256('# Doc\n\nedited\n')} `, 'm'));

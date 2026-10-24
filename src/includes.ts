@@ -19,11 +19,7 @@
  */
 import { readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
-import { md } from 'orz-markdown';
-import { decodeText, withoutHeader } from 'orz-markdown/carrier';
-
-/** The include directive names (orz-markdown's `INCLUDE_DIRECTIVES`). */
-const DIRECTIVES: ReadonlySet<string> = new Set(['markdown', 'md', 'md-include']);
+import { decodeText, includeTargets } from 'orz-markdown/carrier';
 
 export const isUrl = (t: string): boolean => /^[a-z][a-z0-9+.-]*:\/\//i.test(t);
 
@@ -38,17 +34,8 @@ function rootPath(target: string): string {
   return `/${out.join('/')}`;
 }
 
-/** The include targets of a text's body, as written, in order, without repeats. */
-export function includeTargets(text: string): string[] {
-  const tokens = md.parse(withoutHeader(text).body, {}) as Array<{ type: string; info: string; content: string }>;
-  const seen = new Set<string>();
-  for (const t of tokens) {
-    if (t.type !== 'plugin_block' || !DIRECTIVES.has(t.info)) continue;
-    const target = (t.content || '').trim();
-    if (target) seen.add(target);
-  }
-  return [...seen];
-}
+/** The include targets of a text's body, as written, in order, without repeats: the kit's browser-safe `includeTargets` (orz-markdown 2.5.0). */
+export { includeTargets };
 
 /** The record entry that answers a target, if any (URLs exactly; files by their normalized path). */
 function entryFor(record: Readonly<Record<string, string>>, target: string): string | null {

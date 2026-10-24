@@ -8,7 +8,7 @@
  */
 import { themeInfo, type ThemeInfo } from 'orz-markdown/themes';
 
-export { THEMES, DEFAULT_THEME, isThemeId, themeInfo } from 'orz-markdown/themes';
+export { THEMES, DEFAULT_THEME, isThemeId, themeInfo, themeSwatch } from 'orz-markdown/themes';
 export type { ThemeInfo, ThemeScheme } from 'orz-markdown/themes';
 
 /** The theme `id` names, else the default theme (the kit's `themeInfo`). */

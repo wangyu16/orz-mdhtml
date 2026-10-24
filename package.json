@@ -1,6 +1,6 @@
 {
   "name": "orz-mdhtml",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Markdown that edits itself: text twins (x.md) and their single-file, self-editing x.md.html (orz text format 1) — CLI and Node library.",
   "type": "module",
   "main": "./dist/lib.js",
@@ -60,7 +60,7 @@
   "devDependencies": {
     "@types/node": "^22.20.5",
     "esbuild": "^0.28.1",
-    "orz-mdhtml-browser-previous": "npm:orz-mdhtml-browser@1.0.1",
+    "orz-mdhtml-browser-previous": "npm:orz-mdhtml-browser@1.0.2",
     "playwright-core": "^1.63.0",
     "tsx": "^4.22.4",
     "typescript": "^5.9.3",

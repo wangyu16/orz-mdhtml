@@ -1,16 +1,18 @@
 /**
  * The 1.1.0 backlog fixes of the CLI (family STATUS D-77, D-78, D-83, D-90,
- * D-93, D-105, D-106, D-107, D-108, D-91): each test spawns the real CLI
+ * D-93, D-105, D-106, D-107, D-108, D-91, D-120) and the twin-link naming
+ * (orz-markdown 2.5.0): each test spawns the real CLI
  * (`dist/cli.js`, compiled by tests/global-setup.ts) on files in a temporary
  * folder, as tests/cli.test.ts does.
  */
 import { describe, it, expect, afterAll } from 'vitest';
 import { execFile, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { assembleEnvelope } from 'orz-markdown/carrier';
-import { assemble, inspect, readLegacy, VERSION } from '../src/lib.js';
+import { assemble, extract, inspect, readLegacy, VERSION } from '../src/lib.js';
 import { withoutHeader } from 'orz-markdown/carrier';
 import { LEGACY_FILES } from './helpers.js';
 
@@ -259,5 +261,50 @@ describe.concurrent('CLI backlog fixes (1.1.0)', { timeout: 180_000 }, () => {
     expect(readFileSync(join(d, 's.md.html'), 'utf8')).toContain('<title>Untitled</title>');
     expect(inspect(readFileSync(join(d, 's.md.html'), 'utf8')).title).toBe('Untitled');
     expect(JSON.parse((await cli(['inspect', 's.md', '--json'], d)).stdout)).toMatchObject({ title: 'Untitled' });
+  });
+  it('[T.31] assemble keeps the twin-link naming of the file it replaces (#orz-shell "links", orz-markdown 2.5.0), as browser saves keep it; upgrade of a 1.x file keeps it too', async () => {
+    const d = folder();
+    const naming = { md: '{stem}.html' };
+    const text = '# Links\n\nSee [next](next.md).\n';
+    write(join(d, 'x.md'), text);
+    write(join(d, 'x.md.html'), assemble(text, { delivery: 'cdn', twinLinks: naming }));
+    const edited = `${text}\nMore.\n`;
+    write(join(d, 'x.md'), edited);
+    // the file was written by a host, not this CLI: name the text it holds
+    const r = await cli(['assemble', 'x.md', '--replaces', createHash('sha256').update(text, 'utf8').digest('hex'), '--json'], d);
+    expect(r.code, r.stdout).toBe(0);
+    const html = readFileSync(join(d, 'x.md.html'), 'utf8');
+    expect(extract(html)!.twinLinks).toEqual(naming);
+    expect(html === assemble(edited, { delivery: 'cdn', twinLinks: naming })).toBe(true);
+    expect(json(await cli(['upgrade', 'x.md.html', '--no-text', '--json'], d))).toMatchObject({ ok: true, from: 'format-1' });
+    expect(extract(readFileSync(join(d, 'x.md.html'), 'utf8'))!.twinLinks).toEqual(naming);
+    // a file without a naming gets none
+    const e = folder();
+    write(join(e, 'y.md'), text);
+    expect((await cli(['assemble', 'y.md'], e)).code).toBe(0);
+    expect(extract(readFileSync(join(e, 'y.md.html'), 'utf8'))!.twinLinks).toBeUndefined();
+  });
+  it('[T.32] assemble over a 0.x file that holds the same text refuses (it would drop the title, metadata and theme the 0.x file keeps outside the text) and names upgrade; --force assembles anyway, keeping the 0.x file as ~ (D-120)', async () => {
+    const html = readFileSync(LEGACY_FILES['fixtures/metadata.md.html']!, 'utf8');
+    const source = readLegacy(html)!.text;
+    const d = folder();
+    write(join(d, 'notes.md.html'), html);
+    write(join(d, 'notes.md'), source);
+    const r = await cli(['assemble', 'notes.md', '--json'], d);
+    expect(r.code, r.stdout).toBe(1);
+    expect(json(r)).toMatchObject({ ok: false, reason: 'legacy-file', next: { command: 'upgrade', args: ['notes.md.html'] } });
+    expect(readFileSync(join(d, 'notes.md.html'), 'utf8')).toBe(html);
+    const human = await cli(['assemble', 'notes.md'], d);
+    expect(human.stderr).toContain('holding this very text');
+    expect(human.stderr).toContain('`orz-mdhtml upgrade notes.md.html`');
+    // the advice works: upgrade gives the text its header (D-90)
+    const e = folder();
+    write(join(e, 'notes.md.html'), html);
+    write(join(e, 'notes.md'), source);
+    expect(json(await cli(['upgrade', 'notes.md.html', '--json'], e))).toMatchObject({ ok: true, twinWas: 'source' });
+    // --force: assembled, the 0.x file kept
+    const f = await cli(['assemble', 'notes.md', '--force', '--json'], d);
+    expect(json(f)).toMatchObject({ ok: true, backup: join(d, 'notes.md.html~') });
+    expect(readFileSync(join(d, 'notes.md.html~'), 'utf8')).toBe(html);
   });
 });

@@ -796,6 +796,45 @@ chrome('round 1 of the carrier-app loop: conflicts, app editors, unresolved incl
     await ctx.close();
   }, 60_000);
 
+  it('[X.6] the twin-link naming (orz-markdown 2.5.0, FC-18 §8.2) reaches every editor preview: an app\'s editor with `twinLinks` names twin links so in its preview and stores the naming in its save; the editor of a file with "links" (Edit) names them as the file does, and so does the read view', async () => {
+    const ctx = await context();
+    const naming = { md: '{stem}.html' };
+    const text = '# Links\n\nSee [the next part](next.md) and [a deck](talk.slides.md#s2).\n';
+    const hrefsIn = async (page: Page): Promise<string[]> => {
+      for (let i = 0; i < 50; i++) {
+        for (const f of page.frames()) {
+          if (f === page.mainFrame()) continue;
+          const h = await f.evaluate(() => Array.from(document.querySelectorAll('#orz-doc a[href]')).map((a) => a.getAttribute('href') ?? '')).catch(() => [] as string[]);
+          if (h.length > 0) return h;
+        }
+        await page.waitForTimeout(200);
+      }
+      return [];
+    };
+    // an app's editor
+    files.write('app6/orz-mdhtml.browser.js', b.iife);
+    files.write('app6/index.html', '<!doctype html><html><head><meta charset="utf-8"><title>app</title></head><body><div id="ed" style="width:1000px;height:520px"></div><script src="orz-mdhtml.browser.js"></script></body></html>');
+    const page = await ctx.newPage();
+    const errors = recordErrors(page);
+    await page.goto(`${site.url}/app6/index.html`);
+    await page.waitForFunction(() => !!(globalThis as { OrzCarrier?: unknown }).OrzCarrier);
+    await page.evaluate(`(async () => { window.__ed = globalThis.OrzCarrier.mountEditor(document.getElementById('ed'), { text: ${JSON.stringify(text)}, mode: 'preview', fileName: 'links.md.html', twinLinks: ${JSON.stringify(naming)} }); await window.__ed.ready; })()`);
+    expect(await hrefsIn(page)).toEqual(['next.html', 'talk.slides.html#s2']);
+    expect(await page.evaluate(`window.__ed.save()`)).toMatchObject({ ok: true, via: 'file' });
+    const saved = (await readOpfs(page, 'links.md.html'))!;
+    expect(extract(saved)!.twinLinks).toEqual(naming);
+    expect(saved === assemble(text, { engineSource: b.iife, twinLinks: naming })).toBe(true);
+    expect(errors).toEqual([]);
+    await page.close();
+    // the editor of a file with a naming, and its read view
+    const file = await openFile(ctx, 'links6.md.html', await assembleReal(text, { twinLinks: naming }), { onDisk: false });
+    expect(await file.evaluate(() => Array.from(document.querySelectorAll('#orz-doc a[href]')).map((a) => a.getAttribute('href')))).toEqual(['next.html', 'talk.slides.html#s2']);
+    await file.evaluate(`${APP}.edit().ready`);
+    await file.evaluate(`${APP}.editor().setMode('preview')`);
+    expect(await hrefsIn(file)).toEqual(['next.html', 'talk.slides.html#s2']);
+    await ctx.close();
+  }, 60_000);
+
   it('[R.14] an include nothing resolves is a quiet note in the read view and in the editor\'s preview, its directive kept in data-md', async () => {
     const ctx = await context();
     const text = '# Notes\n\nBefore.\n\n{{md missing-part.md}}\n\nAfter.\n';

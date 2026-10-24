@@ -8,10 +8,10 @@
  * from jsDelivr (`orz-mdhtml-browser@<version>/orz-mdhtml.browser.js`) — an
  * app that assembles inline files offline passes `engineSource` itself.
  */
-import { assemble, extract, formats, kind, mountEditor as mount, readDocument, renderPreview, upgrade, version, type Editor, type EditorOptions } from './carrier.js';
+import { assemble, extract, formats, includeTargets, kind, linkTargets, mountEditor as mount, readDocument, renderPreview, upgrade, version, type Editor, type EditorOptions } from './carrier.js';
 
-export { assemble, extract, formats, kind, readDocument, renderPreview, upgrade, version, editHeader } from './carrier.js';
-export type { Editor, EditorOptions, RenderPreviewOptions, DocumentInfo, Extracted, HeaderChange, EditorHooks, PreferenceStore, UpgradeOptions, UpgradeResult } from './carrier.js';
+export { assemble, extract, formats, kind, readDocument, renderPreview, upgrade, version, editHeader, includeTargets, linkTargets } from './carrier.js';
+export type { Editor, EditorOptions, RenderPreviewOptions, DocumentInfo, Extracted, HeaderChange, EditorHooks, PreferenceStore, UpgradeOptions, UpgradeResult, TwinNaming, LinkTarget } from './carrier.js';
 export { THEMES, DEFAULT_THEME } from '../themes.js';
 export { MEASURES } from '../presentation.js';
 
@@ -20,5 +20,5 @@ export function mountEditor(element: HTMLElement, options: EditorOptions): Edito
   return mount(element, options);
 }
 
-/** The FC-19 §2 surface as one object (the IIFE's `globalThis.OrzCarrier`, without booting a file), with orz-mdhtml's `upgrade`. */
-export const OrzCarrier = Object.freeze({ kind, version, formats, assemble, extract, readDocument, mountEditor, renderPreview, upgrade });
+/** The FC-19 §2 surface as one object (the IIFE's `globalThis.OrzCarrier`, without booting a file), with orz-mdhtml's `upgrade`, `includeTargets` and `linkTargets`. */
+export const OrzCarrier = Object.freeze({ kind, version, formats, assemble, extract, readDocument, mountEditor, renderPreview, upgrade, includeTargets, linkTargets });

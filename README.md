@@ -8,7 +8,7 @@ reads like a themed website, edits itself in the browser and saves back in
 place. The file is always `assemble(text)`: the text inside it is the
 document; everything else is a shell that can be regenerated. Built on the
 carrier kit of [orz-markdown](https://www.npmjs.com/package/orz-markdown)
-(`^2.3.0`; this release bundles 2.3.0; orz text format 1).
+(`^2.5.0`; this release bundles 2.5.0; orz text format 1).
 
 ## What a 1.0 `.md.html` is
 
@@ -143,7 +143,7 @@ orz-mdhtml themes
 file (about 1 MB), so it opens without fetching the engine. `--cdn` writes a
 small file that loads the engine from
 `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js`
-(the file's own version, e.g. `orz-mdhtml-browser@1.0.2`) — for pages you
+(the file's own version, e.g. `orz-mdhtml-browser@1.1.0`) — for pages you
 publish on the web. Either way the theme stylesheets, KaTeX's
 and highlight.js's styles, the content libraries (Mermaid, SMILES, Chart.js)
 and the editor (CodeMirror) load from CDNs: reading styled content and editing
@@ -292,9 +292,21 @@ upgrade(oldHtml);                                // { text, html, from, moved, n
 ```
 
 Exports: `assemble`, `extract`, `readDocument`, `newDocument`, `inspect`,
-`upgrade`, `readLegacy`, `THEMES`, `DEFAULT_THEME`, `isThemeId`, `MEASURES`,
-`DEFAULT_MEASURE`, `VERSION`, `ORZ_MARKDOWN_VERSION`, `FORMATS`,
-`BUNDLE_FILE`, `cdnBundleUrl`, `engineSource`, `engineFiles` (types included).
+`upgrade`, `readLegacy`, `includeTargets`, `linkTargets`, `THEMES`,
+`DEFAULT_THEME`, `isThemeId`, `MEASURES`, `DEFAULT_MEASURE`, `VERSION`,
+`ORZ_MARKDOWN_VERSION`, `FORMATS`, `BUNDLE_FILE`, `cdnBundleUrl`,
+`engineSource`, `engineFiles` (types included). `includeTargets(text)` and
+`linkTargets(text)` (orz-markdown 2.5.0) list a text's include directives and
+its links (with line and `kind`: `twin`, `asset`, `other`) exactly as the
+renderer reads them — for a site builder's link check.
+
+**Link names of a published site** (orz-markdown 2.5.0, FC-18 §8.2). A host
+that publishes pages under other names than the family's passes a naming:
+`assemble(text, { twinLinks: { md: '{stem}.html' } })` makes `[next](next.md)`
+point at `next.html` (a kind left out keeps the family name). The naming is
+stored in the file (`#orz-shell` `"links"`; `extract(html).twinLinks`), and
+every save, copy, update, `upgrade` and `assemble` over that file keeps it; a
+file without one has exactly the bytes it had before.
 The Node library writes the same bytes as the browser engine's
 `OrzCarrier.assemble` for the same text and options, whichever orz-markdown
 2.x your installation resolves (since 1.0.2 a file names the kit version this

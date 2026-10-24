@@ -69,7 +69,7 @@ describe('the Node library', () => {
   it('[P.2] the package is the 1.0 surface: the library exports the format-1 API only; the 0.9 API and runtime are gone; bin, exports and files', () => {
     expect(Object.keys(lib).sort()).toEqual([
       'BUNDLE_FILE', 'DEFAULT_MEASURE', 'DEFAULT_THEME', 'FORMATS', 'MEASURES', 'ORZ_MARKDOWN_VERSION', 'THEMES', 'VERSION',
-      'assemble', 'cdnBundleUrl', 'engineFiles', 'engineSource', 'extract', 'inspect', 'isThemeId', 'newDocument', 'readDocument', 'readLegacy', 'upgrade',
+      'assemble', 'cdnBundleUrl', 'engineFiles', 'engineSource', 'extract', 'includeTargets', 'inspect', 'isThemeId', 'linkTargets', 'newDocument', 'readDocument', 'readLegacy', 'upgrade',
     ].sort());
     for (const gone of ['buildMdHtml', 'composeInlineMdHtml', 'findRendererBundle', 'findAsset', 'orzVersionOf', 'selfVersionOf']) expect(lib).not.toHaveProperty(gone);
     expect(lib.VERSION).toBe(VERSION);

@@ -24,7 +24,7 @@ npm install orz-mdhtml-browser@1   # or: npm i orz-mdhtml-browser@1
 | a bundler (Vite, esbuild, webpack) | `import { mountEditor } from 'orz-mdhtml-browser'` | `esm/orz-mdhtml.browser.mjs` (`exports` → `import`) |
 | a plain `<script>` | `<script src=".../orz-mdhtml.browser.js">` → `globalThis.OrzCarrier` | `orz-mdhtml.browser.js` (`exports` → `default`) |
 | `require()` | not supported: it throws, pointing to `import` or `<script>` | `require.cjs` (`exports` → `require`) |
-| the CDN | `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js` (e.g. `@1.0.2`; pin an exact version) | the same IIFE |
+| the CDN | `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js` (e.g. `@1.1.0`; pin an exact version) | the same IIFE |
 
 Types: `orz-mdhtml-browser/index.d.ts` (`Editor`, `EditorOptions`,
 `EditorHooks`, …). The ES module sets no global and boots nothing; the IIFE
@@ -170,10 +170,10 @@ hash list. (`orz-markdown/carrier/editor` exports `PREVIEW_BRIDGE_HASH` and
 `previewScriptHashes(options)` for apps that build their own preview frame
 with the kit; `orz-mdhtml-browser` re-exports neither. Take the hash from
 the same orz-markdown version the frame runs: the bridge, and so its hash,
-differs between kit versions — 2.3.0, which orz-mdhtml 1.0 embeds, and 2.4.0
-differ.) When the policy
-blocks the preview, the `error` event's message may name the kit's option
-`preview.nonce`: here the option is `nonce` on `mountEditor`.
+differs between kit versions.) When the policy blocks the preview, the
+editor says so about a second after the frame loads (orz-markdown 2.5.0): its
+`error` event names the `nonce` option of `mountEditor` and the frame's own
+script hashes (`'sha256-…'`), ready to add to `script-src`.
 
 What loads from where: CodeMirror 6 from
 `cdn.jsdelivr.net/npm/orz-markdown@<version>/vendor/codemirror6.js` (pinned,
@@ -193,7 +193,7 @@ style-src-elem 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.clo
 ## Without an editor
 
 ```ts
-import { assemble, extract, readDocument, renderPreview, upgrade } from 'orz-mdhtml-browser';
+import { assemble, extract, readDocument, renderPreview, upgrade, includeTargets, linkTargets } from 'orz-mdhtml-browser';
 
 readDocument(text)                        // header + derived facts (title, author, uid, theme, lint) — no rendering; index with it
 await renderPreview(text, { includes, fetchInclude })  // the article's HTML, for a sandboxed read-only view (includes as in the editor)
@@ -201,9 +201,22 @@ await renderPreview(text, { document: true })          // a whole HTML document 
 await assemble(text, { delivery: 'cdn' })              // a small .md.html that loads the engine from jsDelivr
 await assemble(text)                                   // an inline .md.html (fetches this release's bundle once, or pass engineSource)
 await assemble(text, { includes })                     // with resolved includes in #orz-includes
-extract(html)                                          // { text, kind, format, shell, delivery, includes } | null
+extract(html)                                          // { text, kind, format, shell, delivery, includes, twinLinks } | null
+includeTargets(text)                                   // the include directives' targets, as the renderer finds them
+linkTargets(text)                                      // [{ href, line, kind: 'twin' | 'asset' | 'other', image, raw }]: every link and image
 await upgrade(oldHtml, { uid })                        // { text, html, from, moved, notes, warnings }: an old file, upgraded in the browser
 ```
+
+**Link names of a published site** (orz-markdown 2.5.0, FC-18 §8.2). By
+default a link to a text twin points at the family's name (`next.md` →
+`next.md.html`). An app that publishes pages under other names passes a
+naming — `{ md: '{stem}.html' }`: `next.md` → `next.html`; a kind left out
+keeps the family's name — as `twinLinks` to `assemble`, `renderPreview` and
+`mountEditor` (the preview names links so; with `hooks.resolveLink` your
+resolver gets the source href instead). `assemble` stores it in the file
+(`extract(html).twinLinks`), and the file keeps it in every save, copy and
+update. (`renderPreview(text, { twinLinks: false })` leaves links as
+written.)
 
 **Old files.** `extract` of an orz-mdhtml 0.x file (made before 1.0) returns
 only its source: the title, metadata and theme it keeps outside the source

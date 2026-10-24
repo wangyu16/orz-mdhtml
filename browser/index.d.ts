@@ -8,6 +8,14 @@
 export type Kind = 'md' | 'slides' | 'paged';
 export type EditorMode = 'split' | 'editor' | 'preview';
 export type HeaderChange = string | null | { multiline: string };
+/**
+ * The twin-link naming (FC-18 §8.2, orz-markdown 2.5.0): per kind, the file
+ * name a host publishes a text twin under, as a template with `{stem}` once
+ * (then only `A-Z a-z 0-9 . _ -`, ending in `.html`, same folder), e.g.
+ * `{ md: '{stem}.html' }` (`x.md` → `x.html`). Kinds left out keep the
+ * family's names (`x.md` → `x.md.html`).
+ */
+export type TwinNaming = Partial<Record<Kind, string>>;
 
 export interface AssembleOptions {
   /** `inline` (default) inlines the engine; `cdn` loads it from jsDelivr. */
@@ -16,6 +24,8 @@ export interface AssembleOptions {
   engineSource?: string;
   /** Resolved includes stored in `#orz-includes` exactly as given. */
   includes?: Record<string, string>;
+  /** The twin-link naming, stored in `#orz-shell` as `"links"` when it is not the family's (every save and update keeps it). An invalid naming rejects. */
+  twinLinks?: TwinNaming;
 }
 
 export interface Extracted {
@@ -25,6 +35,22 @@ export interface Extracted {
   shell: string;
   delivery: string;
   includes?: Record<string, string>;
+  /** The file's twin-link naming (`#orz-shell` `"links"`); absent: the family's. */
+  twinLinks?: TwinNaming;
+}
+
+/** One link of a text ({@link linkTargets}). */
+export interface LinkTarget {
+  /** The target as the renderer writes it (a Markdown destination percent-encoded: `my%20file.md`; a raw `<a href>` as written). */
+  href: string;
+  /** 1-based line of the whole text (header lines counted). */
+  line: number;
+  /** `twin`: a relative link to a text twin (the twin-link rule rewrites it); `asset`: another relative or root-relative path (an image is never `twin`); `other`: an absolute URL, `//host`, or a fragment- or query-only href. */
+  kind: 'twin' | 'asset' | 'other';
+  /** A Markdown image (`![…](…)`): its `src`. */
+  image: boolean;
+  /** A raw-HTML `<a href>`: the renderer leaves it as written. */
+  raw: boolean;
 }
 
 /** Options of {@link upgrade}: the assembly's, a uid for a 0.x file (default: a fresh one), and `downgrade`. */
@@ -102,6 +128,8 @@ export interface EditorOptions {
   includes?: Record<string, string>;
   /** FC-19 §3 `fileName`: the suggested file name of saves without `hooks.save` (picker and download), e.g. `notes.md.html`; default `document.md.html`. */
   fileName?: string;
+  /** FC-19 §3 `twinLinks` (2.5.0): your twin-link naming — the preview names links to text twins so (not with `hooks.resolveLink`), and a save without `hooks.save` stores it in the file. */
+  twinLinks?: TwinNaming;
 }
 
 export type SaveVia = 'hook' | 'host' | 'file' | 'download';
@@ -168,7 +196,8 @@ export interface Editor {
 export interface RenderPreviewOptions {
   fetchInclude?(target: string): Promise<string | null>;
   includes?: Readonly<Record<string, string>>;
-  twinLinks?: boolean;
+  /** `false`: links as written; default `true` (the family's names, `x.md` → `x.md.html`); a {@link TwinNaming}: those names. */
+  twinLinks?: boolean | TwinNaming;
   /**
    * A whole HTML document (the header's stylesheets, no engine script) instead
    * of the article's inner HTML. Either way the document's own raw HTML is kept
@@ -191,6 +220,10 @@ export declare function renderPreview(text: string, options?: RenderPreviewOptio
  */
 export declare function upgrade(html: string, options?: UpgradeOptions): Promise<UpgradeResult>;
 export declare function mountEditor(element: HTMLElement, options: EditorOptions): Editor;
+/** The include targets of a text's body, as written, in order, without repeats (as the renderer finds them; orz-markdown 2.5.0). */
+export declare function includeTargets(text: string): string[];
+/** Every Markdown link and image and every raw `<a href>` of a text's body, in order, as the renderer reads them (orz-markdown 2.5.0). */
+export declare function linkTargets(text: string): LinkTarget[];
 export declare function editHeader(text: string, changes: Readonly<Record<string, HeaderChange>>): string;
 export declare const THEMES: ReadonlyArray<{ id: string; name: string; scheme: 'light' | 'dark' }>;
 export declare const DEFAULT_THEME: string;
@@ -242,6 +275,9 @@ export interface OrzCarrierApi {
   renderPreview: typeof renderPreview;
   /** orz-mdhtml's extension: upgrade an old file in the browser. */
   upgrade: typeof upgrade;
+  /** The targets a text points at (orz-markdown 2.5.0). */
+  includeTargets: typeof includeTargets;
+  linkTargets: typeof linkTargets;
   /** The booted file's handle in an assembled `.md.html` (the IIFE only); null elsewhere. Not in the ES module's `OrzCarrier`. */
   readonly standalone?: StandaloneFile | null;
 }

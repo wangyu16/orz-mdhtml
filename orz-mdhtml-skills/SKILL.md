@@ -178,7 +178,11 @@ its `.md.html` in the file (in the read view and the preview; the text keeps
 `deck.slides.html` and `x.paged.md` → `x.paged.html` likewise, `?query` and
 `#fragment` kept. Absolute URLs, `#anchors` and other files are left as
 written. (In a web app, `renderPreview(text, { twinLinks: false })` turns
-the rewrite off.)
+the rewrite off. A host that publishes pages under other names passes a
+naming, e.g. `{ md: '{stem}.html' }` — `week2.md` → `week2.html` — as
+`twinLinks` to `assemble`, `renderPreview` and `mountEditor`; the file keeps
+it, and so does `orz-mdhtml assemble` over that file. Never edit the links
+in the text to match a host.)
 
 ## The document header (FC-18)
 
@@ -307,7 +311,10 @@ npx orz-mdhtml@1 upgrade old.md.html -o new.md.html --text new.md
 A 0.x file (orz-mdhtml ≤ 0.9.3) keeps its source exactly; its `#orz-meta`
 metadata and saved theme move into the header (its `<title>` too, only when
 the text has no heading to give the title — otherwise it is left out, with a
-warning), and it gets a `uid`.
+warning), and it gets a `uid`. Never `assemble` over a 0.x file to convert
+it: that would drop what it keeps outside its text, so `assemble` refuses
+(`legacy-file`, also when the text beside it is its own source) and names
+`upgrade`.
 The delivery (inline or cdn) is kept unless `--cdn` / `--inline`. A format-1
 file of an older shell is re-assembled with its text and includes unchanged
 (this also repairs a damaged engine). A file of a newer shell is refused (no
@@ -401,8 +408,8 @@ prints the page, not the frame. The split view scrolls the preview with the text
 - Keep the `uid` across revisions of a document. A different document needs
   its own: start it with `new` (or the file's *Save as new copy*), never by
   copying another text's header with its `uid`.
-- Package: `orz-mdhtml` 1.x depends on `orz-markdown ^2.3.0` (the carrier kit;
-  1.0.2 bundles 2.3.0 and its files name that version, whatever kit is
+- Package: `orz-mdhtml` 1.x depends on `orz-markdown ^2.5.0` (the carrier kit;
+  1.1.0 bundles 2.5.0 and its files name that version, whatever kit is
   installed); files record the shell version that wrote them.
 - Security: a `.md.html` runs the code inside it — treat files like programs
   and open only trusted ones.

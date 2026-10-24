@@ -48,7 +48,7 @@ describe('base', () => {
     expect(new Set(THEMES.map((t) => t.id)).size).toBe(THEMES.length);
     expect(isThemeId(DEFAULT_THEME)).toBe(true);
     // the kit's list, re-exported: no second list anywhere in src/
-    expect(readFileSync('src/themes.ts', 'utf8')).toMatch(/export \{ THEMES, DEFAULT_THEME, isThemeId, themeInfo \} from 'orz-markdown\/themes'/);
+    expect(readFileSync('src/themes.ts', 'utf8')).toMatch(/export \{ THEMES, DEFAULT_THEME, isThemeId, themeInfo, themeSwatch \} from 'orz-markdown\/themes'/);
     for (const file of sources('src')) {
       expect(readFileSync(file, 'utf8').match(/'dark-elegant-2'/g) ?? [], file).toEqual([]);
     }

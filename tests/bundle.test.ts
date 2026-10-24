@@ -13,7 +13,7 @@ import { join } from 'node:path';
 import { escapeScriptText } from 'orz-markdown/carrier/read';
 import { renderMarkdownPreviewWithIncludes } from 'orz-markdown/carrier/editor';
 import { isScriptSafe, parseManifest, sandboxDocument } from 'orz-markdown/carrier/shell';
-import { assemble, extract, readDocument, type AssembleOptions } from '../src/assemble.js';
+import { assemble, extract, includeTargets, linkTargets, readDocument, type AssembleOptions } from '../src/assemble.js';
 import { upgrade as upgradeNode, readLegacy } from '../src/legacy.js';
 import { VERSION } from '../src/version.js';
 import { BUNDLE_FILE, ESM_FILE, asciiOnly, buildBrowser, checkBundleRule, scriptSafe, writeBrowser } from '../build/bundle.js';
@@ -200,15 +200,18 @@ chrome('real Chrome (playwright-core, channel chrome)', () => {
       return {
         keys: Object.keys(C).sort(),
         kind: C.kind, version: C.version, formats: C.formats,
-        types: ['assemble', 'extract', 'readDocument', 'mountEditor', 'renderPreview', 'upgrade'].map((k) => typeof (C as unknown as Record<string, unknown>)[k]),
+        types: ['assemble', 'extract', 'readDocument', 'mountEditor', 'renderPreview', 'upgrade', 'includeTargets', 'linkTargets'].map((k) => typeof (C as unknown as Record<string, unknown>)[k]),
+        targets: [(C as unknown as { includeTargets(t: string): string[] }).includeTargets(text), (C as unknown as { linkTargets(t: string): unknown[] }).linkTargets(text)],
         promise: p instanceof Promise, html: await p,
         extracted: C.extract(html), info: C.readDocument(text), standalone: C.standalone,
         storage: Object.keys(localStorage), chrome: !!document.getElementById('orz-chrome'),
       };
     }, { text, html });
-    expect(r.keys).toEqual(['assemble', 'extract', 'formats', 'kind', 'mountEditor', 'readDocument', 'renderPreview', 'standalone', 'upgrade', 'version']);
+    expect(r.keys).toEqual(['assemble', 'extract', 'formats', 'includeTargets', 'kind', 'linkTargets', 'mountEditor', 'readDocument', 'renderPreview', 'standalone', 'upgrade', 'version']);
     expect(r).toMatchObject({ kind: 'md', version: VERSION, formats: [1], promise: true, standalone: null, storage: [], chrome: false });
-    expect(r.types).toEqual(['function', 'function', 'function', 'function', 'function', 'function']);
+    expect(r.types).toEqual(['function', 'function', 'function', 'function', 'function', 'function', 'function', 'function']);
+    // the kit's targets of a text (orz-markdown 2.5.0), the same in the bundle as in Node
+    expect(r.targets).toEqual(JSON.parse(JSON.stringify([includeTargets(text), linkTargets(text)])));
     expect(r.html === html).toBe(true);
     expect(r.extracted).toEqual(extract(html));
     expect(r.info).toEqual(JSON.parse(JSON.stringify(readDocument(text, { kind: 'md' }))));
@@ -375,6 +378,8 @@ chrome('real Chrome (playwright-core, channel chrome)', () => {
         plain: await C.renderPreview(text),
         rec: await C.renderPreview(text, { includes: { 'parts/a.md': 'FILE-INCLUDED\n', 'https://example.test/b.md': 'URL-INCLUDED\n' } }),
         app: await C.renderPreview(text, { fetchInclude: async (u: string) => (u === 'https://example.test/b.md' ? 'APP-INCLUDED\n' : null), twinLinks: false }),
+        // a host's twin-link naming (orz-markdown 2.5.0, FC-18 §8.2)
+        named: await C.renderPreview(text, { twinLinks: { md: '{stem}.html' } }),
         // a file include the record lacks goes to fetchInclude with its path as written (FC-19 §3, 2.2.0)
         path: await C.renderPreview(text, { includes: { 'https://example.test/b.md': 'URL-INCLUDED\n' }, fetchInclude: async (u: string) => (u === 'parts/a.md' ? 'PATH-INCLUDED\n' : null) }),
         doc: await C.renderPreview(text, { document: true }),
@@ -391,6 +396,8 @@ chrome('real Chrome (playwright-core, channel chrome)', () => {
     expect(r.rec).toContain('URL-INCLUDED');
     expect(r.app).toContain('APP-INCLUDED');
     expect(r.app).toContain('href="next.md"');
+    expect(r.named).toContain('href="next.html"');
+    expect(r.named).not.toContain('next.md');
     expect(r.doc.startsWith('<!doctype html>')).toBe(true);
     expect(r.doc).toContain('themes/dark-elegant-1.css');
     expect(r.doc).toContain('<article class="markdown-body measure-wide">');

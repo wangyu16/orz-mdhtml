@@ -15,14 +15,14 @@
  * `mintUid`, a creation tool, FC-18 §10), no environment reads. The shell
  * version is the generated constant in ./version.ts.
  */
-import { assembleEnvelope, editHeader, extract, lintHeader, mintUid, UID_PATTERN, type HeaderChange, type ShellParts } from 'orz-markdown/carrier';
+import { assembleEnvelope, editHeader, extract, lintHeader, mintUid, UID_PATTERN, type HeaderChange, type ShellParts, type TwinNaming } from 'orz-markdown/carrier';
 import { bundleUrl, isScriptSafe } from 'orz-markdown/carrier/shell';
 import { isThemeId } from './themes.js';
 import { isMeasure, presentationOf, readViewMarkup, shellHead, type Measure, type Presentation } from './presentation.js';
 import { VERSION } from './version.js';
 
-export { extract, readDocument } from 'orz-markdown/carrier';
-export type { Extracted, DocumentInfo, Kind } from 'orz-markdown/carrier';
+export { extract, readDocument, includeTargets, linkTargets } from 'orz-markdown/carrier';
+export type { Extracted, DocumentInfo, Kind, TwinNaming, LinkTarget } from 'orz-markdown/carrier';
 
 /** The browser bundle's file name inside `orz-mdhtml-browser` (its `release.json` `bundle.path`). */
 export const BUNDLE_FILE = 'orz-mdhtml.browser.js';
@@ -48,6 +48,15 @@ export interface AssembleOptions {
   engineSource?: string;
   /** Resolved includes, stored in `#orz-includes` exactly as given (FC-18 §8.3, D4). */
   includes?: Record<string, string>;
+  /**
+   * The twin-link naming (FC-18 §8.2, orz-markdown 2.5.0): the names a host
+   * publishes the documents under (`{ md: '{stem}.html' }`: links to `x.md`
+   * point at `x.html`). Stored in `#orz-shell` as `"links"` only when it is
+   * not the family naming, so a file without it keeps its exact bytes;
+   * `extract(html).twinLinks` gives it back, and every save and update of
+   * the file keeps it. An invalid naming throws.
+   */
+  twinLinks?: TwinNaming;
 }
 
 /**
@@ -102,6 +111,7 @@ export function shellParts(options: AssembleOptions = {}, presentation: Presenta
     headHtml: shellHead(presentation, { deferred: true }),
     bodyHtml: `${readViewMarkup(presentation, delivery)}\n<div id="${CHROME_MOUNT_ID}"></div>\n${engine}`,
     ...(includes ? { includes } : {}),
+    ...(options.twinLinks ? { twinLinks: options.twinLinks } : {}),
   };
 }
 

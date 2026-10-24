@@ -235,7 +235,8 @@ const writable = (v: string): boolean => v.trim() !== '' && !/[\r\n\u0000]/.test
  * and the DocMeta, title and theme the 0.x file kept outside its source —
  * and that text's assembly. Keys the text's own header already has are never
  * overwritten; a legacy `kind: meta` header is converted as FC-18 §5 says
- * (the kit's `editHeader`). A format-1 file is re-assembled with this shell.
+ * (the kit's `editHeader`). A format-1 file is re-assembled with this shell,
+ * keeping its includes and its twin-link naming (`#orz-shell` `"links"`).
  *
  * Never loses text: the body after the header is verified to be the legacy
  * source exactly, else it throws. Throws for a file that is neither.
@@ -252,7 +253,9 @@ export function upgrade(html: string, options: UpgradeOptions = {}): UpgradeResu
       throw new Error(`orz-mdhtml upgrade: the file's shell (orz-mdhtml ${ex.shell}) is newer than this tool (${VERSION}); upgrading would downgrade it. Use \`npx orz-mdhtml@latest upgrade\`, or pass --force (library: { downgrade: true }) to re-assemble it with this older shell anyway`);
     }
     const includes = assembleOptions.includes ?? ex.includes;
-    return { text: ex.text, html: assemble(ex.text, { ...assembleOptions, ...(includes ? { includes } : {}) }), from: 'format-1', moved: {}, notes: [], warnings: [] };
+    // the file's twin-link naming (#orz-shell "links", FC-18 §8.2) is kept, as every save keeps it
+    const twinLinks = assembleOptions.twinLinks ?? ex.twinLinks;
+    return { text: ex.text, html: assemble(ex.text, { ...assembleOptions, ...(includes ? { includes } : {}), ...(twinLinks ? { twinLinks } : {}) }), from: 'format-1', moved: {}, notes: [], warnings: [] };
   }
 
   const source = legacy.text;
