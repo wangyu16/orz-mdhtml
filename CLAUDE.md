@@ -10,7 +10,7 @@ Guidance for AI agents working in this repository.
 (`x.md`, orz text format 1, FC-18) and its **self-editing file** (`x.md.html`)
 is `assemble(text)` — a single page that reads like a themed website and can
 be edited and saved in the browser. Built on the orz-markdown carrier kit
-([orz-markdown](../orz-markdown) `carrier/*`, **`^2.7.0`**): the standalone
+([orz-markdown](../orz-markdown) `carrier/*`, **`^2.7.1`**): the standalone
 file's whole runtime is the kit's `orz-markdown/carrier/app`; this repo
 supplies the md kind behind its `StandaloneKind` seam.
 
@@ -92,7 +92,7 @@ closed loop. **1.0.1**: rebuilt on the published `orz-markdown ^2.3.0` (a
 real install, no symlink) for the kit's preview-bridge security fix and the
 screen `light-playful-1` notebook (the kit's baseline grid, run by
 `enhanceDocument`'s default `grid` and the preview frame; claim R.16).
-**1.2.0**: on `orz-markdown ^2.7.0` — the editor shell's reader fixes (D-129…D-135). **1.1.0**: on `orz-markdown ^2.5.0` — the twin-link naming `twinLinks`
+**1.2.0**: on `orz-markdown ^2.7.1` — the editor shell's reader fixes (D-129…D-135). **1.1.0**: on `orz-markdown ^2.5.0` — the twin-link naming `twinLinks`
 through `assemble`/`extract`, `renderPreview`, `mountEditor`, the read view
 and the CLI's `assemble` over a file (claims A.11, T.31, X.6), the kit's
 `includeTargets`/`linkTargets` re-exported, `themeSwatch` theme dots, the
@@ -192,7 +192,7 @@ family root; never edit the copy here alone). This package's facts are in
 `release.config.json` (kit floor `kit.required`, bundles, manifest check,
 fast lane).
 
-1. orz-markdown is installed from the registry (`^2.7.0`; never a link). For a later kit, `npx npm@11 install orz-markdown@^X.Y.Z` (the gate refuses a range below `kit.required`, a link, a non-registry lockfile entry, an older install, or a bundle that embeds another kit). After a release, bump the devDependency `orz-mdhtml-browser-previous` to it (H.3).
+1. orz-markdown is installed from the registry (`^2.7.1`; never a link). For a later kit, `npx npm@11 install orz-markdown@^X.Y.Z` (the gate refuses a range below `kit.required`, a link, a non-registry lockfile entry, an older install, or a bundle that embeds another kit). After a release, bump the devDependency `orz-mdhtml-browser-previous` to it (H.3).
 2. Bump **both** `package.json` and `browser/package.json` to the same
    version; date the CHANGELOG entry (`## [x.y.z] — YYYY-MM-DD`, no
    "unreleased"). `npm run build`, `npm run examples`, commit, push `main`.

@@ -7,7 +7,7 @@ All notable changes to **orz-mdhtml** are recorded here. Versions follow
 
 ## [1.2.0] — 2026-11-12
 
-Built on orz-markdown **2.7.0** (`^2.7.0`; the files of this release name
+Built on orz-markdown **2.7.1** (`^2.7.1`; the files of this release name
 it): the editor shell's reader fixes from the owner's Alembic rounds (family
 STATUS D-129…D-135), with no change to the file format.
 
@@ -19,6 +19,9 @@ STATUS D-129…D-135), with no change to the file format.
 - Below 640 px the toolbar keeps one row, with the other tools under More.
 - ⌘\ keeps cycling the views; for hosts: `reveal(…)`, `refreshSaveStatus()`
   and the `saveStatus` hook (FC-19 2.7.0, additive).
+- Select all, then typing or inserting text (dictation, text replacement),
+  replaces the whole text, header included, even while the settings are
+  folded (orz-markdown 2.7.1, family STATUS D-142).
 
 <a id="110"></a>
 

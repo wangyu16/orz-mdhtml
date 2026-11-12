@@ -8,7 +8,7 @@ reads like a themed website, edits itself in the browser and saves back in
 place. The file is always `assemble(text)`: the text inside it is the
 document; everything else is a shell that can be regenerated. Built on the
 carrier kit of [orz-markdown](https://www.npmjs.com/package/orz-markdown)
-(`^2.7.0`; this release bundles 2.7.0; orz text format 1).
+(`^2.7.1`; this release bundles 2.7.1; orz text format 1).
 
 ## What a 1.0 `.md.html` is
 
