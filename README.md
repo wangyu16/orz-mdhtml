@@ -143,7 +143,7 @@ orz-mdhtml themes
 file (about 1 MB), so it opens without fetching the engine. `--cdn` writes a
 small file that loads the engine from
 `https://cdn.jsdelivr.net/npm/orz-mdhtml-browser@<version>/orz-mdhtml.browser.js`
-(the file's own version, e.g. `orz-mdhtml-browser@1.1.0`) — for pages you
+(the file's own version, e.g. `orz-mdhtml-browser@1.2.0`) — for pages you
 publish on the web. Either way the theme stylesheets, KaTeX's
 and highlight.js's styles, the content libraries (Mermaid, SMILES, Chart.js)
 and the editor (CodeMirror) load from CDNs: reading styled content and editing
