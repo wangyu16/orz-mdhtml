@@ -171,7 +171,7 @@ hash list. (`orz-markdown/carrier/editor` exports `PREVIEW_BRIDGE_HASH` and
 with the kit; `orz-mdhtml-browser` re-exports neither. Take the hash from
 the same orz-markdown version the frame runs: the bridge, and so its hash,
 differs between kit versions.) When the policy blocks the preview, the
-editor says so about a second after the frame loads (orz-markdown 2.5.0): its
+editor says so about a second after the frame loads (since orz-markdown 2.5): its
 `error` event names the `nonce` option of `mountEditor` and the frame's own
 script hashes (`'sha256-…'`), ready to add to `script-src`.
 
@@ -207,7 +207,7 @@ linkTargets(text)                                      // [{ href, line, kind: '
 await upgrade(oldHtml, { uid })                        // { text, html, from, moved, notes, warnings }: an old file, upgraded in the browser
 ```
 
-**Link names of a published site** (orz-markdown 2.5.0, FC-18 §8.2). By
+**Link names of a published site** (since orz-markdown 2.5, FC-18 §8.2). By
 default a link to a text twin points at the family's name (`next.md` →
 `next.md.html`). An app that publishes pages under other names passes a
 naming — `{ md: '{stem}.html' }`: `next.md` → `next.html`; a kind left out

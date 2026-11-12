@@ -4,8 +4,8 @@ The browser engine and editor component of
 [orz-mdhtml](https://github.com/wangyu16/orz-mdhtml) ("Markdown that edits
 itself"): the very bundle every `.md.html` file carries, and the same editor
 for web apps (orz family contract FC-19). Built on the carrier kit of
-[orz-markdown](https://www.npmjs.com/package/orz-markdown) 2.5.0 (bundled:
-this release embeds orz-markdown 2.5.0).
+[orz-markdown](https://www.npmjs.com/package/orz-markdown) 2.7.0 (bundled:
+this release embeds orz-markdown 2.7.0).
 
 ```sh
 npm i orz-mdhtml-browser@1
