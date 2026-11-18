@@ -218,6 +218,15 @@ resolver gets the source href instead). `assemble` stores it in the file
 update. (`renderPreview(text, { twinLinks: false })` leaves links as
 written.)
 
+**Pages published for readers** (since orz-markdown 2.9, FC-18 §8.2). A
+website that publishes files for readers passes `readerCopy: true` (or `{
+notice: '…' }`, its own plain words) to `assemble`: opened from that site,
+the file's editor says at once that edits can't be saved to the website,
+and its Save reads "Download a copy" and downloads (a downloaded copy is an
+ordinary file). An app that saves its own way can word the editor itself:
+`editor.setWords({ save, saved, notice })` — the Save button's label, the
+toast after a save (`''`: none) and a notice above the panes.
+
 **Old files.** `extract` of an orz-mdhtml 0.x file (made before 1.0) returns
 only its source: the title, metadata and theme it keeps outside the source
 are not in it. `upgrade(html, options)` (orz-mdhtml's own addition to the

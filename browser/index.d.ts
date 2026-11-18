@@ -26,6 +26,8 @@ export interface AssembleOptions {
   includes?: Record<string, string>;
   /** The twin-link naming, stored in `#orz-shell` as `"links"` when it is not the family's (every save and update keeps it). An invalid naming rejects. */
   twinLinks?: TwinNaming;
+  /** (orz-markdown 2.9.0) A reader copy: `true` or `{ notice }` (plain text, 1–300 characters) — the file is published for readers (a website's page); opened there, its editor says edits can't be saved to the website and Save reads "Download a copy". Stored in `#orz-shell` as `"readerCopy"`. */
+  readerCopy?: boolean | { notice?: string };
 }
 
 export interface Extracted {
@@ -37,6 +39,8 @@ export interface Extracted {
   includes?: Record<string, string>;
   /** The file's twin-link naming (`#orz-shell` `"links"`); absent: the family's. */
   twinLinks?: TwinNaming;
+  /** (orz-markdown 2.9.0) The file's reader-copy setting (`#orz-shell` `"readerCopy"`), when it has one. */
+  readerCopy?: { notice?: string };
 }
 
 /** One link of a text ({@link linkTargets}). */
@@ -191,6 +195,8 @@ export interface Editor {
   refreshPreview(options?: { includes?: Record<string, string> | null }): Promise<void>;
   /** Resolves when the text engine is final: `codemirror6`, or `textarea` with the load error (the editor is usable before). */
   readonly ready: Promise<{ engine: string; error?: unknown }>;
+  /** (orz-markdown 2.9.0) Your words: the Save button's label (`save`), the toast after a save (`saved`; `''`: none) and a notice above the panes (`notice`); `null`: back to the default, a key left out: kept. */
+  setWords(words: { save?: string | null; saved?: string | null; notice?: string | null }): void;
 }
 
 export interface RenderPreviewOptions {

@@ -200,6 +200,25 @@ describe('the envelope and the shell parts', () => {
     expect(readDocument).toBe(kit.readDocument);
   });
 
+  it('[A.12] (orz-markdown 2.9.0, FC-18 §8.2) a reader copy: assemble(text, { readerCopy }) stores true as #orz-shell "readerCopy":{} and { notice } with the notice, extract gives it back, false or null write the bytes of assemble(text), an invalid notice throws, and upgrade of a 1.x file keeps it', () => {
+    const TEXT_RC = '# Week one\n\nRead this.\n';
+    const NOTICE = 'Your own copy: download it to keep your changes.';
+    for (const [name, o] of OPTION_SETS) {
+      const plain = assemble(TEXT_RC, o);
+      const reader = assemble(TEXT_RC, { ...o, readerCopy: { notice: NOTICE } });
+      expect(extract(reader)!.readerCopy, name).toEqual({ notice: NOTICE });
+      expect(extract(reader)!.text, name).toBe(TEXT_RC);
+      expect(reader, name).toContain(`"readerCopy":{"notice":"${NOTICE}"}`);
+      expect(extract(assemble(TEXT_RC, { ...o, readerCopy: true }))!.readerCopy, name).toEqual({});
+      expect(extract(plain)!.readerCopy, name).toBeUndefined();
+      expect(assemble(TEXT_RC, { ...o, readerCopy: false }) === plain, name).toBe(true);
+      expect(assemble(TEXT_RC, { ...o, readerCopy: null }) === plain, name).toBe(true);
+      expect(assemble(extract(reader)!.text, { ...o, readerCopy: extract(reader)!.readerCopy }) === reader, name).toBe(true);
+      expect(upgrade(reader, o).html === reader, name).toBe(true);
+      expect(() => assemble(TEXT_RC, { ...o, readerCopy: { notice: '' } })).toThrow();
+    }
+  });
+
   it('[A.11] the twin-link naming (orz-markdown 2.5.0, FC-18 §8.2): assemble stores a non-family naming in #orz-shell "links" and extract gives it back; the family naming (or none) writes the bytes of assemble(text); an invalid one throws; upgrade of a 1.x file keeps it; includeTargets and linkTargets are the kit\'s (Node library and assembler)', () => {
     const naming = { md: '{stem}.html' };
     const text = '# Links\n\nSee [next](next.md).\n\n{{md part.md}}\n';
