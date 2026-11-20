@@ -234,7 +234,9 @@ chrome('real Chrome (playwright-core, channel chrome)', () => {
   it('[W.4] the bundle alone assembles in a sandbox="allow-scripts" frame (the quiet update\'s sandbox) and writes the Node bytes', async () => {
     const ctx = await browser!.newContext();
     const page = await ctx.newPage();
-    await page.setContent('<!doctype html><html><body></body></html>');
+    // a served page, not setContent's about:blank: Chrome 158 aborts (FATAL site_instance_impl "has_site_") on a
+    // sandboxed srcdoc frame inside about:blank — a browser bug, not this bundle; real files are served or file://
+    await page.goto(`${site.url}/blank.html`);
     const text = CORPUS.find((c) => c.path === 'md/includes.md')!;
     const out = await page.evaluate(async ({ srcdoc, text, includes, bundleText }) => {
       const f = document.createElement('iframe');
